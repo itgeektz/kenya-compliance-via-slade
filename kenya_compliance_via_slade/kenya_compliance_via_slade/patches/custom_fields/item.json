@@ -89,6 +89,7 @@
     "insert_after": "custom_item_classification_details",
     "label": "Item Classification Code",
     "name": "Item-custom_item_classification",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "options": "Navari KRA eTims Item Classification"
   },
   {
@@ -97,6 +98,7 @@
     "fieldtype": "Link",
     "insert_after": "custom_item_classification",
     "label": "eTims Country of Origin",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_etims_country_of_origin",
     "options": "Navari eTims Country"
   },
@@ -148,6 +150,7 @@
     "fieldtype": "Link",
     "insert_after": "custom_column_break_etc01",
     "label": "Taxation Type",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_taxation_type",
     "options": "Navari KRA eTims Taxation Type"
   },
@@ -164,6 +167,7 @@
     "fieldtype": "Link",
     "insert_after": "custom_packaging_unit_details",
     "label": "Packaging Unit",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_packaging_unit",
     "options": "Navari eTims Packaging Unit"
   },
@@ -196,6 +200,7 @@
     "fieldtype": "Link",
     "insert_after": "custom_unit_of_quantity_details",
     "label": "Unit of Quantity",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_unit_of_quantity",
     "options": "Navari eTims Unit of Quantity"
   },
@@ -228,6 +233,7 @@
     "fieldtype": "Link",
     "insert_after": "custom_item_details",
     "label": "Product Type Code",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_product_type",
     "options": "Navari eTims Product Type"
   },
@@ -236,6 +242,7 @@
     "fieldtype": "Link",
     "insert_after": "custom_product_type",
     "label": "Navari eTims Item Type",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_item_type",
     "options": "Navari eTims Item Type"
   },

@@ -75,6 +75,12 @@ def execute(
                 first_status_change_query.first_modified - IntegrationRequest.creation
             ).as_("max_time"),
         )
+        # Exclude records where submission takes longer than 300 seconds
+        # to prevent skewed data due to retries or delayed background jobs
+        .where(
+            (first_status_change_query.first_modified - IntegrationRequest.creation)
+            <= 300
+        )
         .groupby(IntegrationRequest.integration_request_service)
         .orderby(IntegrationRequest.integration_request_service)
     )
