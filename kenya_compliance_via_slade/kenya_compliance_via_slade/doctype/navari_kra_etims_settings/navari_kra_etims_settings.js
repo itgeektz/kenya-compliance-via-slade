@@ -103,71 +103,6 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
         },
         __("eTims Actions")
       );
-
-      // frm.add_custom_button(
-      //   __("Submit Warehouses"),
-      //   function () {
-      //     frappe.call({
-      //       method:
-      //         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.submit_warehouse_list",
-      //       args: {},
-
-      //       callback: (response) => {},
-      //       error: (error) => {
-      //         // Error Handling is Defered to the Server
-      //       },
-      //     });
-      //   },
-      //   __("eTims Actions")
-      // );
-
-      // frm.add_custom_button(
-      //   __("Initialize device"),
-      //   function () {
-      //     frappe.call({
-      //       method: "frappe.client.get_value",
-      //       args: {
-      //         doctype: "Branch",
-      //         fieldname: "custom_branch_code",
-      //         filters: { name: frm.doc.bhfid },
-      //       },
-      //       callback: function (res) {
-      //         if (res.message) {
-      //           const custom_branch_code = res.message.custom_branch_code;
-
-      //           frappe.call({
-      //             method:
-      //               "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.initialize_device",
-      //             args: {
-      //               request_data: {
-      //                 document_name: frm.doc.name,
-      //                 etims_branch_id: custom_branch_code,
-      //                 username: frm.doc.auth_username,
-      //                 password: frm.doc.auth_password,
-      //                 vscu_url: frm.doc.server_url,
-      //                 etims_web_address:
-      //                   "https://etims-api-sbx.kra.go.ke/etims-api",
-      //                 organisation_tax_pin: frm.doc.tin,
-      //                 etims_device_serial_no: frm.doc.dvcsrlno,
-      //                 company_name: companyName,
-      //                 branch_id: frm.doc.bhfid,
-      //               },
-      //             },
-      //             callback: (response) => {
-      //               // console.log(response);
-      //             },
-      //             error: (error) => {
-      //               // Error handling
-      //             },
-      //           });
-      //         } else {
-      //           frappe.msgprint(__("Failed to fetch slade_id for the branch."));
-      //         }
-      //       },
-      //     });
-      //   },
-      //   __("eTims Actions")
-      // );
     }
 
     frm.add_custom_button(
@@ -223,15 +158,19 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
   },
   sandbox: function (frm) {
     const sandboxFieldValue = parseInt(frm.doc.sandbox);
-    const sandboxServerUrl = "https://etims-api-sbx.kra.go.ke/etims-api";
-    const productionServerUrl = "https://etims-api.kra.go.ke/etims-api";
+    const sandboxServerUrl = "https://api.erp.release.slade360edi.com";
+    const productionServerUrl = "https://api.erp.slade360.co.ke";
+    const sandboxAuthUrl = "https://accounts.multitenant.slade360.co.ke";
+    const productionAuthUrl = "https://accounts.edi.slade360.co.ke";
 
     if (sandboxFieldValue === 1) {
       frm.set_value("env", "Sandbox");
       frm.set_value("server_url", sandboxServerUrl);
+      frm.set_value("auth_server_url", sandboxAuthUrl);
     } else {
       frm.set_value("env", "Production");
       frm.set_value("server_url", productionServerUrl);
+      frm.set_value("auth_server_url", productionAuthUrl);
     }
   },
 });

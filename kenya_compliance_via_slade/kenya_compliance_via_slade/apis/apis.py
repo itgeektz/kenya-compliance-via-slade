@@ -124,6 +124,10 @@ def perform_customer_search(request_data: str) -> None:
 @frappe.whitelist()
 def perform_item_registration(item_name: str) -> dict | None:
     item = frappe.get_doc("Item", item_name)
+
+    if item.custom_prevent_etims_registration:
+        return
+
     missing_fields = []
 
     required_fields = [
@@ -259,23 +263,35 @@ def send_branch_customer_details(name: str, is_customer: bool = True) -> None:
         "country": "KEN",
     }
 
+    patner_type_mapping = {
+        "Company": "CORPORATE",
+        "Individual": "INDIVIDUAL",
+        "Partnership": "CORPORATE",
+    }
+
     if is_customer:
+        customer_type = data.get("customer_type")
+        mapped_customer_type = patner_type_mapping.get(customer_type, customer_type)
+
         payload.update(
             {
                 "is_customer": True,
                 "customer_tax_pin": data.get("customer_tax_pin"),
                 "partner_name": data.get("customer_name"),
                 "phone_number": data.get("mobile_no"),
-                "customer_type": "INDIVIDUAL",
+                "customer_type": mapped_customer_type,
             }
         )
     else:
+        supplier_type = data.get("supplier_type")
+        mapped_supplier_type = patner_type_mapping.get(supplier_type, supplier_type)
+
         payload.update(
             {
                 "customer_tax_pin": data.get("tax_id"),
                 "partner_name": data.get("supplier_name"),
                 "is_supplier": True,
-                "supplier_type": "INDIVIDUAL",
+                "supplier_type": mapped_supplier_type,
             }
         )
 

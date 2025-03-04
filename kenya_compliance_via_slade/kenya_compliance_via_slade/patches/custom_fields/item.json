@@ -24,7 +24,7 @@
     "read_only": 1
   },
   {
-    "description": "Whether the item has been successfully registered in eTim's servers through the Register Item button",
+    "description": "Whether the item has been successfully sent to Slade 360's servers through the Register Item button",
     "fieldname": "custom_sent_to_slade",
     "fieldtype": "Check",
     "insert_after": "custom_item_registered",
@@ -34,16 +34,25 @@
     "read_only": 1
   },
   {
+    "description": "Enable this option to exclude the item from being sent to eTIMS. When checked, this item will not be registered or used in eTIMS transactions.",
+    "fieldname": "custom_prevent_etims_registration",
+    "fieldtype": "Check",
+    "insert_after": "custom_item_registered",
+    "label": "Prevent eTIMS Registration",
+    "name": "Item-custom_prevent_etims_registration",
+    "no_copy": 1
+  },
+  {
     "fieldname": "custom_column_break_uazue",
     "fieldtype": "Column Break",
-    "insert_after": "custom_sent_to_slade",
+    "insert_after": "custom_prevent_etims_registration",
     "label": "",
     "name": "Item-custom_column_break_uazue"
   },
   {
     "fieldname": "custom_submission_tries",
     "fieldtype": "Int",
-    "insert_after": "custom_sent_to_slade",
+    "insert_after": "custom_slade_id",
     "label": "Submission Tries",
     "name": "Item-custom_submission_tries"
   },
@@ -69,8 +78,9 @@
   {
     "fieldname": "custom_item_classification_details",
     "fieldtype": "Section Break",
-    "insert_after": "custom_slade_id",
+    "insert_after": "custom_submission_tries",
     "label": "Item Classification Details",
+    "depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_item_classification_details"
   },
   {
@@ -79,8 +89,8 @@
     "insert_after": "custom_item_classification_details",
     "label": "Item Classification Code",
     "name": "Item-custom_item_classification",
-    "options": "Navari KRA eTims Item Classification",
-    "reqd": 1
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
+    "options": "Navari KRA eTims Item Classification"
   },
   {
     "fetch_from": "custom_referenced_imported_item.origin_nation_code",
@@ -88,9 +98,9 @@
     "fieldtype": "Link",
     "insert_after": "custom_item_classification",
     "label": "eTims Country of Origin",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_etims_country_of_origin",
-    "options": "Navari eTims Country",
-    "reqd": 1
+    "options": "Navari eTims Country"
   },
   {
     "fieldname": "custom_item_code_etims",
@@ -140,15 +150,16 @@
     "fieldtype": "Link",
     "insert_after": "custom_column_break_etc01",
     "label": "Taxation Type",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_taxation_type",
-    "options": "Navari KRA eTims Taxation Type",
-    "reqd": 1
+    "options": "Navari KRA eTims Taxation Type"
   },
   {
     "fieldname": "custom_packaging_unit_details",
     "fieldtype": "Section Break",
     "insert_after": "custom_taxation_type",
     "label": "Packaging Unit Details",
+    "depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_packaging_unit_details"
   },
   {
@@ -156,9 +167,9 @@
     "fieldtype": "Link",
     "insert_after": "custom_packaging_unit_details",
     "label": "Packaging Unit",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_packaging_unit",
-    "options": "Navari eTims Packaging Unit",
-    "reqd": 1
+    "options": "Navari eTims Packaging Unit"
   },
   {
     "fieldname": "custom_column_break_mn3af",
@@ -181,6 +192,7 @@
     "fieldtype": "Section Break",
     "insert_after": "custom_packaging_unit_code",
     "label": "Unit of Quantity Details",
+    "depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_unit_of_quantity_details"
   },
   {
@@ -188,9 +200,9 @@
     "fieldtype": "Link",
     "insert_after": "custom_unit_of_quantity_details",
     "label": "Unit of Quantity",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_unit_of_quantity",
-    "options": "Navari eTims Unit of Quantity",
-    "reqd": 1
+    "options": "Navari eTims Unit of Quantity"
   },
   {
     "fieldname": "custom_column_break_57atq",
@@ -213,6 +225,7 @@
     "fieldtype": "Section Break",
     "insert_after": "custom_unit_of_quantity_code",
     "label": "Product Type Details",
+    "depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_item_details"
   },
   {
@@ -220,18 +233,18 @@
     "fieldtype": "Link",
     "insert_after": "custom_item_details",
     "label": "Product Type Code",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_product_type",
-    "options": "Navari eTims Product Type",
-    "reqd": 1
+    "options": "Navari eTims Product Type"
   },
   {
     "fieldname": "custom_item_type",
     "fieldtype": "Link",
     "insert_after": "custom_product_type",
     "label": "Navari eTims Item Type",
+    "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_item_type",
-    "options": "Navari eTims Item Type",
-    "reqd": 1
+    "options": "Navari eTims Item Type"
   },
   {
     "fieldname": "custom_column_break_5wrxn",
@@ -265,6 +278,7 @@
     "fieldtype": "Section Break",
     "insert_after": "custom_product_type_name",
     "label": "eTims Imported Item Information",
+    "depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_country_of_origin_details"
   },
   {
