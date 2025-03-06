@@ -9,6 +9,26 @@ The **eTims Details tab** will be present for each item during and after loading
 
 > **NOTE**: The information captured here is mandatory when sending sales information to the eTims servers.
 
+#### 📦 Sent to Slade
+
+**custom_sent_to_slade**: Indicates whether the item has been successfully sent to Slade 360's servers through the Register Item button.
+
+#### 🚫 Prevent eTIMS Registration
+
+**custom_prevent_etims_registration**: Enable this option to exclude the item from being sent to eTIMS. When checked, this item will not be registered or used in eTIMS transactions.
+
+#### 📤 Imported Item Submitted?
+
+**custom_imported_item_submitted**: Indicates whether this imported item has been successfully submitted to eTIMS servers through the "send imported item" button.
+
+#### 🆔 Slade ID
+
+**custom_slade_id**: The unique identifier assigned to the item by Slade 360's servers.
+
+#### 🔄 Submission Tries
+
+Tracks the number of attempts made to submit the item to the respective servers.
+
 #### 🔗 Linked Doctypes
 
 1. **Item Classifications**: Item classifications as specified by KRA.
