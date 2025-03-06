@@ -4,11 +4,31 @@ This section provides an overview of key reports and dashboards, offering insigh
 
 ---
 
-## 📊 **Submission Report**
+## 🔍 **Integration Requests Tracking Report**
 
-![Submission Report](images/submission_report.png)
+![Integration Requests Tracking Report](images/integration_req_reports.png)
 
-The **Submission Report** offers a comprehensive view of all critical documents sent to eTims. It helps track submission status and ensures compliance with regulatory requirements.
+The **Integration Requests Tracking Report** tracks all integrations through the Integration Request doctype, providing a detailed report of each API URL by route key. It monitors the different statuses for each request.
+
+### What It Tracks:
+
+- **API Requests** – Logs every submission sent to eTims.
+- **Responses** – Tracks eTims responses and statuses.
+- **Error Handling** – Identifies failed requests and highlights areas requiring attention.
+
+✅ **Features:**
+
+- Real-time tracking of all eTims communication.
+- Detailed request-response logs for auditing.
+- Instant identification of failed or incomplete transactions.
+
+---
+
+## 📊 **Document Submission Status Report**
+
+![Document Submission Status Report](images/submission_report.png)
+
+The **Document Submission Status Report** offers a comprehensive view of all critical documents sent to eTims. It helps track submission status and ensures compliance with regulatory requirements.
 
 ### Key Documents Tracked:
 
@@ -25,23 +45,66 @@ The **Submission Report** offers a comprehensive view of all critical documents 
 
 ---
 
-## 🔍 **Request Tracking Report**
+## ⏳ **Integration Request Time Analysis Report**
 
-![Request Tracking Report](images/integration_req_reports.png)
+![Integration Request Report](images/integration_time_performance_report.png)
 
-The **Request Tracking Report** tracks all integrations through the Integration Request doctype, providing a detailed report of each API URL by route key. It monitors the different statuses for each request.
+The **Integration Request Time Analysis Report** provides insights into the efficiency of integration services by measuring the time taken for requests to receive their first status update. This report helps monitor system performance, detect delays, and optimize response times.
 
-### What It Tracks:
+### **What It Tracks:**
 
-- **API Requests** – Logs every submission sent to eTims.
-- **Responses** – Tracks eTims responses and statuses.
-- **Error Handling** – Identifies failed requests and highlights areas requiring attention.
+- **Service Processing Time** – Measures the time from request creation to the first recorded status update.
+- **Performance Metrics:**
+  - **Average Time (Seconds)** – The mean duration for a request to change status, indicating overall system efficiency.
+  - **Min Time (Seconds)** – The fastest recorded status update time, showcasing best-case performance.
+  - **Max Time (Seconds)** – The longest recorded processing time (excluding outliers beyond 300 seconds) to highlight potential delays.
+- **Filtered Analysis** – Supports filtering by **date range** and **service type** for focused insights.
 
 ✅ **Features:**
 
-- Real-time tracking of all eTims communication.
-- Detailed request-response logs for auditing.
-- Instant identification of failed or incomplete transactions.
+- Real-time tracking of integration request processing times.
+- Helps identify slow-performing services that may need optimization.
+- Filters out excessively long processing times (>300s) to prevent skewed data.
+- Supports drill-down analysis by service type and date range.
+
+---
+
+## 📊 **Document Submission Time Analytics Report**
+
+![Document Submission Time Analytics Report](images/document_submission_time_analysis.png)
+
+The **Document Submission Time Analytics Report** provides a detailed analysis of the time taken for various documents to be submitted. It calculates the **minimum**, **maximum**, and **average** time (in seconds) taken for document submissions, helping you identify bottlenecks and optimize processes.
+
+### Key Documents Tracked:
+
+- **Item** – Tracks the time taken for item submissions.
+- **Invoice** – Monitors the submission time for sales invoices.
+- **Credit Note** – Tracks the submission time for credit notes.
+- **Purchase Invoice** – Monitors the time taken for purchase invoice submissions.
+- **Stock Ledger Entry (SLE)** – Tracks the time taken for inventory movement updates.
+
+### ✅ **Features:**
+
+- **Average Time**: Calculates the average time taken for document submissions.
+- **Minimum Time**: Identifies the fastest submission time for each document type.
+- **Maximum Time**: Highlights the slowest submission time for each document type.
+- **Filter by Date Range**: Allows filtering data based on a specific date range.
+- **Bar Chart Visualization**: Provides a visual representation of the average, minimum, and maximum submission times.
+
+---
+
+# 📊 **Failed Integration Requests Report**
+
+![Failed Integration Requests Report](images/failed_integration_report.png)
+
+The **Failed Integration Requests Report** provides a detailed analysis of failed integration requests in your system. It helps identify common errors, track their frequency over time, and take corrective actions to improve integration reliability.
+
+### Key Features:
+
+- **Error Tracking**: Tracks failed integration requests grouped by error messages.
+- **Periodic Analysis**: Analyzes errors over customizable time periods (e.g., weekly, monthly, quarterly).
+- **Visualization**: Displays error trends in a bar chart for easy interpretation.
+- **Custom Filters**: Allows filtering by document type and date range.
 
 ---
 
@@ -83,9 +146,15 @@ The **eTims Dashboard** provides a real-time overview of all eTims-related activ
 #### 📊 **Charts & Visual Insights:**
 
 ![eTims Dashboard](images/dashboard-charts.png)
+![eTims Dashboard](images/dashboard-charts-2.png)
 
-- **Document Submission Status** – Provides a full-width graphical representation of submission statuses (Pending, Successful, Failed).
-- **Integration Request Endpoints** – Displays a full-width chart summarizing API requests, endpoints, and responses.
+1. **Document Submission Status** – Provides a graphical representation of submission statuses (Pending, Successful, Failed).
+
+2. **Integration Request Endpoints** – Displays a chart summarizing API requests, endpoints, and responses.
+
+3. **Integration Request Time Analysis** – Chart analyzing the time taken for integration requests to complete.
+
+4. **Document Submission Time Analysis** – Chart providing a detailed analysis of the time taken for various document submissions.
 
 ✅ **Features:**
 

@@ -44,7 +44,7 @@ class FailedIntegrationRequestsAnalytics:
 
     def get_columns(self) -> None:
         """Define report columns"""
-        self.columns = [
+        self.columns: List[Dict[str, Any]] = [
             {
                 "label": _("Error"),
                 "fieldname": "error",
@@ -80,7 +80,7 @@ class FailedIntegrationRequestsAnalytics:
 
     def get_failed_requests(self) -> None:
         """Fetch failed integration requests grouped by error"""
-        filters = {"status": "Failed"}
+        filters: Dict[str, Any] = {"status": "Failed"}
         if self.filters.get("reference_doctype"):
             if self.filters.reference_doctype not in DOCTYPE_MAPPING:
                 frappe.throw(
@@ -94,7 +94,9 @@ class FailedIntegrationRequestsAnalytics:
             "Integration Request", filters=filters, fields=["error", "creation"]
         )
 
-        self.error_periodic_data = defaultdict(lambda: defaultdict(int))
+        self.error_periodic_data: Dict[str, Dict[str, int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
 
         for request in failed_requests:
             error = self.style_error_message(request["error"] or "No error message")
@@ -139,10 +141,10 @@ class FailedIntegrationRequestsAnalytics:
 
     def get_rows(self) -> None:
         """Format grouped data into report rows"""
-        self.data = []
+        self.data: List[Dict[str, Any]] = []
 
         for error, period_data in self.error_periodic_data.items():
-            row = {"error": error}
+            row: Dict[str, Any] = {"error": error}
             total = 0
 
             for end_date in self.periodic_daterange:
@@ -207,7 +209,7 @@ class FailedIntegrationRequestsAnalytics:
         else:
             from_date = from_date + relativedelta(from_date, weekday=MO(-1))
 
-        self.periodic_daterange = []
+        self.periodic_daterange: List[str] = []
         for x in range(1, 53):
             period_end_date = (
                 add_days(from_date, 6)
@@ -223,7 +225,7 @@ class FailedIntegrationRequestsAnalytics:
 
     def get_chart_data(self) -> None:
         labels = [d.get("label") for d in self.columns[1:-1]]
-        datasets = []
+        datasets: List[Dict[str, Any]] = []
 
         for error, period_data in self.error_periodic_data.items():
             dataset_values = [
@@ -241,7 +243,7 @@ class FailedIntegrationRequestsAnalytics:
                 )
                 datasets.append({"name": error, "values": [total_value]})
 
-        self.chart = {
+        self.chart: Dict[str, Any] = {
             "data": {"labels": labels, "datasets": datasets},
             "type": "bar",
             "axis_options": {"xIsSeries": True},

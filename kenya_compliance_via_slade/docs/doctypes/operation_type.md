@@ -6,7 +6,7 @@ Defines different operation types and their associated workflows within the syst
 
 ### 💼 Transaction Management
 
-Defines and manages new transaction types within the system.
+Manages stock transactions and maps them to Slade Inventory Operation Types.
 
 ![Current Environment Identifier](../images/operation_type.png)
 
