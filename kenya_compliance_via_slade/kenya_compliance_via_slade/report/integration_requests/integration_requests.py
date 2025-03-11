@@ -114,7 +114,6 @@ class IntegrationRequestAnalytics:
                 "values": [row.get("cancelled", 0) for row in self.data],
             },
             {"name": "Failed", "values": [row.get("failed", 0) for row in self.data]},
-            {"name": "Total", "values": [row.get("total", 0) for row in self.data]},
         ]
 
         self.chart = {
