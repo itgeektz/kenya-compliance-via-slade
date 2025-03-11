@@ -514,7 +514,7 @@ def update_stock_quantity(name: str, id: str) -> None:
         process_request(
             request_data,
             route_key="SaveStockBalanceReq",
-            handler_function=submit_inventory_on_success,
+            # handler_function=submit_inventory_on_success,
             request_method="PATCH",
             doctype="Item",
         )

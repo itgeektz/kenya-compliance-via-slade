@@ -291,7 +291,7 @@ def process_invoice_items(
             "product": get_link_value(
                 "Item", "name", item.get("item_code"), "custom_slade_id"
             ),
-            "quantity": abs(item.get("qty")),
+            "quantity": round(abs(item.get("qty")), 2),
             "new_price": item.get("rate")
             + (abs(item.get("custom_tax_amount", 0)) / abs(item.get("qty"))),
             "amount": abs(item.get("amount")) + abs(item.get("custom_tax_amount", 0)),

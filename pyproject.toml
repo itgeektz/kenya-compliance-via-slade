@@ -1,7 +1,7 @@
 [project]
 name = "kenya_compliance_via_slade"
 authors = [
-    { name = "Navari", email = "solutions@navari.co.ke"}
+    { name = "Navari", email = "support@navari.co.ke"}
 ]
 description = "Kenya Compliance via Slade360"
 requires-python = ">=3.10"
@@ -11,7 +11,8 @@ dependencies = [
     # "frappe~=15.0.0" # Installed and managed by bench.
     "aiohttp==3.9.1",
     "deprecation==2.1.0",
-    "qrcode==7.4.2"
+    "qrcode==7.4.2",
+    "bs4"
 ]
 
 [build-system]

@@ -655,8 +655,8 @@ def operation_types_search_on_success(
         {
             "slade_id": response.get("id"),
             "operation_name": response.get("operation_name"),
-            "source_location_id": response.get("source_location"),
-            "destination_location_id": response.get("destination_location"),
+            "source_location": response.get("source_location"),
+            "destination_location": response.get("destination_location"),
             "operation_type": response.get("operation_type"),
         },
     )
