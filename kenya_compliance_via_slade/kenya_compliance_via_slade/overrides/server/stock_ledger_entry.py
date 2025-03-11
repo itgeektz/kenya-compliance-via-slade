@@ -268,13 +268,9 @@ def stock_mvt_submission_on_success(
     route_key = "StockIOLineReq"
     requset_data = {
         "document_name": document_name,
-        "organisation": frappe.get_value("Company", record.company, "custom_slade_id"),
-        "source_organisation_unit": frappe.get_value(
-            "Department", record.department, "custom_slade_id"
-        ),
         "product": item.custom_slade_id,
-        "quantity": abs(doc.actual_qty),
-        "quantity_confirmed": abs(doc.actual_qty),
+        "quantity": round(abs(doc.actual_qty), 2),
+        "quantity_confirmed": round(abs(doc.actual_qty), 2),
     }
     if doc.voucher_type == "Stock Reconciliation" or (
         doc.voucher_type == "Stock Entry" and record.is_opening == "Yes"
