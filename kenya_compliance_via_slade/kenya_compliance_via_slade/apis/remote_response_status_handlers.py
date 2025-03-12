@@ -292,9 +292,10 @@ def process_invoice_items(
                 "Item", "name", item.get("item_code"), "custom_slade_id"
             ),
             "quantity": round(abs(item.get("qty")), 2),
-            "new_price": item.get("rate")
+            "new_price": item.get("net_rate")
             + (abs(item.get("custom_tax_amount", 0)) / abs(item.get("qty"))),
-            "amount": abs(item.get("amount")) + abs(item.get("custom_tax_amount", 0)),
+            "amount": abs(item.get("net_amount"))
+            + abs(item.get("custom_tax_amount", 0)),
             "credit_note" if invoice.is_return else "sales_invoice": invoice_slade_id,
             "document_name": item.get("name"),
             "allow_discount": False,

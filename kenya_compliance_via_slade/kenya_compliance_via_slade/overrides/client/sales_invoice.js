@@ -21,7 +21,7 @@ frappe.ui.form.on(parentDoctype, {
     );
 
     if (activeSetting?.name) {
-      if (!frm.doc.custom_slade_id) {
+      if (!frm.doc.custom_successfully_submitted) {
         frm.add_custom_button(
           __("Send Invoice"),
           function () {
