@@ -56,6 +56,31 @@ def generic_invoices_on_submit_override(
             )
             return
 
+    # Check if custom_slade_id exists
+    if doc.custom_slade_id:
+        # If custom_slade_id exists, start from process_invoice_items
+        frappe.enqueue(
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.process_invoice_items",
+            document_name=doc.name,
+            doctype=invoice_type,
+            invoice_slade_id=doc.custom_slade_id,
+            queue="long",
+        )
+        return
+
+    # Check if custom_transition_successful exists
+    if doc.custom_transition_successful:
+        # If custom_transition_successful exists, start from process_sales_sign
+        frappe.enqueue(
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.process_sales_sign",
+            document_name=doc.name,
+            doctype=invoice_type,
+            invoice_slade_id=doc.custom_slade_id,
+            queue="long",
+        )
+        return
+
+    # If neither custom_slade_id nor custom_transition_successful exists, proceed with the normal flow
     payload = build_invoice_payload(doc, company_name, doc.is_return)
     additional_context = {
         "invoice_type": invoice_type,
