@@ -460,7 +460,7 @@ def update_invoice_info(response: dict, **kwargs) -> None:
             {
                 "doctype": "File",
                 "file_name": f"QR-{custom_slade_id}.png",
-                "is_private": 1,
+                "is_private": 0,
                 "content": buffer.read(),
                 "attached_to_doctype": doctype,
                 "attached_to_name": custom_slade_id,

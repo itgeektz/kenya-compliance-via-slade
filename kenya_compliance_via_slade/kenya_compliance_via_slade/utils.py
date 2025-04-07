@@ -481,8 +481,7 @@ def update_last_request_date(
 
     doc = frappe.get_doc(
         routes_table,
-        {"url_path": route},
-        ["*"],
+        {"url_path": route}
     )
 
     doc.last_request_date = response_datetime
@@ -816,16 +815,19 @@ def get_department(id: str) -> str:
         "Department", {"department_name": department_name}, "name"
     )
     if existing_department:
-        doc = frappe.get_doc("Department", existing_department)
+        frappe.db.set_value("Department", existing_department, {
+            "custom_slade_id": id,
+            "custom_is_etims_department": 1
+        })
+        return existing_department
     else:
-        doc = frappe.new_doc("Department")
-        doc.department_name = department_name
-
-    doc.custom_slade_id = id
-    doc.custom_is_etims_department = 1
-
-    doc.save(ignore_permissions=True)
-    return doc.name
+        new_department = frappe.get_doc({
+            "doctype": "Department",
+            "department_name": department_name,
+            "custom_slade_id": id,
+            "custom_is_etims_department": 1
+        }).insert(ignore_permissions=True, ignore_mandatory=True)
+        return new_department.name
 
 
 def get_link_value(
@@ -926,3 +928,45 @@ def parse_request_data(request_data: str | dict) -> dict:
     elif isinstance(request_data, (dict, list)):
         return request_data
     return {}
+
+
+
+def get_total_stock_balance_from_sle(sle_name: str) -> dict:
+    if not sle_name:
+        return 0
+
+    sle = frappe.get_doc("Stock Ledger Entry", sle_name)
+
+    item_code = sle.item_code
+    creation = sle.creation
+
+    warehouses = frappe.get_all(
+        "Stock Ledger Entry",
+        filters={
+            "item_code": item_code,
+            "docstatus": 1,
+        },
+        distinct=True,
+        pluck="warehouse"
+    )
+
+    balance  = 0
+
+    for wh in warehouses:
+        latest_sle = frappe.get_all(
+            "Stock Ledger Entry",
+            filters={
+                "item_code": item_code,
+                "warehouse": wh,
+                "docstatus": 1,
+                "creation": ("<=", creation),
+            },
+            fields=["qty_after_transaction"],
+            order_by="posting_date desc, posting_time desc, creation desc",
+            limit=1
+        )
+
+        if latest_sle:
+            balance += float(latest_sle[0]["qty_after_transaction"])
+
+    return float(balance)
