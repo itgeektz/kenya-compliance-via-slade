@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 import frappe
 import frappe.defaults
 from frappe.model.document import Document
+from frappe import _
+from typing import List
 
 from ..apis.api_builder import EndpointsBuilder
 from ..apis.process_request import process_request
@@ -12,7 +14,6 @@ from ..doctype.doctype_names_mapping import (
     OPERATION_TYPE_DOCTYPE_NAME,
     UOM_CATEGORY_DOCTYPE_NAME,
 )
-from ..overrides.server.stock_ledger_entry import on_update
 from ..utils import get_settings
 from .task_response_handlers import (
     itemprice_search_on_success,
@@ -99,6 +100,7 @@ def send_sales_invoices_information() -> None:
             "custom_successfully_submitted": 0,
             "custom_transition_successful": 1,
             "creation": [">=", timeframe_ago],
+            "is_opening":"No"
         }
     )
     if processed_unsent_to_etims:
@@ -304,33 +306,39 @@ def fetch_etims_operation_types(request_data: str) -> None:
 
 
 def send_stock_information() -> None:
+    from ..overrides.server.stock_ledger_entry import fetch_current_stock_balance
     settings = get_settings()
     if not settings.get("stock_auto_submission_enabled"):
         return
+
     timeframe = settings.get("stock_information_submission_timeframe", 86400) or 86400
     duration = timedelta(seconds=timeframe)
-
     timeframe_ago = datetime.now() - duration
-    all_stock_ledger_entries: list[Document] = frappe.get_all(
+    entries = fetch_stock_ledgers(timeframe_ago)  
+    for entry in entries:
+        fetch_current_stock_balance(entry)  
+
+
+def fetch_stock_ledgers(timeframe_ago: datetime) -> List[Document]:
+    entries = frappe.get_all(
         "Stock Ledger Entry",
-        {
+        filters={
             "docstatus": 1,
             "custom_submitted_successfully": 0,
             "creation": [">=", timeframe_ago],
         },
-        ["name"],
+        fields=["name", "item_code"],
+        order_by="creation asc",  
     )
-    for entry in all_stock_ledger_entries:
-        doc = frappe.get_doc(
-            "Stock Ledger Entry", entry.name, for_update=False
-        )  # Refetch to get the document representation of the record
 
-        try:
-            frappe.enqueue(on_update, doc=doc)
+    seen_items = set()
+    oldest_entries = []
+    for entry in entries:
+        if entry["item_code"] not in seen_items:
+            seen_items.add(entry["item_code"])
+            oldest_entries.append(entry)
 
-        except Exception as e:
-            frappe.log_error(f"Error Enqueuing stock ledger entry {doc.name}, {str(e)}")
-            continue
+    return [frappe.get_doc("Stock Ledger Entry", entry["name"]) for entry in oldest_entries]
 
 
 def send_purchase_information() -> None:
@@ -357,7 +365,7 @@ def send_purchase_information() -> None:
     for invoice in all_submitted_purchase_invoices:
         doc = frappe.get_doc(
             "Purchase Invoice", invoice.name, for_update=False
-        )  # Refetch to get the document representation of the record
+        ) 
 
         try:
             frappe.enqueue(on_submit, doc=doc)

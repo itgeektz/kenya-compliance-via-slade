@@ -12,7 +12,7 @@ from ...doctype.doctype_names_mapping import (
     OPERATION_TYPE_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
 )
-from ...utils import extract_document_series_number, get_settings
+from ...utils import extract_document_series_number, get_settings, get_total_stock_balance_from_sle
 
 endpoints_builder = EndpointsBuilder()
 
@@ -338,17 +338,64 @@ def stock_mvt_submit_items_on_success(
 
 
 def stock_operation_on_error(response_data: dict, document_name: str, **kwargs) -> None:
-    from ...apis.apis import submit_inventory
-
-    doc = frappe.get_doc("Stock Ledger Entry", document_name)
-
-    submit_inventory(doc.item_code)
+    fetch_current_stock_balance(document_name)
 
 
 def process_stock_mvt_transition(response: dict, document_name: str, **kwargs) -> None:
     frappe.db.set_value(
         "Stock Ledger Entry", document_name, {"custom_submitted_successfully": 1}
     )
+
+
+def stock_balance_on_success(response: dict, document_name: str, **kwargs) -> None:
+    from ...apis.apis import submit_inventory
+
+    doc = frappe.get_doc("Stock Ledger Entry", document_name)
+
+    results = (
+        response.get("results", [])
+        if isinstance(response, dict)
+        else response if isinstance(response, list) else []
+    )
+
+    if not results:
+        frappe.enqueue(
+            submit_inventory,
+            queue="default",
+            name=doc.item_code
+        )
+        return
+
+    slade_balance = float(results[0].get("quantity", 0)) if results else 0
+    balance = get_total_stock_balance_from_sle(doc)
+    
+    if slade_balance != balance:
+        frappe.enqueue(
+            adjust_stock_quantity,
+            queue="default",
+            name=doc.item_code,
+            id=results[0].get("id"),
+            qty=balance,
+        )
+
+    associated_sles = frappe.get_all(
+        "Stock Ledger Entry",
+        filters={
+            "item_code": doc.item_code,
+            "creation": [">=", doc.creation],
+        },
+        fields=["name"],
+        order_by="creation asc"
+    )
+
+    for sle in associated_sles:
+        frappe.enqueue(
+            on_update,
+            queue="default",
+            doc=frappe.get_doc("Stock Ledger Entry", sle.name),
+        )
+
+def fetch_current_stock_balance(document_name: str) -> float:
     doc = frappe.get_doc("Stock Ledger Entry", document_name)
     settings = get_settings(company_name=doc.company)
     requset_data = {
@@ -369,33 +416,21 @@ def process_stock_mvt_transition(response: dict, document_name: str, **kwargs) -
     )
 
 
-def stock_balance_on_success(response: dict, document_name: str, **kwargs) -> None:
-    from ...apis.apis import submit_inventory, update_stock_quantity
-
-    doc = frappe.get_doc("Stock Ledger Entry", document_name)
-
-    results = (
-        response.get("results", [])
-        if isinstance(response, dict)
-        else response if isinstance(response, list) else []
+@frappe.whitelist()
+def adjust_stock_quantity(name: str, id: str, qty: str) -> None:
+    request_data = {
+        "id": id,
+        "document_name": name,
+        "quantity": qty,
+    }
+    process_request(
+        request_data,
+        route_key="SaveStockBalanceReq",
+        handler_function=adjust_stock_quantity_on_success,
+        request_method="PATCH",
+        doctype="Item",
     )
 
-    if not results:
-        submit_inventory(doc.item_code)
-        return
 
-    slade_balance = float(results[0].get("quantity", 0)) if results else 0
-
-    if slade_balance <= 0:
-
-        frappe.enqueue(
-            update_stock_quantity,
-            queue="default",
-            name=doc.item_code,
-            id=results[0].get("id"),
-        )
-        return
-
-    frappe.db.set_value(
-        "Stock Ledger Entry", document_name, {"custom_new_total_qty": slade_balance}
-    )
+def adjust_stock_quantity_on_success(response: dict, document_name: str, **kwargs) -> None:
+    pass
