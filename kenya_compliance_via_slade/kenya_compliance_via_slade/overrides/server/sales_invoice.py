@@ -9,6 +9,7 @@ def on_submit(doc: Document, method: str = None) -> None:
     if (
         doc.custom_successfully_submitted == 0
         and doc.custom_defer_etims_submission == 0
+        and doc.is_opening == "No"
     ):
         generic_invoices_on_submit_override(doc, "Sales Invoice")
 
@@ -30,4 +31,6 @@ def before_cancel(doc: Document, method: str = None) -> None:
 @frappe.whitelist()
 def send_invoice_details(name: str) -> None:
     doc = frappe.get_doc("Sales Invoice", name)
+    if doc.is_opening == "Yes":
+        return
     generic_invoices_on_submit_override(doc, "Sales Invoice")
