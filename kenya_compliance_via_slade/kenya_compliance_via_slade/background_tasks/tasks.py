@@ -99,6 +99,7 @@ def send_sales_invoices_information() -> None:
             "custom_successfully_submitted": 0,
             "custom_transition_successful": 1,
             "creation": [">=", timeframe_ago],
+            "is_opening":"No"
         }
     )
     if processed_unsent_to_etims:
