@@ -25,9 +25,7 @@ fixtures = [
     {"dt": IMPORTED_ITEMS_STATUS_DOCTYPE_NAME},
     {"dt": ROUTES_TABLE_DOCTYPE_NAME},
     {"dt": ITEM_TYPE_DOCTYPE_NAME},
-    {
-        "dt": PRODUCT_TYPE_DOCTYPE_NAME,
-    },
+    {"dt": PRODUCT_TYPE_DOCTYPE_NAME},
     {
         "dt": TRANSACTION_PROGRESS_DOCTYPE_NAME,
         "filters": [
@@ -45,7 +43,14 @@ fixtures = [
             ]
         ],
     },
+    {
+        "dt": "Custom Field",
+        "filters": [
+            ["module", "=", "Kenya Compliance Via Slade"]
+        ],
+    },
 ]
+
 # Includes in <head>
 # ------------------
 
@@ -79,6 +84,7 @@ doctype_js = {
     "UOM": "kenya_compliance_via_slade/overrides/client/uom.js",
     # "Warehouse": "kenya_compliance_via_slade/overrides/client/warehouse.js",
     "Mode of Payment": "kenya_compliance_via_slade/overrides/client/mode_of_payment.js",
+    "Stock Ledger Entry": "kenya_compliance_via_slade/overrides/client/stock_ledger_entry.js",
     # "Price List": "kenya_compliance_via_slade/overrides/client/price_list.js",
     # "Item Price": "kenya_compliance_via_slade/overrides/client/item_price.js",
 }

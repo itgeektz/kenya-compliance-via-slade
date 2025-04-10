@@ -12,7 +12,7 @@ from ...doctype.doctype_names_mapping import (
     OPERATION_TYPE_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
 )
-from ...utils import extract_document_series_number, get_settings, get_total_stock_balance_from_sle
+from ...utils import extract_document_series_number, get_settings, get_total_stock_balance_from_sle, get_max_submission_attempts
 
 endpoints_builder = EndpointsBuilder()
 
@@ -20,7 +20,10 @@ endpoints_builder = EndpointsBuilder()
 def on_update(doc: Document, method: str | None = None) -> None:
     if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
         return
-
+    
+    max_tries = get_max_submission_attempts("Stock Ledger Entry")
+    if int(doc.custom_submission_tries) >= max_tries:
+        return
     save_ledger_details(doc.name)
 
 
@@ -43,12 +46,10 @@ def save_ledger_details(name: str) -> None:
                 handle_operation_type(doc, record, payload)
 
         elif not doc.custom_inventory_submitted_successfully:
-            stock_mvt_submission_on_success(
-                response={"id": not doc.custom_slade_id}, document_name=name
-            )
+            submit_stock_mvt_items(name=name)
 
         else:
-            stock_mvt_submit_items_on_success(response={}, document_name=name)
+            submit_stock_mvt_transition(name=name)
 
     except Exception as e:
         frappe.log_error(
@@ -240,6 +241,54 @@ def submit_stock_mvt(payload: dict, route_key: str, **kwargs) -> None:
         request_method="POST",
     )
 
+@frappe.whitelist()
+def fetch_stock_mvt(name: str) -> None:
+    doc = frappe.get_doc("Stock Ledger Entry", name)
+    record = frappe.get_doc(doc.voucher_type, doc.voucher_no)
+    route_key = "StockIOSaveReq"
+    if doc.voucher_type == "Stock Reconciliation" or (
+        doc.voucher_type == "Stock Entry" and record.is_opening == "Yes"
+    ):
+        route_key = "StockMasterSaveReq"
+    payload = {
+        "document_name": name,
+        "id": doc.custom_slade_id,
+    }
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        doctype="Stock Ledger Entry",
+        request_data=payload,
+        route_key=route_key,
+        handler_function=fetch_stock_mvt_on_success,
+        request_method="GET",
+    )
+
+
+def fetch_stock_mvt_on_success(
+    response: dict, document_name: str, **kwargs
+) -> None:
+    response = response if isinstance(response, list) else response.get("results", [response])
+    frappe.log_error(
+        title=f"Stock Ledger Entry {document_name}",
+        message=f"Received response: {response}",
+    )
+    if len(response) > 0:
+        state = response[0].get("workflow_state")
+        if state == "PROCESSED":
+            frappe.db.set_value(
+                "Stock Ledger Entry",
+                document_name,
+                {"custom_submitted_successfully": 1},
+            )
+        else:
+            frappe.db.set_value(
+                "Stock Ledger Entry",
+                document_name,
+                {"custom_submitted_successfully": 0},
+            )
+            submit_stock_mvt_transition(name=document_name)
+
 
 def is_valid_uuid(uuid_to_test: str, version: int = 4) -> bool:
     try:
@@ -261,13 +310,21 @@ def stock_mvt_submission_on_success(
         return
 
     frappe.db.set_value("Stock Ledger Entry", document_name, {"custom_slade_id": id})
-    doc = frappe.get_doc("Stock Ledger Entry", document_name)
+    submit_stock_mvt_items(name=document_name)
+    
 
+@frappe.whitelist() 
+def submit_stock_mvt_items(name: str) -> None:
+    doc = frappe.get_doc("Stock Ledger Entry", name)
+    if not doc.custom_slade_id or doc.custom_inventory_submitted_successfully or not is_valid_uuid(doc.custom_slade_id):
+        return
+    
     record = frappe.get_doc(doc.voucher_type, doc.voucher_no)
     item = frappe.get_doc("Item", doc.item_code)
     route_key = "StockIOLineReq"
+    id = doc.custom_slade_id
     requset_data = {
-        "document_name": document_name,
+        "document_name": name,
         "product": item.custom_slade_id,
         "quantity": round(abs(doc.actual_qty), 2),
         "quantity_confirmed": round(abs(doc.actual_qty), 2),
@@ -316,13 +373,26 @@ def stock_mvt_submit_items_on_success(
         document_name,
         {"custom_inventory_submitted_successfully": 1},
     )
-    doc = frappe.get_doc("Stock Ledger Entry", document_name)
+    submit_stock_mvt_transition(name=document_name)
+    
+
+@frappe.whitelist() 
+def submit_stock_mvt_transition(name: str) -> None:
+    if not name:
+        return
+    doc = frappe.get_doc("Stock Ledger Entry", name)
+    doc.custom_submission_tries = (
+        int(doc.custom_submission_tries) + 1
+        if doc.custom_submission_tries
+        else 1
+    )
+    doc.save(ignore_permissions=True)
     if doc.voucher_type == "Stock Reconciliation":
         route_key = "StockAdjustmentTransitionReq"
     else:
         route_key = "StockOperationTransitionReq"
     requset_data = {
-        "document_name": document_name,
+        "document_name": name,
         "id": doc.custom_slade_id,
     }
     frappe.enqueue(
@@ -338,7 +408,8 @@ def stock_mvt_submit_items_on_success(
 
 
 def stock_operation_on_error(response_data: dict, document_name: str, **kwargs) -> None:
-    fetch_current_stock_balance(document_name)
+    # fetch_current_stock_balance(document_name)
+    pass
 
 
 def process_stock_mvt_transition(response: dict, document_name: str, **kwargs) -> None:
@@ -384,11 +455,14 @@ def stock_balance_on_success(response: dict, document_name: str, **kwargs) -> No
             "item_code": doc.item_code,
             "creation": [">=", doc.creation],
         },
-        fields=["name"],
+        fields=["name", "custom_submission_tries"],
         order_by="creation asc"
     )
 
     for sle in associated_sles:
+        max_tries = get_max_submission_attempts("Stock Ledger Entry")
+        if int(sle.custom_submission_tries) >= max_tries:
+            continue
         frappe.enqueue(
             on_update,
             queue="default",
