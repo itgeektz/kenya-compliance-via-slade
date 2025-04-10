@@ -382,7 +382,7 @@ def build_invoice_payload(
         branch = invoice.branch if hasattr(invoice, "branch") else settings.get("bhfid")
 
         customer = frappe.get_value("Customer", invoice.customer, "slade_id")
-        currency = frappe.get_value("Currency", invoice.currency, "custom_slade_id")
+        currency = frappe.get_value("Currency", "KES", "custom_slade_id")
 
         if is_return:
             payload = {

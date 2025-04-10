@@ -286,24 +286,34 @@ def process_invoice_items(
     if invoice.is_return:
         route_key = "SalesCreditNoteLineReq"
 
+    conversion_rate = invoice.conversion_rate or 1
+
     for item in items:
+        tax_amount = item.get("custom_tax_amount", 0) or 0
+
+        converted_tax_amount = tax_amount * conversion_rate if tax_amount else 0
+
+        qty = abs(item.get("qty"))
+        base_net_rate = item.get("base_net_rate") or 0
+        base_amount = abs(item.get("base_amount")) or 0
+
         payload = {
             "product": get_link_value(
                 "Item", "name", item.get("item_code"), "custom_slade_id"
             ),
-            "quantity": round(abs(item.get("qty")), 2),
-            "new_price": item.get("base_net_rate") 
-            + (abs(item.get("custom_tax_amount", 0)) / abs(item.get("qty"))),
-            "amount": abs(item.get("base_amount"))
-            + abs(item.get("custom_tax_amount", 0)),
+            "quantity": round(qty, 2),
+            "new_price": base_net_rate + (converted_tax_amount / qty if qty else 0),
+            "amount": base_amount + converted_tax_amount,
             "credit_note" if invoice.is_return else "sales_invoice": invoice_slade_id,
             "document_name": item.get("name"),
             "allow_discount": False,
         }
+
         request_method = "POST"
         if item.get("custom_slade_id"):
             request_method = "PATCH"
             payload["id"] = item.get("custom_slade_id")
+
         process_request(
             payload,
             route_key,
