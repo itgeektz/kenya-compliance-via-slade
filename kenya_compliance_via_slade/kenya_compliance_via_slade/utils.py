@@ -930,15 +930,22 @@ def parse_request_data(request_data: str | dict) -> dict:
     return {}
 
 
-
 def get_total_stock_balance_from_sle(sle_name: str) -> dict:
     if not sle_name:
         return 0
 
-    sle = frappe.get_doc("Stock Ledger Entry", sle_name)
+    sle = frappe.db.get_value(
+        "Stock Ledger Entry", 
+        sle_name, 
+        ["item_code", "creation"], 
+        as_dict=True
+    )
 
-    item_code = sle.item_code
-    creation = sle.creation
+    if not sle:
+        return 0
+
+    item_code = sle["item_code"]
+    creation = sle["creation"]
 
     warehouses = frappe.get_all(
         "Stock Ledger Entry",
@@ -950,7 +957,7 @@ def get_total_stock_balance_from_sle(sle_name: str) -> dict:
         pluck="warehouse"
     )
 
-    balance  = 0
+    balance = 0
 
     for wh in warehouses:
         latest_sle = frappe.get_all(
@@ -970,3 +977,16 @@ def get_total_stock_balance_from_sle(sle_name: str) -> dict:
             balance += float(latest_sle[0]["qty_after_transaction"])
 
     return float(balance)
+
+
+def get_max_submission_attempts(doctype: str = "Sales Invoice") -> int:
+    settings = get_settings()
+    if doctype == "Sales Invoice":
+        tries = settings.get("maximum_sales_information_submission_attempts", 3)
+    elif doctype == "Purchase Invoice":
+        tries = settings.get("maximum_purchase_information_submission_attempts", 3)
+    elif doctype == "Stock Ledger Entry":
+        tries = settings.get("maximum_stock_information_submission_attempts", 3)
+    else:
+        tries = 3  
+    return tries

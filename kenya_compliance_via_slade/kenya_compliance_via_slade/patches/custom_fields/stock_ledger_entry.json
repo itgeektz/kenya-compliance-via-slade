@@ -77,11 +77,11 @@
   },
   {
     "allow_on_submit": 1,
-    "fieldname": "custom_new_total_qty",
+    "fieldname": "custom_submission_tries",
     "fieldtype": "Float",
     "insert_after": "custom_slade_id",
-    "label": "New Total Qty",
-    "name": "Stock Ledger Entry-custom_new_total_qty",
+    "label": "Submission Tries",
+    "name": "Stock Ledger Entry-custom_submission_tries",
     "no_copy": 1,
     "read_only": 1
   }

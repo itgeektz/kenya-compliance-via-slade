@@ -11,7 +11,10 @@ def create_fields_from_json(json_file_name: str, doctype: str) -> None:
         json_file_path: str = os.path.join(current_dir, json_file_name)
 
         with open(json_file_path) as f:
-            custom_fields_data: dict = json.load(f)
+            custom_fields_data: list = json.load(f)
+
+        for field in custom_fields_data:
+            field["module"] = "Kenya Compliance Via Slade"
 
         custom_fields: dict = {doctype: custom_fields_data}
 

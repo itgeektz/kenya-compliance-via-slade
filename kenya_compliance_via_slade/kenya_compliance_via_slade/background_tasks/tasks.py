@@ -14,7 +14,7 @@ from ..doctype.doctype_names_mapping import (
     OPERATION_TYPE_DOCTYPE_NAME,
     UOM_CATEGORY_DOCTYPE_NAME,
 )
-from ..utils import get_settings
+from ..utils import get_settings, get_max_submission_attempts
 from .task_response_handlers import (
     itemprice_search_on_success,
     operation_types_search_on_success,
@@ -45,11 +45,6 @@ def get_timeframe() -> timedelta:
     settings = get_settings()
     timeframe = settings.get("sales_information_submission_timeframe", 86400) or 86400
     return timedelta(seconds=timeframe)
-
-
-def get_max_submission_attempts() -> int:
-    settings = get_settings()
-    return settings.get("maximum_sales_information_submission_attempts", 3)
 
 
 def fetch_sales_invoices(filters: dict) -> list:
