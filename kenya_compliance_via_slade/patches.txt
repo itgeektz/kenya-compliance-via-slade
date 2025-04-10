@@ -1,20 +1,20 @@
 [pre_model_sync]
 
 [post_model_sync]
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.bom_item # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.bom # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.branch # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.company # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.currency # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.customer # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.department # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.item_tax_template # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.item # 10/04/ 25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.mode_of_payment # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.sales_invoice # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.sales_invoice_item # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.purchase_invoice_item # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.purchase_invoice # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.stock_ledger_entry # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.supplier # 10/04/25 
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.warehouse # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.bom_item # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.bom # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.branch # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.company # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.currency # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.customer # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.department # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.item_tax_template # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.item # 10/04/ 25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.mode_of_payment # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.sales_invoice # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.sales_invoice_item # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.purchase_invoice_item # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.purchase_invoice # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.stock_ledger_entry # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.supplier # 10/04/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.warehouse # 10/04/25 
