@@ -1,7 +1,6 @@
 from typing import Optional
 
 import frappe
-import frappe.defaults
 from frappe.model.document import Document
 
 from ...background_tasks.tasks import (
