@@ -291,19 +291,19 @@ def process_invoice_items(
     for item in items:
         tax_amount = item.get("custom_tax_amount", 0) or 0
 
-        converted_tax_amount = tax_amount * conversion_rate if tax_amount else 0
+        converted_tax_amount = round(tax_amount * conversion_rate, 4) if tax_amount else 0
 
         qty = abs(item.get("qty"))
-        base_net_rate = item.get("base_net_rate") or 0
-        base_amount = abs(item.get("base_amount")) or 0
+        base_net_rate = round(item.get("base_net_rate") or 0, 4)
+        base_amount = round(abs(item.get("base_amount")) or 0, 4)
 
         payload = {
             "product": get_link_value(
                 "Item", "name", item.get("item_code"), "custom_slade_id"
             ),
-            "quantity": round(qty, 2),
-            "new_price": base_net_rate + (converted_tax_amount / qty if qty else 0),
-            "amount": base_amount + converted_tax_amount,
+            "quantity": round(qty, 4),
+            "new_price": round(base_net_rate + (converted_tax_amount / qty if qty else 0), 4),
+            "amount": round(base_amount + converted_tax_amount, 4),
             "credit_note" if invoice.is_return else "sales_invoice": invoice_slade_id,
             "document_name": item.get("name"),
             "allow_discount": False,

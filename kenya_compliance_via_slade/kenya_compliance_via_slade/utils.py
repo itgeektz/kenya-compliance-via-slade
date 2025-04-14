@@ -706,9 +706,11 @@ def authenticate_and_get_token(
             "scope": scope,
         }
     else:
-        raise Exception(
-            f"Authentication failed: {response.status_code} - {response.text}"
-        )
+        try:
+            response_data = json.loads(response.text)
+            frappe.throw(f"Authentication failed: <b>{response_data.get('error', 'Unknown error')}</b>")
+        except json.JSONDecodeError:
+            frappe.throw(f"Authentication failed: Unable to parse server response as JSON. Raw response: <b>{response.text}</b>")
 
 
 @frappe.whitelist()
@@ -976,7 +978,7 @@ def get_total_stock_balance_from_sle(sle_name: str) -> dict:
         if latest_sle:
             balance += float(latest_sle[0]["qty_after_transaction"])
 
-    return float(balance)
+    return round(balance, 4)
 
 
 def get_max_submission_attempts(doctype: str = "Sales Invoice") -> int:
