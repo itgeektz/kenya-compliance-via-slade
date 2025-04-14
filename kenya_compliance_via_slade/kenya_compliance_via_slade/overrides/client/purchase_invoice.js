@@ -9,7 +9,7 @@ frappe.ui.form.on(parentDoctype, {
       "name"
     );
 
-    if (activeSetting?.name) {
+    if (activeSetting?.name && frm.doc.docstatus !== 0) {
       if (!frm.doc.custom_submitted_successfully) {
         frm.add_custom_button(
           __("Send Invoice"),
