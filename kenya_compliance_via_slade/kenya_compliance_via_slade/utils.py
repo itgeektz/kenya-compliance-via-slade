@@ -706,9 +706,11 @@ def authenticate_and_get_token(
             "scope": scope,
         }
     else:
-        raise Exception(
-            f"Authentication failed: {response.status_code} - {response.text}"
-        )
+        try:
+            response_data = json.loads(response.text)
+            frappe.throw(f"Authentication failed: <b>{response_data.get('error', 'Unknown error')}</b>")
+        except json.JSONDecodeError:
+            frappe.throw(f"Authentication failed: Unable to parse server response as JSON. Raw response: <b>{response.text}</b>")
 
 
 @frappe.whitelist()
