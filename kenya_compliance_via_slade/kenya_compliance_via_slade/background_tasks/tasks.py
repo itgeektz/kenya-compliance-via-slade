@@ -310,17 +310,22 @@ def send_stock_information() -> None:
     duration = timedelta(seconds=timeframe)
     timeframe_ago = datetime.now() - duration
     entries = fetch_stock_ledgers(timeframe_ago)  
+    max_tries = get_max_submission_attempts("Stock Ledger Entry")
     for entry in entries:
-        fetch_current_stock_balance(entry)  
-
+        if int(entry.custom_submission_tries) >= max_tries:
+            continue
+        fetch_current_stock_balance(entry) 
+         
 
 def fetch_stock_ledgers(timeframe_ago: datetime) -> List[Document]:
+    max_tries = get_max_submission_attempts("Stock Ledger Entry")
     entries = frappe.get_all(
         "Stock Ledger Entry",
         filters={
             "docstatus": 1,
             "custom_submitted_successfully": 0,
             "creation": [">=", timeframe_ago],
+            "custom_submission_tries": ["<", max_tries],
         },
         fields=["name", "item_code"],
         order_by="creation asc",  

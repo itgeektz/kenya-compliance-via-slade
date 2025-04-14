@@ -976,7 +976,7 @@ def get_total_stock_balance_from_sle(sle_name: str) -> dict:
         if latest_sle:
             balance += float(latest_sle[0]["qty_after_transaction"])
 
-    return float(balance)
+    return round(balance, 4)
 
 
 def get_max_submission_attempts(doctype: str = "Sales Invoice") -> int:

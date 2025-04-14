@@ -326,8 +326,8 @@ def submit_stock_mvt_items(name: str) -> None:
     requset_data = {
         "document_name": name,
         "product": item.custom_slade_id,
-        "quantity": round(abs(doc.actual_qty), 2),
-        "quantity_confirmed": round(abs(doc.actual_qty), 2),
+        "quantity": round(abs(doc.actual_qty), 4),
+        "quantity_confirmed": round(abs(doc.actual_qty), 4),
     }
     if doc.voucher_type == "Stock Reconciliation" or (
         doc.voucher_type == "Stock Entry" and record.is_opening == "Yes"
@@ -360,7 +360,7 @@ def get_total_stock_balance(item_code: str) -> float:
         "Bin", filters={"item_code": item_code}, fields=["warehouse", "actual_qty"]
     )
 
-    total_qty = sum(float(bin["actual_qty"]) for bin in bins)
+    total_qty = round(sum(float(bin["actual_qty"]) for bin in bins), 4)
 
     return total_qty
 
@@ -437,8 +437,8 @@ def stock_balance_on_success(response: dict, document_name: str, **kwargs) -> No
         )
         return
 
-    slade_balance = float(results[0].get("quantity", 0)) if results else 0
-    balance = get_total_stock_balance_from_sle(doc)
+    slade_balance = round(float(results[0].get("quantity", 0)), 4) if results else 0
+    balance = round(get_total_stock_balance_from_sle(doc), 4)
     
     if slade_balance != balance:
         frappe.enqueue(
@@ -468,6 +468,7 @@ def stock_balance_on_success(response: dict, document_name: str, **kwargs) -> No
             queue="default",
             doc=frappe.get_doc("Stock Ledger Entry", sle.name),
         )
+        
 
 def fetch_current_stock_balance(document_name: str) -> float:
     doc = frappe.get_doc("Stock Ledger Entry", document_name)
@@ -495,7 +496,7 @@ def adjust_stock_quantity(name: str, id: str, qty: str) -> None:
     request_data = {
         "id": id,
         "document_name": name,
-        "quantity": qty,
+        "quantity": round(float(qty), 4),
     }
     process_request(
         request_data,
