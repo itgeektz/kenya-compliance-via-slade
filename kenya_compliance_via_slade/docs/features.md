@@ -88,7 +88,7 @@ BOMs are submitted after they are submitted or through manual submission.
 
 ![Registered Purchases Screenshot](./images/registered_purchases.png)
 
-The Registered Purchases feature allows users to fetch all purchases from eTims and generate related invoices in ERPNext with the associated suppliers and items. More detailed information on [Registered Purchases](./registered_purchases.md).
+The Registered Purchases feature allows users to fetch all purchases from eTims and generate related invoices in ERPNext with the associated suppliers and items. More detailed information on [Registered Purchases](./features/registered_purchases.md).
 
 ### 🌐 Imports Fetch
 
@@ -96,6 +96,6 @@ The Registered Purchases feature allows users to fetch all purchases from eTims 
 
 ![Imports Fetch Screenshot](./images/imports_fetch.png)
 
-The Imports Fetch feature enables users to fetch and manage imported goods data from eTims. This includes mapping the imported items. More detailed information on [Imports Fetch](./imports_fetch.md).
+The Imports Fetch feature enables users to fetch and manage imported goods data from eTims. This includes mapping the imported items. More detailed information on [Imports Fetch](./features/imports_fetch.md).
 
-[⬅️ Previous: Setup Configuration](./setup_configuration.md) | [Next: Customisations ➡️](./customisations.md)
+[⬅️ Previous: Setup Configuration](./setup_configuration.md) | [Next: Key Doctypes ➡️](./doctypes.md)
