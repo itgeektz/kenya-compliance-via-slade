@@ -8,11 +8,11 @@ To set up the application, follow these steps:
 
 1. **🛠️ Create the eTims Settings**:
 
-   Navigate to the eTims Settings doctype and create a new record with the necessary details. [Learn more](settings_configuration.md)
+   Navigate to the eTims Settings doctype and create a new record with the necessary details. [Learn more](./doctypes/environment_settings.md)
 
 2. **🔄 Fetch All Codes**:
 
-   In the eTims Settings doctype, click the _Get Codes_ button to fetch the latest codes from the eTims servers. [Learn more](settings_configuration.md)
+   In the eTims Settings doctype, click the _Get Codes_ button to fetch the latest codes from the eTims servers. [Learn more](./doctypes/environment_settings.md)
 
 3. **🔗 Sync the Organisation Structures**:
 
@@ -28,7 +28,7 @@ To set up the application, follow these steps:
 
 6. **📦 Classify and Register All Items**:
 
-   Navigate to the Item list view and classify each item according to the specifications provided by KRA and submit to eTims. [Learn more](item_actions.md)
+   Navigate to the Item list view and classify each item according to the specifications provided by KRA and submit to eTims. [Learn more](./features/item_registration.md)
 
 By following these steps, you will ensure that your application is properly set up and ready to communicate with the eTims servers.
 
