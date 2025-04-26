@@ -276,7 +276,7 @@ def send_branch_customer_details(name: str, is_customer: bool = True) -> None:
         payload.update(
             {
                 "is_customer": True,
-                "customer_tax_pin": data.get("customer_tax_pin"),
+                "customer_tax_pin": data.get("tax_id"),
                 "partner_name": data.get("customer_name"),
                 "phone_number": data.get("mobile_no"),
                 "customer_type": mapped_customer_type,
