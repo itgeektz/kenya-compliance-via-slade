@@ -247,19 +247,37 @@ def sales_information_submission_on_success(
     Updates the invoice with custom ID and submission status.
     """
     frappe.db.set_value(
-        doctype,
-        document_name,
-        {
-            "custom_slade_id": response.get("id"),
-        },
-    )
+            doctype, document_name, {"custom_successfully_submitted": 1}
+        )
     frappe.enqueue(
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.process_invoice_items",
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
         document_name=document_name,
-        doctype=doctype,
-        invoice_slade_id=response.get("id"),
+        invoice_type=doctype,
         queue="long",
     )
+    
+    
+# def sales_information_submission_on_success(
+#     response: dict, document_name: str, doctype: str, **kwargs
+# ) -> None:
+#     """
+#     Callback function executed after successfully processing an item.
+#     Updates the invoice with custom ID and submission status.
+#     """
+#     frappe.db.set_value(
+#         doctype,
+#         document_name,
+#         {
+#             "custom_slade_id": response.get("id"),
+#         },
+#     )
+#     frappe.enqueue(
+#         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.process_invoice_items",
+#         document_name=document_name,
+#         doctype=doctype,
+#         invoice_slade_id=response.get("id"),
+#         queue="long",
+#     )
 
 
 @frappe.whitelist()
@@ -389,7 +407,9 @@ def process_sales_sign(document_name: str, doctype: str, invoice_slade_id: str) 
     )
 
 
-def update_invoice_info(response: dict, **kwargs) -> None:
+def update_invoice_info(
+    response: dict, document_name: str, **kwargs
+) -> None:
     doctype = kwargs.get("doctype")
     data = response.get("results", [])[0] if response.get("results") else response
     custom_slade_id = data.get("id")
@@ -479,9 +499,6 @@ def update_invoice_info(response: dict, **kwargs) -> None:
         file_doc.save(ignore_permissions=True)
         updates["custom_qr_code"] = file_doc.file_url
 
-    document_name = frappe.db.get_value(
-        doctype, {"custom_slade_id": custom_slade_id}, "name"
-    )
     if document_name:
         frappe.db.set_value(doctype, document_name, updates)
         frappe.publish_realtime("refresh_form", document_name)
