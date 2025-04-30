@@ -857,7 +857,7 @@ def get_invoice_details(
         if invoice.is_return and invoice.return_against:
             route_key = "SalesCreditNoteSaveReq"
             original_invoice = frappe.get_doc("Sales Invoice", invoice.return_against)
-            request_data["id"] = original_invoice.custom_slade_id
+            request_data["invoice"] = original_invoice.custom_slade_id
         else:
             route_key = "TrnsSalesSaveWrReq"
             request_data["reference_number"] = document_name
