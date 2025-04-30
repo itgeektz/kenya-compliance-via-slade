@@ -199,16 +199,28 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         route_path = f"/{parsed_url.path.split('/')[-1]}"
 
         if not retrying:
-            self.integration_request = create_request_log(
-                data=self._payload,
-                request_description=self._request_description,
-                is_remote_request=True,
-                service_name=self._request_description,
-                request_headers=self._headers,
-                url=self._url,
-                reference_docname=document_name,
-                reference_doctype=doctype,
-            )
+            try:
+                self.integration_request = create_request_log(
+                    data=self._payload,
+                    request_description=self._request_description,
+                    is_remote_request=True,
+                    service_name=self._request_description,
+                    request_headers=self._headers,
+                    url=self._url,
+                    reference_docname=document_name,
+                    reference_doctype=doctype,
+                )
+            except frappe.LinkValidationError:
+                # Retry without passing reference_docname if document doesn't exist
+                self.integration_request = create_request_log(
+                    data=self._payload,
+                    request_description=self._request_description,
+                    is_remote_request=True,
+                    service_name=self._request_description,
+                    request_headers=self._headers,
+                    url=self._url,
+                    reference_doctype=doctype,
+                )
 
         try:
             if self._method == "POST":

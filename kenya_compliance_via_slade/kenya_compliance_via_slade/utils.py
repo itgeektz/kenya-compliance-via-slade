@@ -16,6 +16,8 @@ from aiohttp import ClientTimeout
 import frappe
 from frappe.model.document import Document
 
+from frappe.query_builder import DocType
+
 from .doctype.doctype_names_mapping import (
     ENVIRONMENT_SPECIFICATION_DOCTYPE_NAME,
     ROUTES_TABLE_CHILD_DOCTYPE_NAME,
@@ -118,24 +120,27 @@ def get_route_path(
     parent_doctype: str = ROUTES_TABLE_DOCTYPE_NAME,
 ) -> tuple[str, str] | None:
 
-    query = f"""
-    SELECT
-        child.url_path,
-        child.last_request_date
-    FROM `tab{routes_table_doctype}` AS child
-    JOIN `tab{parent_doctype}` AS parent
-    ON child.parent = parent.name
-    WHERE child.url_path_function LIKE '{search_field}'
-    AND parent.vendor LIKE '{vendor}'
-    LIMIT 1
-    """
+    RoutesTable = DocType(routes_table_doctype)
+    ParentTable = DocType(parent_doctype)
 
-    results = frappe.db.sql(query, as_dict=True)
+    query = (
+        frappe.qb.from_(RoutesTable)
+        .join(ParentTable)
+        .on(RoutesTable.parent == ParentTable.name)
+        .select(RoutesTable.url_path, RoutesTable.last_request_date)
+        .where(
+            (RoutesTable.url_path_function.like(search_field))
+            & (ParentTable.vendor.like(vendor))
+        )
+        .limit(1)
+    )
+
+    results = query.run(as_dict=True)
 
     if results:
         return (results[0]["url_path"], results[0]["last_request_date"])
 
-    return None
+    return None, None
 
 
 def get_environment_settings(
@@ -146,30 +151,35 @@ def get_environment_settings(
     branch_id: str = "00",
 ) -> Document | None:
     error_message = None
-    query = f"""
-    SELECT server_url,
-        name,
-        vendor,
-        tin,
-        dvcsrlno,
-        bhfid,
-        company,
-        communication_key,
-        sales_control_unit_id as scu_id
-    FROM `tab{doctype}`
-    WHERE company = '{company_name}'
-        AND env = '{environment}'
-        AND vendor = '{vendor}'
-        AND name IN (
-            SELECT name
-            FROM `tab{doctype}`
-            WHERE is_active = 1
+
+    Settings = DocType(doctype)
+
+    query = (
+        frappe.qb.from_(Settings)
+        .select(
+            Settings.server_url,
+            Settings.name,
+            Settings.vendor,
+            Settings.tin,
+            Settings.dvcsrlno,
+            Settings.bhfid,
+            Settings.company,
+            Settings.communication_key,
+            Settings.sales_control_unit_id.as_("scu_id"),
         )
-    """
+        .where(
+            (Settings.company == company_name)
+            & (Settings.env == environment)
+            & (Settings.vendor == vendor)
+            & (Settings.is_active == 1)
+        )
+    )
 
     if branch_id:
-        query += f"AND bhfid = '{branch_id}';"
-    setting_doctype = frappe.db.sql(query, as_dict=True)
+        query = query.where(Settings.bhfid == branch_id)
+
+    setting_doctype = query.run(as_dict=True)
+
     if setting_doctype:
         return setting_doctype[0]
 
