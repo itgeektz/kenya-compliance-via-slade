@@ -2,12 +2,12 @@
  {
   "docstatus": 0,
   "doctype": "Navari eTims Routes",
-  "modified": "2025-02-24 17:57:01.215071",
+  "modified": "2025-04-30 09:12:57.934718",
   "name": "VSCU Slade 360",
   "routes_table": [
    {
     "description": null,
-    "last_request_date": null,
+    "last_request_date": "2025-04-30 09:03:52.515779",
     "url_path": "/api/etims/etims_notices/",
     "url_path_function": "NoticeSearchReq"
    },
@@ -115,7 +115,7 @@
    },
    {
     "description": null,
-    "last_request_date": null,
+    "last_request_date": "2025-04-30 09:33:04.614762",
     "url_path": "/api/sales/salesinvoices/",
     "url_path_function": "TrnsSalesSaveWrReq"
    },
@@ -277,13 +277,13 @@
    },
    {
     "description": null,
-    "last_request_date": null,
+    "last_request_date": "2025-04-30 09:32:41.939174",
     "url_path": "/api/inventory/inventoryoperation/",
     "url_path_function": "StockIOSaveReq"
    },
    {
     "description": null,
-    "last_request_date": null,
+    "last_request_date": "2025-04-30 09:33:01.368199",
     "url_path": "/api/inventory/inventoryoperationline/",
     "url_path_function": "StockIOLineReq"
    },
@@ -307,7 +307,7 @@
    },
    {
     "description": null,
-    "last_request_date": null,
+    "last_request_date": "2025-04-30 09:16:45.919120",
     "url_path": "/api/inventory/inventoryoperationtype/",
     "url_path_function": "OperationTypesReq"
    },
@@ -325,7 +325,7 @@
    },
    {
     "description": null,
-    "last_request_date": null,
+    "last_request_date": "2025-04-30 09:33:03.730075",
     "url_path": "/api/inventory/inventoryoperation/{id}/transition/DRAFT_SUBMIT_APPROVE/",
     "url_path_function": "StockOperationTransitionReq"
    },
@@ -382,6 +382,18 @@
     "last_request_date": null,
     "url_path": "/api/inventory/stockquantity/{id}/",
     "url_path_function": "SaveStockBalanceReq"
+   },
+   {
+    "description": null,
+    "last_request_date": "2025-04-30 09:33:00.552733",
+    "url_path": "/api/etims/sign_sales_invoice/",
+    "url_path_function": "SalesInvoiceSaveReq"
+   },
+   {
+    "description": null,
+    "last_request_date": null,
+    "url_path": "/api/etims/sign_sales_credit_note/",
+    "url_path_function": "CreditNoteSaveReq"
    }
   ],
   "vendor": "VSCU Slade 360"
