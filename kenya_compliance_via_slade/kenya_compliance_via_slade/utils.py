@@ -358,7 +358,7 @@ def build_invoice_payload(
         # RETURN INVOICE STRUCTURE
         payload = {
             "document_name": invoice.name,
-            "invoice_reference": clean_invc_no(invoice.return_against) if invoice.amended_from else invoice.return_against,
+            "invoice_reference": invoice.return_against,
             "refund_reason": "13",  # Assuming standard reason code
             "amount": abs(invoice.base_grand_total),
             "items": []
@@ -381,8 +381,8 @@ def build_invoice_payload(
         # REGULAR INVOICE STRUCTURE
         payload = {
             "document_name": invoice.name,
-            "reference_number": clean_invc_no(invoice.name) if invoice.amended_from else invoice.name,
-            "sales_type": "",
+            "reference_number": invoice.name,
+            "sales_type": "credit",
             "customer_pin": frappe.get_value("Customer", invoice.customer, "tax_id") or "None",
             "itemDetails": []
         }
