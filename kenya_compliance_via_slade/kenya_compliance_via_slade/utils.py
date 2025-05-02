@@ -372,7 +372,7 @@ def build_invoice_payload(
             qty = abs(item.get("qty"))
             base_amount = round(abs(item.get("base_amount")) or 0, 4)
             payload["items"].append({
-                "item_name": item.item_name,
+                "item_name": item.item_code,
                 "quantity": qty,
                 "amount": round(base_amount + converted_tax_amount, 4),
             })
@@ -396,7 +396,7 @@ def build_invoice_payload(
             base_net_rate = round(item.get("base_net_rate") or 0, 4)
             tax_code = (item.item_tax_template and frappe.get_value("Tax Template", item.item_tax_template, "custom_etims_taxation_type")) or frappe.get_value("Item", item.item_code, "custom_taxation_type")
             payload["itemDetails"].append({
-                "product_name": item.item_name,
+                "product_name": item.item_code,
                 "unit_price": round(base_net_rate + (converted_tax_amount / qty if qty else 0), 4),
                 "discount": item.discount_amount or 0,
                 "quantity": qty,
