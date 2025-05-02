@@ -59,7 +59,7 @@ def send_sales_invoices_information() -> None:
     all_submitted_unsent = fetch_sales_invoices(
         {
             "docstatus": 1,
-            "custom_slade_id": ["is", "not set"],
+            "custom_successfully_submitted": 0,
             "creation": [">=", timeframe_ago],
         }
     )
@@ -77,29 +77,29 @@ def send_sales_invoices_information() -> None:
     if successful_without_scu_data:
         fetch_scu_data(successful_without_scu_data)
 
-    sent_unprocessed = fetch_sales_invoices(
-        {
-            "docstatus": 1,
-            "custom_slade_id": ["is", "set"],
-            "custom_successfully_submitted": 0,
-            "custom_transition_successful": 0,
-            "creation": [">=", timeframe_ago],
-        }
-    )
-    if sent_unprocessed:
-        process_sent_invoices(sent_unprocessed)
+    # sent_unprocessed = fetch_sales_invoices(
+    #     {
+    #         "docstatus": 1,
+    #         "custom_slade_id": ["is", "set"],
+    #         "custom_successfully_submitted": 0,
+    #         "custom_transition_successful": 0,
+    #         "creation": [">=", timeframe_ago],
+    #     }
+    # )
+    # if sent_unprocessed:
+    #     process_sent_invoices(sent_unprocessed)
 
-    processed_unsent_to_etims = fetch_sales_invoices(
-        {
-            "docstatus": 1,
-            "custom_successfully_submitted": 0,
-            "custom_transition_successful": 1,
-            "creation": [">=", timeframe_ago],
-            "is_opening":"No"
-        }
-    )
-    if processed_unsent_to_etims:
-        sign_processed_invoices(processed_unsent_to_etims)
+    # processed_unsent_to_etims = fetch_sales_invoices(
+    #     {
+    #         "docstatus": 1,
+    #         "custom_successfully_submitted": 0,
+    #         "custom_transition_successful": 1,
+    #         "creation": [">=", timeframe_ago],
+    #         "is_opening":"No"
+    #     }
+    # )
+    # if processed_unsent_to_etims:
+    #     sign_processed_invoices(processed_unsent_to_etims)
 
 
 def handle_invoice_submission(invoices: list, action_func: callable) -> None:

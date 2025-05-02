@@ -253,6 +253,11 @@ doc_events = {
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.on_update"
         ],
     },
+    "Stock Ledger Entry": {
+        "on_update": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.stock_ledger_entry.on_update"
+        ],
+    },
 }
 
 # Scheduled Tasks

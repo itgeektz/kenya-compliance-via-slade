@@ -20,9 +20,11 @@ endpoints_builder = EndpointsBuilder()
 def on_update(doc: Document, method: str | None = None) -> None:
     if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
         return
-    
+    settings = get_settings(company_name=doc.company)
+    if not settings.get("stock_auto_submission_enabled"):
+        return
     max_tries = get_max_submission_attempts("Stock Ledger Entry")
-    if int(doc.custom_submission_tries) >= max_tries:
+    if doc.custom_submission_tries and int(doc.custom_submission_tries) >= max_tries:
         return
     save_ledger_details(doc.name)
 
@@ -461,7 +463,7 @@ def stock_balance_on_success(response: dict, document_name: str, **kwargs) -> No
 
     for sle in associated_sles:
         max_tries = get_max_submission_attempts("Stock Ledger Entry")
-        if int(sle.custom_submission_tries) >= max_tries:
+        if sle.custom_submission_tries and int(sle.custom_submission_tries) >= max_tries:
             continue
         frappe.enqueue(
             on_update,

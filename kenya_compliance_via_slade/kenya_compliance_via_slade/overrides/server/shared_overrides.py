@@ -45,40 +45,40 @@ def generic_invoices_on_submit_override(
         or frappe.get_value("Company", {}, "name")
     )
 
-    route_key = "TrnsSalesSaveWrReq"
+    route_key = "SalesInvoiceSaveReq"
 
     if doc.is_return:
         return_invoice = frappe.get_doc("Sales Invoice", doc.return_against)
-        route_key = "SalesCreditNoteSaveReq"
+        route_key = "CreditNoteSaveReq"
         if not return_invoice.custom_successfully_submitted:
             frappe.msgprint(
                 f"Return against invoice {doc.return_against} was not successfully submitted. Cannot process return."
             )
             return
 
-    # Check if custom_slade_id exists
-    if doc.custom_slade_id:
-        # If custom_slade_id exists, start from process_invoice_items
-        frappe.enqueue(
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.process_invoice_items",
-            document_name=doc.name,
-            doctype=invoice_type,
-            invoice_slade_id=doc.custom_slade_id,
-            queue="long",
-        )
-        return
+    # # Check if custom_slade_id exists
+    # if doc.custom_slade_id:
+    #     # If custom_slade_id exists, start from process_invoice_items
+    #     frappe.enqueue(
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.process_invoice_items",
+    #         document_name=doc.name,
+    #         doctype=invoice_type,
+    #         invoice_slade_id=doc.custom_slade_id,
+    #         queue="long",
+    #     )
+    #     return
 
-    # Check if custom_transition_successful exists
-    if doc.custom_transition_successful:
-        # If custom_transition_successful exists, start from process_sales_sign
-        frappe.enqueue(
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.process_sales_sign",
-            document_name=doc.name,
-            doctype=invoice_type,
-            invoice_slade_id=doc.custom_slade_id,
-            queue="long",
-        )
-        return
+    # # Check if custom_transition_successful exists
+    # if doc.custom_transition_successful:
+    #     # If custom_transition_successful exists, start from process_sales_sign
+    #     frappe.enqueue(
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.process_sales_sign",
+    #         document_name=doc.name,
+    #         doctype=invoice_type,
+    #         invoice_slade_id=doc.custom_slade_id,
+    #         queue="long",
+    #     )
+    #     return
 
     # If neither custom_slade_id nor custom_transition_successful exists, proceed with the normal flow
     payload = build_invoice_payload(doc, company_name, doc.is_return)

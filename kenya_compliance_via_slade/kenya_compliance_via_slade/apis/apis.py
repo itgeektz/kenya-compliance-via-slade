@@ -161,7 +161,7 @@ def perform_item_registration(item_name: str) -> dict | None:
     selling_price = round(item.get("valuation_rate", 1), 2) or 1
 
     request_data = {
-        "name": item.get("item_name"),
+        "name": item.get("name"),
         "document_name": item.get("name"),
         "description": item.get("description"),
         "can_be_sold": True if item.get("is_sales_item") == 1 else False,
@@ -276,7 +276,7 @@ def send_branch_customer_details(name: str, is_customer: bool = True) -> None:
         payload.update(
             {
                 "is_customer": True,
-                "customer_tax_pin": data.get("customer_tax_pin"),
+                "customer_tax_pin": data.get("tax_id"),
                 "partner_name": data.get("customer_name"),
                 "phone_number": data.get("mobile_no"),
                 "customer_type": mapped_customer_type,
@@ -839,22 +839,35 @@ def initialize_device(request_data: str) -> None:
         doctype=SETTINGS_DOCTYPE_NAME,
     )
 
-
 @frappe.whitelist()
 def get_invoice_details(
-    id: str, document_name: str, invoice_type: str = "Sales Invoice"
+    id: str = None, document_name: str = None, invoice_type: str = "Sales Invoice"
 ) -> None:
-    request_data = {"id": id, "document_name": document_name}
     invoice = frappe.get_doc(invoice_type, document_name)
+
+    request_data = {
+        "document_name": document_name,
+    }
     route_key = "TrnsSalesSearchReq"
     if invoice.is_return:
         route_key = "SalesCreditNoteSaveReq"
+    if id:
+        request_data["id"] = id
+    else:
+        if invoice.is_return and invoice.return_against:
+            route_key = "SalesCreditNoteSaveReq"
+            original_invoice = frappe.get_doc("Sales Invoice", invoice.return_against)
+            request_data["invoice"] = original_invoice.custom_slade_id
+        else:
+            route_key = "TrnsSalesSaveWrReq"
+            request_data["reference_number"] = document_name
     process_request(
         request_data,
         route_key,
         update_invoice_info,
         doctype=invoice_type,
     )
+
 
 
 @frappe.whitelist()
