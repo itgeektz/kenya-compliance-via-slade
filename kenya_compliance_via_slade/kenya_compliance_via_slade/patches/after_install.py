@@ -21,4 +21,4 @@ def create_fields_and_links() -> None:
     create_fields_from_json("./custom_fields/supplier.json", "Supplier")
     create_fields_from_json("./custom_fields/warehouse.json", "Warehouse")
     
-    update_links_for_doctypes()
+    # update_links_for_doctypes()
