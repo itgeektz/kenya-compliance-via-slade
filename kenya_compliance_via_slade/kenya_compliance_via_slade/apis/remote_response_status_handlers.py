@@ -76,11 +76,14 @@ def item_registration_on_success(response: dict, document_name: str, **kwargs) -
         "custom_sent_to_slade": 1,
     }
     frappe.db.set_value("Item", document_name, updates)
-    frappe.enqueue(
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.submit_inventory",
-        name=document_name,
-        queue="long",
-    )
+
+    item_doc = frappe.get_doc("Item", document_name)
+    if item_doc.maintain_stock:
+        frappe.enqueue(
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.submit_inventory",
+            name=document_name,
+            queue="long",
+        )
 
 
 def customer_branch_details_submission_on_success(

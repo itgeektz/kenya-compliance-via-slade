@@ -364,17 +364,17 @@ def build_invoice_payload(
             "items": []
         }
         
-        conversion_rate = invoice.conversion_rate or 1
+        # conversion_rate = invoice.conversion_rate or 1
         
         for item in invoice.items:
             tax_amount = item.get("custom_tax_amount", 0) or 0
-            converted_tax_amount = round(tax_amount * conversion_rate, 4) if tax_amount else 0
+            # converted_tax_amount = round(tax_amount * conversion_rate, 4) if tax_amount else 0
             qty = abs(item.get("qty"))
             base_amount = round(abs(item.get("base_amount")) or 0, 4)
             payload["items"].append({
                 "item_name": item.item_code,
                 "quantity": qty,
-                "amount": round(base_amount + converted_tax_amount, 4),
+                "amount": round(base_amount + tax_amount, 4),
             })
     
     else:
@@ -387,17 +387,17 @@ def build_invoice_payload(
             "itemDetails": []
         }
         
-        conversion_rate = invoice.conversion_rate or 1
+        # conversion_rate = invoice.conversion_rate or 1
         
         for item in invoice.items:
             tax_amount = item.get("custom_tax_amount", 0) or 0
-            converted_tax_amount = round(tax_amount * conversion_rate, 4) if tax_amount else 0
+            # converted_tax_amount = round(tax_amount * conversion_rate, 4) if tax_amount else 0
             qty = abs(item.get("qty"))
             base_net_rate = round(item.get("base_net_rate") or 0, 4)
-            tax_code = (item.item_tax_template and frappe.get_value("Tax Template", item.item_tax_template, "custom_etims_taxation_type")) or frappe.get_value("Item", item.item_code, "custom_taxation_type")
+            tax_code = (item.item_tax_template and frappe.get_value("Item Tax Template", item.item_tax_template, "custom_etims_taxation_type")) or frappe.get_value("Item", item.item_code, "custom_taxation_type")
             payload["itemDetails"].append({
                 "product_name": item.item_code,
-                "unit_price": round(base_net_rate + (converted_tax_amount / qty if qty else 0), 4),
+                "unit_price": round(base_net_rate + (tax_amount / qty if qty else 0), 4),
                 "discount": item.discount_amount or 0,
                 "quantity": qty,
                 "uom": item.uom or "Pcs",
@@ -641,7 +641,7 @@ def calculate_tax(doc: "Document") -> None:
 
         # Calculate tax if we have a valid tax rate
         if tax_rate is not None:
-            tax = item.net_amount * tax_rate / 100
+            tax = item.base_net_amount * tax_rate / 100
 
         # Set the custom tax fields in the item
         item.custom_tax_amount = tax
@@ -649,10 +649,10 @@ def calculate_tax(doc: "Document") -> None:
 
 
 def get_item_tax_rate(item_tax_template: str) -> float | None:
-    """Fetch the tax rate from the Item Tax Template."""
+    """Fetch the combined tax rate from the Item Tax Template."""
     tax_template = frappe.get_doc("Item Tax Template", item_tax_template)
     if tax_template.taxes:
-        return tax_template.taxes[0].tax_rate
+        return sum(tax.tax_rate for tax in tax_template.taxes)
     return None
 
 

@@ -41,7 +41,8 @@
     "fieldname": "custom_tax_amount",
     "fieldtype": "Currency",
     "insert_after": "custom_tax_rate",
-    "label": "Tax Amount",
+    "label": "Tax Amount (Company Currency)",
+    "options": "Company:company:default_currency",
     "name": "Sales Invoice Item-custom_tax_amount"
   }
 ]

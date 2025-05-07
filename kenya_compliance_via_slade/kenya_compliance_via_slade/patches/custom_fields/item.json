@@ -241,7 +241,7 @@
     "fieldname": "custom_item_type",
     "fieldtype": "Link",
     "insert_after": "custom_product_type",
-    "label": "Navari eTims Item Type",
+    "label": "eTims Item Type",
     "mandatory_depends_on": "eval: doc.custom_prevent_etims_registration != 1",
     "name": "Item-custom_item_type",
     "options": "Navari eTims Item Type"

@@ -14,6 +14,7 @@ frappe.realtime.on("refresh_form", function (name) {
 
 frappe.ui.form.on(parentDoctype, {
   refresh: async function (frm) {
+    await updateTaxAmountLabel(frm);
     const { message: activeSetting } = await frappe.db.get_value(
       settingsDoctypeName,
       { is_active: 1 },
@@ -148,3 +149,28 @@ frappe.ui.form.on(childDoctype, {
     }
   },
 });
+
+async function updateTaxAmountLabel(frm) {
+  try {
+    const defaultCompany = frappe.defaults.get_user_default("Company");
+    if (!defaultCompany) return;
+
+    const { message: companyDoc } = await frappe.db.get_value(
+      "Company",
+      defaultCompany,
+      "default_currency"
+    );
+
+    if (companyDoc?.default_currency) {
+      const currency = companyDoc.default_currency;
+
+      frm.fields_dict.items.grid.update_docfield_property(
+        "custom_tax_amount",
+        "label",
+        `Tax Amount (${currency})`
+      );
+    }
+  } catch (error) {
+    console.error("Error updating Tax Amount label:", error);
+  }
+}
