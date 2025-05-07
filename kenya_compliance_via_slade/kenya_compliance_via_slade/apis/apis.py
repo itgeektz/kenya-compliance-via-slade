@@ -125,7 +125,7 @@ def perform_customer_search(request_data: str) -> None:
 def perform_item_registration(item_name: str) -> dict | None:
     item = frappe.get_doc("Item", item_name)
 
-    if item.custom_prevent_etims_registration:
+    if item.custom_prevent_etims_registration or item.disabled:
         return
 
     missing_fields = []
