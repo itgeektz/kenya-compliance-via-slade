@@ -2,6 +2,7 @@ import frappe
 from frappe.model.document import Document
 
 from .shared_overrides import generic_invoices_on_submit_override
+from ...utils import calculate_tax
 
 
 def on_submit(doc: Document, method: str = None) -> None:
@@ -11,6 +12,7 @@ def on_submit(doc: Document, method: str = None) -> None:
         and doc.custom_defer_etims_submission == 0
         and doc.is_opening == "No"
     ):
+        calculate_tax(doc)
         generic_invoices_on_submit_override(doc, "Sales Invoice")
 
 
