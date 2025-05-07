@@ -139,7 +139,7 @@ doctype_list_js = {
 # ------------
 
 # before_install = "kenya_compliance_via_slade.install.before_install"
-# after_install = "kenya_compliance_via_slade.kenya_compliance_via_slade.setup.after_install.after_install"
+after_install = "kenya_compliance_via_slade.kenya_compliance_via_slade.patches.after_install.create_fields_and_links"
 
 # Uninstallation
 # ------------
