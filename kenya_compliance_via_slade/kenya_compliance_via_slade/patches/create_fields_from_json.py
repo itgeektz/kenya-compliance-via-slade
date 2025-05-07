@@ -28,7 +28,12 @@ def create_fields_from_json(json_file_name: str, doctype: str) -> None:
 
     except Exception as e:
         frappe.log_error(
-            f"Error in creating custom fields for {doctype}: {str(e)}",
             "Custom Field Creation Error",
+            f"Error in creating custom fields for {doctype}: {str(e)}",
         )
-        raise e
+        # raise e
+        
+        
+        
+        
+        
