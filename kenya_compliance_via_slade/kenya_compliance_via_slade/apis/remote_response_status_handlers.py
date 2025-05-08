@@ -78,7 +78,7 @@ def item_registration_on_success(response: dict, document_name: str, **kwargs) -
     frappe.db.set_value("Item", document_name, updates)
 
     item_doc = frappe.get_doc("Item", document_name)
-    if item_doc.maintain_stock:
+    if item_doc.is_stock_item:
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.submit_inventory",
             name=document_name,
