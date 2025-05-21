@@ -10,7 +10,7 @@ from ...background_tasks.tasks import (
     send_sales_invoices_information,
     send_stock_information,
 )
-from ...utils import user_details_fetch
+from ...utils import user_details_fetch, reset_auth_password, update_navari_settings_with_token
 from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
 
 class NavariKRAeTimsSettings(Document):
@@ -107,3 +107,11 @@ class NavariKRAeTimsSettings(Document):
                     else None
                 ),
             )
+            
+    def update_password(self) -> None:
+        """Update the password for the settings document."""
+        reset_auth_password(self.name)
+        
+    def update_token(self) -> None:
+        """Update the password for the settings document."""
+        update_navari_settings_with_token(self.name, True)

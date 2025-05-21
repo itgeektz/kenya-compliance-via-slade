@@ -5,6 +5,31 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
   refresh: function (frm) {
     const companyName = frm.doc.company;
 
+    frm.fields_dict.get_new_token.$wrapper
+      .find("button")
+      .on("click", function () {
+        frappe.call({
+          method:
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.update_navari_settings_with_token",
+          args: {
+            docname: frm.doc.name,
+            skip_checks: true,
+          },
+        });
+      });
+
+    frm.fields_dict.reset_auth_password.$wrapper
+      .find("button")
+      .on("click", function () {
+        frappe.call({
+          method:
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.reset_auth_password",
+          args: {
+            docname: frm.doc.name,
+          },
+        });
+      });
+
     if (!frm.is_new() && frm.doc.is_active) {
       frm.add_custom_button(
         __("Get Notices"),
@@ -127,6 +152,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.update_navari_settings_with_token",
           args: {
             docname: frm.doc.name,
+            skip_checks: true,
           },
         });
       },

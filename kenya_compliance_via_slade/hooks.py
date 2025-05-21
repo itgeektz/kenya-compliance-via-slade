@@ -272,6 +272,9 @@ scheduler_events = {
         # "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.send_purchase_information",
         # "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.send_stock_information",
     ],
+    "weekly": [
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.update_setting_passwords",
+    ],
     "monthly": [
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.refresh_code_lists",
         # "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.search_organisations_request",

@@ -87,19 +87,21 @@ def extract_metadata(data: dict) -> tuple:
     if isinstance(data, list) and data:
         first_entry = data[0]
         company_name = (
-            first_entry.get("company_name", None)
+            first_entry.get("company")
+            or first_entry.get("company_name")
             or frappe.defaults.get_user_default("Company")
             or frappe.get_value("Company", {}, "name")
         )
         branch_id = (
-            first_entry.get("branch_id", None)
+            first_entry.get("branch_id")
             or frappe.defaults.get_user_default("Branch")
             or frappe.get_value("Branch", "name")
         )
         document_name = first_entry.get("document_name", None)
     else:
         company_name = (
-            data.pop("company_name", None)
+            data.pop("company", None)
+            or data.pop("company_name", None)
             or frappe.defaults.get_user_default("Company")
             or frappe.get_value("Company", {}, "name")
         )
