@@ -2,6 +2,8 @@
 
 import json
 import re
+import secrets
+import string
 from base64 import b64encode
 from datetime import datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
@@ -15,6 +17,7 @@ from aiohttp import ClientTimeout
 
 import frappe
 from frappe.model.document import Document
+from frappe.integrations.utils import create_request_log
 
 from frappe.query_builder import DocType
 
@@ -384,6 +387,7 @@ def build_invoice_payload(
             "reference_number": invoice.name,
             "sales_type": "credit",
             "customer_pin": frappe.get_value("Customer", invoice.customer, "tax_id") or "None",
+            "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name") or "None",
             "itemDetails": []
         }
         
@@ -736,7 +740,9 @@ def authenticate_and_get_token(
     password: str,
     client_id: str,
     client_secret: str,
+    docname: str = None,
 ) -> dict:
+    url = f"{auth_server_url}/oauth2/token/"
     payload = {
         "username": username,
         "password": password,
@@ -744,49 +750,60 @@ def authenticate_and_get_token(
         "client_id": client_id,
         "client_secret": client_secret,
     }
-    encoded_payload = urlencode(payload)
-
     headers = {
-        "accept": "application/json",
-        "content-type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
     }
 
-    response = requests.post(
-        f"{auth_server_url}/oauth2/token/", headers=headers, data=encoded_payload
+    integration_request = create_request_log(
+        data=json.dumps(payload),
+        request_description="Slade360 eTims Authentication",
+        is_remote_request=True,
+        service_name="Slade360 eTims Authentication",
+        request_headers=json.dumps(headers),
+        url=url,
+        reference_doctype=SETTINGS_DOCTYPE_NAME,
+        reference_docname=docname,
     )
 
-    if response.status_code == 200:
-        data = response.json()
-        access_token = data.get("access_token")
-        refresh_token = data.get("refresh_token")
-        expires_in = data.get("expires_in")
-        token_type = data.get("token_type")
-        scope = data.get("scope")
+    try:
+        response = requests.post(url, headers=headers, data=urlencode(payload))
+        frappe.db.set_value("Integration Request", integration_request.name, "output", response.text, update_modified=False)
 
-        return {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "expires_in": expires_in,
-            "token_type": token_type,
-            "scope": scope,
-        }
-    else:
-        try:
-            response_data = json.loads(response.text)
-            frappe.throw(f"Authentication failed: <b>{response_data.get('error', 'Unknown error')}</b>")
-        except json.JSONDecodeError:
-            frappe.throw(f"Authentication failed: Unable to parse server response as JSON. Raw response: <b>{response.text}</b>")
+        if response.ok:
+            data = response.json()
+            frappe.db.set_value("Integration Request", integration_request.name, "status", "Completed", update_modified=False)
+            return {
+                "access_token": data.get("access_token"),
+                "refresh_token": data.get("refresh_token"),
+                "expires_in": data.get("expires_in"),
+                "token_type": data.get("token_type"),
+                "scope": data.get("scope"),
+            }
+
+        error = response.json().get("error", "Unknown error") if response.headers.get("content-type", "").startswith("application/json") else "Invalid response"
+        frappe.db.set_value("Integration Request", integration_request.name, "status", "Failed", update_modified=False)
+        frappe.db.set_value("Integration Request", integration_request.name, "error", error, update_modified=False)
+        frappe.throw(f"Authentication failed: <b>{error}</b>")
+
+    except Exception as e:
+        frappe.db.set_value("Integration Request", integration_request.name, {
+            "status": "Failed",
+            "error": str(e)
+        }, update_modified=False)
+        frappe.throw(f"Authentication request failed: <b>{e}</b>")
 
 
 @frappe.whitelist()
-def update_navari_settings_with_token(docname: str) -> str:
+def update_navari_settings_with_token(docname: str, skip_checks: bool = False) -> str:
     settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, docname)
-    if not settings_doc.get("access_token") or (
+    needs_update = skip_checks or not settings_doc.get("access_token") or (
         datetime.strptime(
             str(settings_doc.get("token_expiry")).split(".")[0], "%Y-%m-%d %H:%M:%S"
         )
         < datetime.now()
-    ):
+    )
+    if needs_update:
         auth_server_url = settings_doc.auth_server_url
         username = settings_doc.auth_username
         client_id = settings_doc.client_id
@@ -794,7 +811,7 @@ def update_navari_settings_with_token(docname: str) -> str:
         client_secret = settings_doc.get_password("client_secret")
 
         token_details = authenticate_and_get_token(
-            auth_server_url, username, password, client_id, client_secret
+            auth_server_url, username, password, client_id, client_secret, docname
         )
 
         if not token_details:
@@ -1057,3 +1074,74 @@ def get_max_submission_attempts(doctype: str = "Sales Invoice") -> int:
     else:
         tries = 3  
     return tries
+
+
+
+def generate_strong_password(length: int = 16) -> str:
+    """Generate a strong random password"""
+    characters = string.ascii_letters + string.digits + string.punctuation
+    while True:
+        password = ''.join(secrets.choice(characters) for _ in range(length))
+        if (any(c.islower() for c in password) and
+            any(c.isupper() for c in password) and
+            any(c.isdigit() for c in password) and
+            any(c in string.punctuation for c in password)):
+            return password
+
+@frappe.whitelist()
+def reset_auth_password(docname: str) -> None:
+    settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, docname)
+
+    auth_server_url = settings_doc.auth_server_url
+    old_password = settings_doc.get_password("auth_password")
+    new_password = generate_strong_password()
+
+    url = f"{auth_server_url}/password_change/"
+    payload = {
+        "old_password": old_password,
+        "new_password1": new_password,
+        "new_password2": new_password,
+    }
+    headers = {
+        "Authorization": f"Bearer {settings_doc.access_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    integration_request = create_request_log(
+        data=json.dumps(payload),
+        request_description="Reset Slade360 Auth Password",
+        is_remote_request=True,
+        service_name="Slade360 eTims Password Reset",
+        request_headers=json.dumps(headers),
+        url=url,
+        reference_doctype=SETTINGS_DOCTYPE_NAME,
+        reference_docname=docname,
+    )
+
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        frappe.db.set_value("Integration Request", integration_request.name, "output", response.text, update_modified=False)
+
+        if response.status_code == 200:
+            frappe.db.set_value(SETTINGS_DOCTYPE_NAME, docname, "auth_password", new_password, update_modified=False)
+            frappe.db.set_value("Integration Request", integration_request.name, "status", "Completed", update_modified=False)
+        else:
+            try:
+                error_message = response.json().get("error", "Unknown error")
+            except json.JSONDecodeError:
+                error_message = f"Invalid response: {response.text}"
+
+            frappe.db.set_value("Integration Request", integration_request.name, {
+                "status": "Failed",
+                "error": error_message
+            }, update_modified=False)
+
+            frappe.throw(f"Password update failed: <b>{error_message}</b>")
+
+    except Exception as e:
+        frappe.db.set_value("Integration Request", integration_request.name, {
+            "status": "Failed",
+            "error": str(e)
+        }, update_modified=False)
+        frappe.throw(f"Password update request failed: <b>{e}</b>")

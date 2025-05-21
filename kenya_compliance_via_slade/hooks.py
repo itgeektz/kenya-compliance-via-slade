@@ -14,7 +14,7 @@ app_publisher = "Navari Ltd"
 app_description = "This app works to integrate ERPNext with KRA's eTIMS via Slade360 Advantage to allow for the sharing of information with the revenue authority."
 app_email = "support@navari.co.ke"
 app_license = "GNU Affero General Public License v3.0"
-required_apps = ["frappe/erpnext"]
+required_apps = ["erpnext"]
 
 
 # Fixtures
@@ -271,6 +271,9 @@ scheduler_events = {
         # "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.send_sales_invoices_information",
         # "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.send_purchase_information",
         # "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.send_stock_information",
+    ],
+    "weekly": [
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.update_setting_passwords",
     ],
     "monthly": [
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.refresh_code_lists",

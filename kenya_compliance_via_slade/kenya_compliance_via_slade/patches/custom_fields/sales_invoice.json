@@ -36,47 +36,28 @@
     "fieldname": "custom_payment_type",
     "fieldtype": "Link",
     "insert_after": "custom_payment_and_transaction_details",
-    "label": "Payment Type",
+    "label": "Mode of Payment",
     "name": "Sales Invoice-custom_payment_type",
     "options": "Mode of Payment"
   },
   {
-    "default": "Approved",
-    "fieldname": "custom_transaction_progres",
-    "fieldtype": "Link",
-    "insert_after": "custom_payment_type",
-    "label": "Transaction Progress",
-    "name": "Sales Invoice-custom_transaction_progres",
-    "options": "Navari KRA eTims Transaction Progress"
-  },
-  {
     "fieldname": "custom_column_break_arjmp",
     "fieldtype": "Column Break",
-    "insert_after": "custom_transaction_progres",
+    "insert_after": "custom_payment_type",
     "label": "",
     "name": "Sales Invoice-custom_column_break_arjmp"
   },
   {
-    "fieldname": "custom_payment_type_code",
-    "fieldtype": "Data",
+    "fieldname": "prevent_etims_submission",
+    "fieldtype": "Check",
     "insert_after": "custom_column_break_arjmp",
-    "label": "Payment Type Code",
-    "name": "Sales Invoice-custom_payment_type_code",
-    "read_only": 1
-  },
-  {
-    "fetch_from": "custom_transaction_progres.code",
-    "fieldname": "custom_transaction_progress_code",
-    "fieldtype": "Data",
-    "insert_after": "custom_payment_type_code",
-    "label": "Transaction Progress Code",
-    "name": "Sales Invoice-custom_transaction_progress_code",
-    "read_only": 1
+    "label": "Prevent Submitting to eTims",
+    "name": "Sales Invoice-prevent_etims_submission"
   },
   {
     "fieldname": "custom_slade_details",
     "fieldtype": "Section Break",
-    "insert_after": "custom_transaction_progress_code",
+    "insert_after": "prevent_etims_submission",
     "label": "Slade Details",
     "name": "Sales Invoice-custom_slade_details"
   },
@@ -117,19 +98,9 @@
     "read_only": 1
   },
   {
-    "default": "0",
-    "fieldname": "custom_transition_successful",
-    "fieldtype": "Check",
-    "insert_after": "custom_successfully_submitted",
-    "label": "Transition Successful?",
-    "name": "Sales Invoice-custom_transition_successful",
-    "no_copy": 1,
-    "read_only": 1
-  },
-  {
     "fieldname": "custom_etims_response_details",
     "fieldtype": "Section Break",
-    "insert_after": "custom_transition_successful",
+    "insert_after": "custom_successfully_submitted",
     "label": "SCU Data Details",
     "name": "Sales Invoice-custom_etims_response_details"
   },

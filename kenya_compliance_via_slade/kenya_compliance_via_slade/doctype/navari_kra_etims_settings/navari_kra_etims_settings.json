@@ -68,10 +68,12 @@
   "column_break_ekvx",
   "auth_username",
   "auth_password",
+  "reset_auth_password",
   "section_break_eqay",
   "access_token",
   "column_break_clyl",
   "refresh_token",
+  "get_new_token",
   "column_break_uosd",
   "token_expiry",
   "expires_in"
@@ -504,8 +506,19 @@
    "fieldtype": "Link",
    "label": "Default Warehouse",
    "options": "Warehouse"
+  },
+  {
+   "fieldname": "get_new_token",
+   "fieldtype": "Button",
+   "label": "Get New Token"
+  },
+  {
+   "fieldname": "reset_auth_password",
+   "fieldtype": "Button",
+   "label": "Reset Auth Password"
   }
  ],
+ "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [
   {
@@ -514,7 +527,7 @@
    "link_fieldname": "reference_docname"
   }
  ],
- "modified": "2025-02-13 01:32:16.817187",
+ "modified": "2025-05-21 17:47:32.566074",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari KRA eTims Settings",
@@ -534,6 +547,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
