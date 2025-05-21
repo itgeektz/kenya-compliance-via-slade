@@ -13,7 +13,13 @@ def on_submit(doc: Document, method: str = None) -> None:
         and doc.is_opening == "No"
     ):
         calculate_tax(doc)
-        generic_invoices_on_submit_override(doc, "Sales Invoice")
+        try:
+            generic_invoices_on_submit_override(doc, "Sales Invoice")
+        except frappe.ValidationError as e:
+            frappe.log_error(
+                "Sales Invoice Submission Error",
+                f"Error in Sales Invoice submission: {str(e)}",
+            )
 
 
 def before_cancel(doc: Document, method: str = None) -> None:

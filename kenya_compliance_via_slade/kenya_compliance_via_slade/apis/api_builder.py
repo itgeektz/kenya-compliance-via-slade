@@ -82,6 +82,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         self._url: str | None = None
         self._request_description: str | None = None
         self._payload: dict | None = None
+        self._settings: dict | None = None
         self._headers: dict | None = None
         self._method: Literal["GET", "POST", "PATCH", "PUT"] | None = None
         self._success_callback_handler: Callable | None = None
@@ -129,6 +130,14 @@ class EndpointsBuilder(BaseEndpointsBuilder):
     @payload.setter
     def payload(self, new_payload: dict) -> None:
         self._payload = new_payload
+        
+    @property
+    def settings(self) -> dict | None:
+        return self._settings
+    
+    @settings.setter
+    def settings(self, new_settings: dict) -> None:
+        self._settings = new_settings
 
     @property
     def headers(self) -> dict | None:
@@ -157,10 +166,10 @@ class EndpointsBuilder(BaseEndpointsBuilder):
     ) -> None:
         self._error_callback_handler = callback
 
-    def refresh_token(self, document_name: str) -> str:
+    def refresh_token(self) -> str:
         """Fetch a new token and update the headers."""
         try:
-            settings = update_navari_settings_with_token(document_name)
+            settings = update_navari_settings_with_token(self._settings.name)
 
             if settings:
                 new_token = settings.access_token
@@ -270,9 +279,6 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                         else None
                     ),
                 )
-            elif response.status_code == 401 and not retrying:
-                self.refresh_token(document_name)
-                self.make_remote_call(doctype, document_name, retrying=True)
             else:
                 if isinstance(response_data, str):
                     error = response_data
@@ -280,7 +286,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                     error = response_data[0]
                 else:
                     error = str(response_data)
-
+                    
                 update_integration_request(
                     self.integration_request.name,
                     status="Failed",
@@ -300,11 +306,25 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                         doctype=doctype,
                         document_name=document_name,
                     )
+                    
+                if response.status_code == 401 and not retrying:
+                    # Optionally, you can refresh token and retry here if needed
+                    self.refresh_token()
+                    self.make_remote_call(doctype, document_name, retrying=True)
+                
+
+                   
             return response_data
 
-        except requests.exceptions.RequestException as error:
-            self.error = error
-            self.notify()
+        except Exception as error:
+            frappe.log_error(
+                title="eTims Error",
+                message=error,
+                reference_doctype=self.doctype,
+                reference_name=self.document_name,
+            )
+            # self.error = error
+            # self.notify()
             return None
 
 

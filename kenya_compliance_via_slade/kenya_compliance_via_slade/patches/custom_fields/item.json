@@ -2,7 +2,7 @@
   {
     "fieldname": "custom_kra_tax_details",
     "fieldtype": "Tab Break",
-    "insert_after": "uoms",
+    "insert_after": "item_defaults",
     "label": "eTims Details",
     "name": "Item-custom_kra_tax_details"
   },

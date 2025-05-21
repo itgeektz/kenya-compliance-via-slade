@@ -24,9 +24,16 @@ def generic_invoices_on_submit_override(
         invoice_type (Literal["Sales Invoice", "POS Invoice"]):
         The Type of the invoice. Either Sales, or POS
     """
+    company_name = (
+        doc.company
+        or frappe.defaults.get_user_default("Company")
+        or frappe.get_value("Company", {}, "name")
+    )
 
-    if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
+    settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, {"is_active": 1, "company": company_name})
+    if doc.prevent_etims_submission or not settings_doc.sales_auto_submission_enabled or (hasattr(doc, "etr_serial_number") and doc.etr_serial_number):
         return
+
 
     for item in doc.items:
         item_doc = frappe.get_doc("Item", item.item_code)
@@ -38,12 +45,6 @@ def generic_invoices_on_submit_override(
                 f"Item {item.item_code} is not registered. Cannot send invoice to eTims."
             )
             return
-
-    company_name = (
-        doc.company
-        or frappe.defaults.get_user_default("Company")
-        or frappe.get_value("Company", {}, "name")
-    )
 
     route_key = "SalesInvoiceSaveReq"
 

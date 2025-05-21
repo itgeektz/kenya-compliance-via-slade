@@ -21,7 +21,11 @@ frappe.ui.form.on(parentDoctype, {
       "name"
     );
 
-    if (activeSetting?.name && frm.doc.docstatus !== 0) {
+    if (
+      activeSetting?.name &&
+      frm.doc.docstatus !== 0 &&
+      !frm.doc.prevent_etims_submission
+    ) {
       if (!frm.doc.custom_successfully_submitted) {
         frm.add_custom_button(
           __("Send Invoice"),
@@ -62,35 +66,6 @@ frappe.ui.form.on(parentDoctype, {
         );
       }
     }
-  },
-
-  validate: function (frm) {
-    frappe.db.get_value(
-      settingsDoctypeName,
-      {
-        is_active: 1,
-        bhfid: frm.doc.branch,
-        company: frappe.defaults.get_user_default("Company"),
-      },
-      [
-        "name",
-        "company",
-        "bhfid",
-        "sales_payment_type",
-        "sales_transaction_progress",
-      ],
-      (response) => {
-        if (!frm.doc.custom_payment_type) {
-          frm.set_value("custom_payment_type", response.sales_payment_type);
-        }
-        if (!frm.doc.custom_transaction_progres) {
-          frm.set_value(
-            "custom_transaction_progres",
-            response.sales_transaction_progress
-          );
-        }
-      }
-    );
   },
 });
 
