@@ -11,7 +11,7 @@ from ...background_tasks.tasks import (
     send_stock_information,
 )
 from ...utils import user_details_fetch
-
+from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
 
 class NavariKRAeTimsSettings(Document):
     """ETims Integration Settings doctype"""
@@ -29,7 +29,7 @@ class NavariKRAeTimsSettings(Document):
     def validate(self) -> None:
         if self.is_active == 1:
             existing_doc: Optional[str] = frappe.db.exists(
-                "Navari Slade360 eTims Settings",
+                SETTINGS_DOCTYPE_NAME,
                 {
                     "bhfid": self.bhfid,
                     "company": self.company,

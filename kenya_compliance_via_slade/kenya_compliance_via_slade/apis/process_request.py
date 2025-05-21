@@ -39,10 +39,10 @@ def process_request(
     route_path, _ = get_route_path(route_key, "VSCU Slade 360")
     dynamic_route_path = process_dynamic_url(route_path, request_data)
     url = f"{server_url}{dynamic_route_path}"
-    if request_method != "GET":
-        settings = get_settings(company_name, branch_id)
-        updates = add_organisation_branch_department(settings)
-        # data.update(updates)
+    settings = get_settings(company_name, branch_id)
+    # if request_method != "GET":
+    #     updates = add_organisation_branch_department(settings)
+    #     # data.update(updates)
 
     if headers and server_url and route_path:
         return execute_request(
@@ -56,6 +56,7 @@ def process_request(
             doctype,
             document_name,
             error_callback,
+            settings
         )
     else:
         return f"Failed to process {route_key}. Missing required configuration."
@@ -129,6 +130,7 @@ def execute_request(
     doctype: str,
     document_name: str,
     error_callback: Callable = None,
+    settings: dict = None,
 ) -> str:
 
     # Clean data for GET request
@@ -144,6 +146,7 @@ def execute_request(
         endpoints_builder.method = request_method
         endpoints_builder.success_callback = handler_function
         endpoints_builder.error_callback = error_callback
+        endpoints_builder.settings = settings
 
         response = endpoints_builder.make_remote_call(
             doctype=doctype,
