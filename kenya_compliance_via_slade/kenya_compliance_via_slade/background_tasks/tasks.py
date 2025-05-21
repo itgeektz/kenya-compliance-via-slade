@@ -378,7 +378,7 @@ def send_purchase_information() -> None:
 def update_setting_passwords() -> None:
     settings_list = frappe.get_all(
         "Navari KRA ETIMS Settings",
-        filters={"is_active": 1},
+        filters={"is_active": 1, "sandbox": 0},
         fields=["name"]
     )
     for setting in settings_list:
