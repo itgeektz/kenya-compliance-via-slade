@@ -402,7 +402,7 @@ def build_invoice_payload(
             payload["itemDetails"].append({
                 "product_name": item.item_code,
                 "unit_price": round(base_net_rate + (tax_amount / qty if qty else 0), 4),
-                "discount": item.discount_amount or 0,
+                "discount": round(item.discount_amount, 4) or 0,
                 "quantity": qty,
                 "uom": item.uom or "Pcs",
                 "tax_code": tax_code
