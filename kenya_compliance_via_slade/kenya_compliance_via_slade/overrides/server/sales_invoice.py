@@ -14,14 +14,15 @@ def on_submit(doc: Document, method: str = None) -> None:
     )
 
     settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, {"is_active": 1, "company": company_name})
-
+    
+    calculate_tax(doc)
+    
     if (
         doc.custom_successfully_submitted == 0
         and doc.custom_defer_etims_submission == 0
         and doc.is_opening == "No"
         and settings_doc.sales_auto_submission_enabled
     ):
-        calculate_tax(doc)
         try:
             generic_invoices_on_submit_override(doc, "Sales Invoice")
         except frappe.ValidationError as e:
