@@ -8,7 +8,6 @@
   },
   {
     "default": "0",
-
     "fieldname": "custom_details_submitted_successfully",
     "fieldtype": "Check",
     "insert_after": "custom_section_break_lsyni",
@@ -16,6 +15,15 @@
     "name": "Customer-custom_details_submitted_successfully",
     "no_copy": 1,
     "read_only": 1
+  },
+  {
+    "fieldname": "require_tax_id",
+    "fieldtype": "Check",
+    "insert_after": "taxation_section",
+    "label": "Require Tax ID",
+    "name": "Sales Invoice-require_tax_id",
+    "allow_on_submit": 1,
+    "default": "1"
   },
   {
     "fieldname": "custom_column_break_ptw1z",

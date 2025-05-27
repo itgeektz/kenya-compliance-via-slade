@@ -31,7 +31,7 @@ def generic_invoices_on_submit_override(
     )
 
     settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, {"is_active": 1, "company": company_name})
-    if doc.prevent_etims_submission or not settings_doc.sales_auto_submission_enabled or (hasattr(doc, "etr_serial_number") and doc.etr_serial_number):
+    if doc.prevent_etims_submission or not settings_doc.sales_auto_submission_enabled or (hasattr(doc, "etr_invoice_number") and doc.etr_invoice_number):
         return
 
 

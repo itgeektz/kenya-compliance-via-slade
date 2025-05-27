@@ -98,34 +98,11 @@ frappe.ui.form.on(doctype, {
       }
     }
   },
-  customer_group: function (frm) {
-    frappe.db.get_value(
-      "Customer Group",
-      {
-        name: frm.doc.customer_group,
-      },
-      ["custom_insurance_applicable"],
-      (response) => {
-        const customerGroupInsuranceApplicable =
-          response.custom_insurance_applicable;
-
-        if (customerGroupInsuranceApplicable) {
-          frappe.msgprint(
-            `The Customer Group ${frm.doc.customer_group} has Insurance Applicable on. Please fill the relevant insurance fields under Tax tab`
-          );
-          frm.toggle_reqd("custom_insurance_code", true);
-          frm.toggle_reqd("custom_insurance_name", true);
-          frm.toggle_reqd("custom_premium_rate", true);
-
-          frm.set_value("custom_insurance_applicable", 1);
-        } else {
-          frm.toggle_reqd("custom_insurance_code", false);
-          frm.toggle_reqd("custom_insurance_name", false);
-          frm.toggle_reqd("custom_premium_rate", false);
-
-          frm.set_value("custom_insurance_applicable", 0);
-        }
-      }
-    );
+  require_tax_id: function (frm) {
+    if (frm.doc.require_tax_id) {
+      frm.set_df_property("tax_id", "reqd", 1);
+    } else {
+      frm.set_df_property("tax_id", "reqd", 0);
+    }
   },
 });
