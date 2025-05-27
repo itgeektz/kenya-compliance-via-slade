@@ -252,6 +252,9 @@ doc_events = {
         "on_update": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.on_update"
         ],
+        "validate": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.validate"
+        ],
     },
     "Stock Ledger Entry": {
         "on_update": [

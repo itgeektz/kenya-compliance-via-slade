@@ -242,22 +242,24 @@ def process_inventory_transition(response: dict, document_name: str, **kwargs) -
     pass
 
 
-def sales_information_submission_on_success(
-    response: dict, document_name: str, doctype: str, **kwargs
-) -> None:
+def sales_information_submission_on_success(response: dict, document_name: str, doctype: str, **kwargs) -> None:
     """
-    Callback function executed after successfully processing an item.
-    Updates the invoice with custom ID and submission status.
+    Callback after successful submission. Maps SCU data and signature_link.
     """
-    frappe.db.set_value(
-            doctype, document_name, {"custom_successfully_submitted": 1}
-        )
+    updates = {
+        "custom_successfully_submitted": 1,
+        **map_scu_fields(response, document_name, doctype, qr_key="signature_link")
+    }
+
+    frappe.db.set_value(doctype, document_name, updates)
+
     frappe.enqueue(
         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
         document_name=document_name,
         invoice_type=doctype,
         queue="long",
     )
+
     
     
 # def sales_information_submission_on_success(
@@ -410,101 +412,81 @@ def process_sales_sign(document_name: str, doctype: str, invoice_slade_id: str) 
     )
 
 
-def update_invoice_info(
-    response: dict, document_name: str, **kwargs
-) -> None:
+def update_invoice_info(response: dict, document_name: str, **kwargs) -> None:
     doctype = kwargs.get("doctype")
     data = response.get("results", [])[0] if response.get("results") else response
-    custom_slade_id = data.get("id")
     scu_data = data.get("scu_data")
     if not scu_data:
         return
 
-    qr_code_url = scu_data.get("qr_code_url")
+    custom_slade_id = data.get("id")
     sales_invoice_tax_table = data.get("sales_invoice_tax_table", {})
 
     tax_amounts = {
-        "custom_taxbl_amount_a": float(
-            sales_invoice_tax_table.get("A", {}).get("total_taxable_amount", 0.0)
-        ),
-        "custom_tax_a": float(
-            sales_invoice_tax_table.get("A", {}).get("total_tax_amount", 0.0)
-        ),
-        "custom_taxbl_amount_b": float(
-            sales_invoice_tax_table.get("B", {}).get("total_taxable_amount", 0.0)
-        ),
-        "custom_tax_b": float(
-            sales_invoice_tax_table.get("B", {}).get("total_tax_amount", 0.0)
-        ),
-        "custom_taxbl_amount_c": float(
-            sales_invoice_tax_table.get("C", {}).get("total_taxable_amount", 0.0)
-        ),
-        "custom_tax_c": float(
-            sales_invoice_tax_table.get("C", {}).get("total_tax_amount", 0.0)
-        ),
-        "custom_taxbl_amount_d": float(
-            sales_invoice_tax_table.get("D", {}).get("total_taxable_amount", 0.0)
-        ),
-        "custom_tax_d": float(
-            sales_invoice_tax_table.get("D", {}).get("total_tax_amount", 0.0)
-        ),
-        "custom_taxbl_amount_e": float(
-            sales_invoice_tax_table.get("E", {}).get("total_taxable_amount", 0.0)
-        ),
-        "custom_tax_e": float(
-            sales_invoice_tax_table.get("E", {}).get("total_tax_amount", 0.0)
-        ),
+        f"custom_taxbl_amount_{k.lower()}": float(v.get("total_taxable_amount", 0.0))
+        for k, v in sales_invoice_tax_table.items()
     }
+    tax_amounts.update({
+        f"custom_tax_{k.lower()}": float(v.get("total_tax_amount", 0.0))
+        for k, v in sales_invoice_tax_table.items()
+    })
 
     updates = {
         "custom_slade_id": custom_slade_id,
-        "custom_qr_code_url": qr_code_url,
-        "custom_current_receipt_number": scu_data.get("scu_receipt_number"),
-        "custom_control_unit_date_time": parse_datetime(
-            scu_data.get("scu_receipt_timestamp")
-        ),
-        "custom_receipt_signature": scu_data.get("scu_receipt_signature"),
-        "custom_internal_data": scu_data.get("scu_internal_data"),
-        "custom_scu_id": scu_data.get("scu_id"),
-        "custom_scu_mrc_no": scu_data.get("scu_mrc_number"),
-        "custom_scu_invoice_number": scu_data.get("scu_invoice_number"),
+        **map_scu_fields(scu_data, custom_slade_id, doctype, qr_key="qr_code_url"),
         **tax_amounts,
     }
-
-    # Generate QR Code image if qr_code_url is available
-    if qr_code_url:
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=10,
-            border=4,
-        )
-        qr.add_data(qr_code_url)
-        qr.make(fit=True)
-
-        # Save QR Code image as binary
-        img = qr.make_image(fill_color="black", back_color="white")
-        buffer = BytesIO()
-        img.save(buffer, format="PNG")
-        buffer.seek(0)
-
-        # Attach the QR code image to the document and get the file URL
-        file_doc = frappe.get_doc(
-            {
-                "doctype": "File",
-                "file_name": f"QR-{custom_slade_id}.png",
-                "is_private": 0,
-                "content": buffer.read(),
-                "attached_to_doctype": doctype,
-                "attached_to_name": custom_slade_id,
-            }
-        )
-        file_doc.save(ignore_permissions=True)
-        updates["custom_qr_code"] = file_doc.file_url
 
     if document_name:
         frappe.db.set_value(doctype, document_name, updates)
         frappe.publish_realtime("refresh_form", document_name)
+
+
+def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    file_doc = frappe.get_doc({
+        "doctype": "File",
+        "file_name": f"QR-{docname}.png",
+        "is_private": 0,
+        "content": buffer.read(),
+        "attached_to_doctype": doctype,
+        "attached_to_name": docname,
+    })
+    file_doc.save(ignore_permissions=True)
+
+    return file_doc.file_url
+
+
+def map_scu_fields(data: dict, docname: str, doctype: str, qr_key: str) -> dict:
+    qr_url = data.get(qr_key)
+    image_url = generate_and_attach_qr_code(qr_url, docname, doctype) if qr_url else None
+
+    return {
+        "custom_qr_code_url": qr_url,
+        "custom_qr_code": image_url,
+        "custom_current_receipt_number": data.get("scu_receipt_number"),
+        "custom_control_unit_date_time": parse_datetime(data.get("scu_receipt_timestamp")),
+        "custom_receipt_signature": data.get("scu_receipt_signature"),
+        "custom_internal_data": data.get("scu_internal_data"),
+        "custom_scu_id": data.get("scu_id"),
+        "custom_scu_mrc_no": data.get("scu_mrc_number"),
+        "custom_scu_invoice_number": data.get("scu_invoice_number"),
+    }
+
+
 
 
 def sales_item_submission_on_success(
