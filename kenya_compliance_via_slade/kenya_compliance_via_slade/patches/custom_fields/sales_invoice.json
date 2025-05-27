@@ -32,7 +32,7 @@
   },
   {
     "allow_on_submit": 1,
-    "default": "",
+    "default": "Cash",
     "fieldname": "custom_payment_type",
     "fieldtype": "Link",
     "insert_after": "custom_payment_and_transaction_details",
@@ -52,7 +52,9 @@
     "fieldtype": "Check",
     "insert_after": "custom_column_break_arjmp",
     "label": "Prevent Submitting to eTims",
-    "name": "Sales Invoice-prevent_etims_submission"
+    "name": "Sales Invoice-prevent_etims_submission",
+    "allow_on_submit": 1,
+    "default": "0"
   },
   {
     "fieldname": "custom_slade_details",
