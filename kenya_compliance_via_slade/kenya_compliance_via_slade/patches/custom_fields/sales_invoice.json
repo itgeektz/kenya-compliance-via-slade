@@ -32,7 +32,6 @@
   },
   {
     "allow_on_submit": 1,
-    "default": "Cash",
     "fieldname": "custom_payment_type",
     "fieldtype": "Link",
     "insert_after": "custom_payment_and_transaction_details",
