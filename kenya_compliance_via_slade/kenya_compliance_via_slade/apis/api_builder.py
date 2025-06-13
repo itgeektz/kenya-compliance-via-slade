@@ -11,7 +11,7 @@ from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
 
 from ..logger import etims_logger
-from ..utils import update_last_request_date, update_navari_settings_with_token
+from ..utils import update_last_request_date, update_navari_settings_with_token, reset_auth_password
 from .remote_response_status_handlers import on_slade_error
 
 
@@ -286,6 +286,9 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                     error = response_data[0]
                 else:
                     error = str(response_data)
+                    
+                if "could not decode json: Expecting value: line 1 column 1 (char 0)" in error:
+                    reset_auth_password(self._settings.name)
                     
                 update_integration_request(
                     self.integration_request.name,
