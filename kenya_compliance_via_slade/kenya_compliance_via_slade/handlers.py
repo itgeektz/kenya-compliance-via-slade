@@ -33,7 +33,12 @@ def handle_slade_errors(
 
     try:
         # Log the error with more context in the error message
-        frappe.log_error(message=log_message, title="Slade Error")
+        frappe.log_error(
+            message=log_message, 
+            title="Slade Error", 
+            reference_doctype=doctype,
+            reference_name=document_name
+        )
     except Exception as e:
         # If logging fails, fall back to standard error logging
         etims_logger.error(f"Error while logging Slade error: {str(e)}")

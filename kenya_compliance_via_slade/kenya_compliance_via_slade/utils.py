@@ -16,6 +16,7 @@ import requests
 from aiohttp import ClientTimeout
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 from frappe.integrations.utils import create_request_log
 
@@ -317,22 +318,28 @@ def get_settings(company_name: str = None, branch_id: str = None) -> dict | None
         or frappe.get_value("Branch", {}, "name")
     )
 
-    settings = frappe.db.get_value(
-        SETTINGS_DOCTYPE_NAME,
-        {"company": company_name, "bhfid": branch_id, "is_active": 1},
-        "*",
-        as_dict=True,
-    )
-
-    if not settings:
+    if frappe.db.exists(
+        SETTINGS_DOCTYPE_NAME, 
+        {"company": company_name, "bhfid": branch_id, "is_active": 1}
+    ):
+        settings = frappe.db.get_value(
+            SETTINGS_DOCTYPE_NAME,
+            {"company": company_name, "bhfid": branch_id, "is_active": 1},
+            "*",
+            as_dict=True,
+        )
+        return settings
+    
+    if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
         settings = frappe.db.get_value(
             SETTINGS_DOCTYPE_NAME,
             {"is_active": 1},
             "*",
             as_dict=True,
         )
-
-    return settings
+        return settings
+    
+    return None
 
 
 def get_branch_id(company_name: str, vendor: str) -> str | None:
@@ -1145,3 +1152,22 @@ def reset_auth_password(docname: str) -> None:
             "error": str(e)
         }, update_modified=False)
         frappe.throw(f"Password update request failed: <b>{e}</b>")
+
+
+@frappe.whitelist()
+def get_active_setting(doctype):
+    try:
+        result = frappe.get_all(
+            doctype,
+            filters={"is_active": 1},
+            fields=["name"],
+            limit=1,
+            ignore_permissions=True  
+        )
+        if result:
+            return {"message": result[0]}
+        else:
+            return {"message": None}
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), _("Failed to get active setting"))
+        frappe.throw(_("An error occurred while fetching settings"))
