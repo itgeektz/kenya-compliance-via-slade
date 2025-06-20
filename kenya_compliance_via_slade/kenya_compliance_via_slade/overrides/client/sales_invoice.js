@@ -15,11 +15,13 @@ frappe.realtime.on("refresh_form", function (name) {
 frappe.ui.form.on(parentDoctype, {
   refresh: async function (frm) {
     await updateTaxAmountLabel(frm);
-    const { message: activeSetting } = await frappe.db.get_value(
-      settingsDoctypeName,
-      { is_active: 1 },
-      "name"
-    );
+    const { message: activeSetting } = await frappe.call({
+      method:
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_setting",
+      args: {
+        doctype: settingsDoctypeName,
+      },
+    });
 
     if (
       activeSetting?.name &&

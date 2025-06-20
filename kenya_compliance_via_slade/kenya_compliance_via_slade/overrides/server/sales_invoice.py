@@ -12,7 +12,9 @@ def on_submit(doc: Document, method: str = None) -> None:
         or frappe.defaults.get_user_default("Company")
         or frappe.get_value("Company", {}, "name")
     )
-
+    if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1, "company": company_name}):
+        return
+    
     settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, {"is_active": 1, "company": company_name})
     
     calculate_tax(doc)

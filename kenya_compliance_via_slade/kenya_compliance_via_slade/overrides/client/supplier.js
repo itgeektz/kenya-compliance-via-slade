@@ -4,11 +4,13 @@ const settingsDoctypeName = "Navari KRA eTims Settings";
 frappe.ui.form.on(doctype, {
   refresh: async function (frm) {
     const companyName = frappe.boot.sysdefaults.company;
-    const { message: activeSetting } = await frappe.db.get_value(
-      settingsDoctypeName,
-      { is_active: 1 },
-      "name"
-    );
+    const { message: activeSetting } = await frappe.call({
+      method:
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_setting",
+      args: {
+        doctype: settingsDoctypeName,
+      },
+    });
 
     if (activeSetting?.name) {
       if (!frm.is_new() && frm.doc.tax_id) {
