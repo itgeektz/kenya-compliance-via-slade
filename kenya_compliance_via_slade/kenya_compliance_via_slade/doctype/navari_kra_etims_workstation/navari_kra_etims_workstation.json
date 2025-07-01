@@ -12,6 +12,7 @@
   "workstation_type",
   "workstation_type_display",
   "column_break_stkg",
+  "settings",
   "company",
   "department",
   "is_billing_point",
@@ -82,11 +83,17 @@
    "fieldname": "is_billing_point",
    "fieldtype": "Check",
    "label": "Is Billing Point"
+  },
+  {
+   "fieldname": "settings",
+   "fieldtype": "Link",
+   "label": "Settings",
+   "options": "Navari KRA eTims Settings"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-16 11:02:57.721543",
+ "modified": "2025-07-01 19:04:42.976482",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari KRA eTims Workstation",
@@ -107,6 +114,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "workstation,department,workstation_type_display",
  "show_title_field_in_link": 1,
  "sort_field": "modified",

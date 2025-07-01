@@ -12,6 +12,7 @@
   "supplier_pin",
   "supplier_invoice_number",
   "section_break_ksza",
+  "settings",
   "receipt_type_code",
   "payment_type_code",
   "remarks",
@@ -300,6 +301,12 @@
    "fieldtype": "Link",
    "label": "Organisation",
    "options": "Company"
+  },
+  {
+   "fieldname": "settings",
+   "fieldtype": "Link",
+   "label": "Settings",
+   "options": "Navari KRA eTims Settings"
   }
  ],
  "in_create": 1,
@@ -311,7 +318,7 @@
    "link_fieldname": "custom_source_registered_purchase"
   }
  ],
- "modified": "2025-01-07 10:56:58.196239",
+ "modified": "2025-07-01 18:57:02.723739",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari eTims Registered Purchases",
@@ -331,6 +338,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
