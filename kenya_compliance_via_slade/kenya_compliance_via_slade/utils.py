@@ -24,6 +24,7 @@ from frappe.query_builder import DocType
 
 from .doctype.doctype_names_mapping import (
     ENVIRONMENT_SPECIFICATION_DOCTYPE_NAME,
+    ORGANISATION_MAPPING_DOCTYPE_NAME,
     ROUTES_TABLE_CHILD_DOCTYPE_NAME,
     ROUTES_TABLE_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
@@ -853,51 +854,75 @@ def user_details_fetch(document_name: str, **kwargs) -> None:
 
 @frappe.whitelist()
 def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) -> None:
-    settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, document_name)
-    result = response.get("results", [])[0] if response.get("results") else response
+   # TODO: Enhance mapping for Company, Cluster, Branch, Department
+   # Need to update the fetch logic to properly retrieve all these entities
+   # and create appropriate links between them in the system
+   # Should handle cases where entities don't exist and need creation
+  
+   settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, document_name)
+   company = settings_doc.company
 
-    workstation = (
-        result.get("user_workstations")[0]["workstation"]
-        if result.get("user_workstations") and len(result.get("user_workstations")) > 0
-        else None
-    )
 
-    branch_id = (
-        result.get("user_workstations")[0]["workstation__org_unit__parent"]
-        if result.get("user_workstations") and len(result.get("user_workstations")) > 0
-        else None
-    )
+   result = response.get("results", [])[0] if response.get("results") else response
+   user_workstations = result.get("user_workstations") or []
 
-    department_id = (
-        result.get("user_workstations")[0]["workstation__org_unit"]
-        if result.get("user_workstations") and len(result.get("user_workstations")) > 0
-        else None
-    )
 
-    company = frappe.defaults.get_user_default("Company") or frappe.get_value(
-        "Company", {}, "name"
-    )
+   if not user_workstations:
+       frappe.throw("No user workstations found in response.")
 
-    if company:
-        frappe.db.set_value(
-            "Company", company, "custom_slade_id", result.get("organisation_id")
-        )
-        settings_doc.company = company
 
-    workstation_link = get_link_value(WORKSTATION_DOCTYPE_NAME, "slade_id", workstation)
-    if workstation_link:
-        settings_doc.workstation = workstation_link
+   organisation_id = result.get("organisation_id")
 
-    branch_link = get_link_value("Branch", "slade_id", branch_id)
-    if branch_link:
-        settings_doc.bhfid = branch_link
 
-    department_link = get_department(department_id)
+   existing_workstations = {
+       mapping.workstation: mapping.cluster
+       for mapping in settings_doc.get("organisation_mapping", [])
+   }
 
-    if department_link:
-        settings_doc.department = department_link
 
-    settings_doc.save(ignore_permissions=True)
+   for workstation_entry in user_workstations:
+       workstation_id = workstation_entry.get("workstation")
+       department_id = workstation_entry.get("workstation__org_unit")
+       branch_id = workstation_entry.get("workstation__org_unit__parent")
+       cluster_id = workstation_entry.get("workstation__org_unit__parent__parent")
+       cluster_name = workstation_entry.get("workstation__org_unit__parent__parent__name")
+
+
+       workstation_link = get_link_value(WORKSTATION_DOCTYPE_NAME, "slade_id", workstation_id)
+      
+       workstation_link = get_link_value(WORKSTATION_DOCTYPE_NAME, "slade_id", workstation_id)
+       branch_link = get_link_value("Branch", "slade_id", branch_id)
+       department_link = get_department(department_id)
+
+
+       if workstation_id in existing_workstations:
+           frappe.db.set_value(
+               ORGANISATION_MAPPING_DOCTYPE_NAME,
+               {"parent": settings_doc.name, "workstation": workstation_link},
+               {
+                   "cluster": cluster_id,
+                   "cluster_name": cluster_name,
+                   "department": department_link,
+                   "branch": branch_link,
+                   "is_active": 1
+               }
+           )
+       else:
+           settings_doc.append("organisation_mapping", {
+               "workstation": workstation_link,
+               "cluster": cluster_id,
+               "cluster_name": cluster_name,
+               "department": department_link,
+               "branch": branch_link,
+               "is_active": 1
+           })
+
+
+   if company:
+       frappe.db.set_value("Company", company, "custom_slade_id", organisation_id)
+
+
+   settings_doc.save(ignore_permissions=True)
 
 
 def get_department(id: str) -> str:
