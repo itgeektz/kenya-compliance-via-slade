@@ -15,13 +15,15 @@
   "settings_section",
   "server_url",
   "auth_server_url",
+  "warehouse",
+  "workstation",
+  "column_break_mmvk",
   "company",
   "tin",
-  "column_break_mmvk",
   "bhfid",
   "department",
-  "workstation",
-  "warehouse",
+  "section_break_xyci",
+  "organisation_mapping",
   "request_frequency_tab",
   "frequency_of_communication_with_etims_servers_section",
   "column_break_fsjl",
@@ -112,6 +114,7 @@
    "description": "00 is Head-Office/Headquarters, 01 to 99 is Branch Office",
    "fieldname": "bhfid",
    "fieldtype": "Link",
+   "hidden": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Branch Id",
@@ -386,6 +389,7 @@
    "fetch_from": "etims_user.workstation",
    "fieldname": "workstation",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Workstation",
    "options": "Navari KRA eTims Workstation"
   },
@@ -401,6 +405,7 @@
   {
    "fieldname": "department",
    "fieldtype": "Link",
+   "hidden": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Department",
@@ -504,6 +509,7 @@
    "fetch_from": "etims_user.workstation",
    "fieldname": "warehouse",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Default Warehouse",
    "options": "Warehouse"
   },
@@ -516,6 +522,16 @@
    "fieldname": "reset_auth_password",
    "fieldtype": "Button",
    "label": "Reset Auth Password"
+  },
+  {
+   "fieldname": "section_break_xyci",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "organisation_mapping",
+   "fieldtype": "Table",
+   "label": "Organisation Mapping",
+   "options": "eTims Settings Organisation Mapping"
   }
  ],
  "grid_page_length": 50,
@@ -527,7 +543,7 @@
    "link_fieldname": "reference_docname"
   }
  ],
- "modified": "2025-05-21 17:47:32.566074",
+ "modified": "2025-07-01 16:28:29.050041",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari KRA eTims Settings",
