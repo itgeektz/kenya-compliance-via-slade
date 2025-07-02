@@ -1177,22 +1177,18 @@ def reset_auth_password(docname: str) -> None:
             "error": str(e)
         }, update_modified=False)
         frappe.throw(f"Password update request failed: <b>{e}</b>")
-
+        
 
 @frappe.whitelist()
 def get_active_setting(doctype):
     try:
-        result = frappe.get_all(
+        results = frappe.get_all(
             doctype,
             filters={"is_active": 1},
-            fields=["name"],
-            limit=1,
+            fields=["name", "company"],
             ignore_permissions=True  
         )
-        if result:
-            return {"message": result[0]}
-        else:
-            return {"message": None}
+        return results
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), _("Failed to get active setting"))
+        frappe.log_error(frappe.get_traceback(), _("Failed to get active settings"))
         frappe.throw(_("An error occurred while fetching settings"))

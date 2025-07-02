@@ -12,7 +12,7 @@ frappe.listview_settings[doctypeName] = {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.length > 0) {
       listview.page.add_inner_button(
         __("Fetch eTims Price List List"),
         function (listview) {

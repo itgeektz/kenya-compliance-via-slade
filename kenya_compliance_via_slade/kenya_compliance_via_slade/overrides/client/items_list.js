@@ -10,7 +10,7 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
       doctype: settingsDoctypeName,
     },
   });
-  if (activeSetting?.name) {
+  if (activeSetting?.length > 0) {
     listview.page.add_inner_button(
       __("Get Imported Items"),
       function (listview) {

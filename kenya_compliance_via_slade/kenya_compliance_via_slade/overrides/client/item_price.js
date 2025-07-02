@@ -15,7 +15,7 @@ frappe.ui.form.on(doctypeName, {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.length > 0) {
       if (!frm.is_new()) {
         const submit_name = !frm.doc.custom_slade_id
           ? "Submit Item Price"

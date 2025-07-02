@@ -11,7 +11,7 @@ frappe.ui.form.on(itemDoctypName, {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.length > 0) {
       if (frm.doc.custom_item_registered) {
         frm.toggle_enable("custom_item_classification", false);
         frm.toggle_enable("custom_etims_country_of_origin", false);

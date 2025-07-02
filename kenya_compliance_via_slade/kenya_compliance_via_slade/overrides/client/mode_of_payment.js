@@ -11,7 +11,7 @@ frappe.ui.form.on(doctypeName, {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.length > 0) {
       if (!frm.doc.custom_submitted_successfully) {
         frm.add_custom_button(
           __("Submit to eTims"),

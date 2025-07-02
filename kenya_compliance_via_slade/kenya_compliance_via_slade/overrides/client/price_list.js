@@ -15,7 +15,7 @@ frappe.ui.form.on(doctypeName, {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.length > 0) {
       frm.set_query("custom_warehouse", function () {
         return {
           filters: {

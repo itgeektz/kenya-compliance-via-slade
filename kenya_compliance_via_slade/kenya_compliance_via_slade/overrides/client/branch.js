@@ -12,7 +12,7 @@ frappe.ui.form.on(doctype, {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.length > 0) {
       frm.add_custom_button(
         __("Get Imported Items"),
         function () {

@@ -12,7 +12,7 @@ frappe.ui.form.on(doctype, {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.length > 0) {
       let itemCode;
 
       frappe.db.get_value("Item", { name: frm.doc.item }, ["*"], (response) => {
