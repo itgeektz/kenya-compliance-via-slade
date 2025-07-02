@@ -2,10 +2,7 @@ from .kenya_compliance_via_slade.doctype.doctype_names_mapping import (
     IMPORTED_ITEMS_STATUS_DOCTYPE_NAME,
     ITEM_TYPE_DOCTYPE_NAME,
     PRODUCT_TYPE_DOCTYPE_NAME,
-    PURCHASE_RECEIPT_DOCTYPE_NAME,
     ROUTES_TABLE_DOCTYPE_NAME,
-    TRANSACTION_PROGRESS_DOCTYPE_NAME,
-    TRANSACTION_TYPE_DOCTYPE_NAME,
 )
 
 app_name = "kenya_compliance_via_slade"
@@ -20,29 +17,10 @@ required_apps = ["erpnext"]
 # Fixtures
 # --------
 fixtures = [
-    {"dt": TRANSACTION_TYPE_DOCTYPE_NAME},
-    {"dt": PURCHASE_RECEIPT_DOCTYPE_NAME},
     {"dt": IMPORTED_ITEMS_STATUS_DOCTYPE_NAME},
     {"dt": ROUTES_TABLE_DOCTYPE_NAME},
     {"dt": ITEM_TYPE_DOCTYPE_NAME},
     {"dt": PRODUCT_TYPE_DOCTYPE_NAME},
-    {
-        "dt": TRANSACTION_PROGRESS_DOCTYPE_NAME,
-        "filters": [
-            [
-                "name",
-                "in",
-                (
-                    "Wait for Approval",
-                    "Approved",
-                    "Cancel Requested",
-                    "Canceled",
-                    "Credit Note Generated",
-                    "Transferred",
-                ),
-            ]
-        ],
-    },
     {
         "dt": "Custom Field",
         "filters": [
