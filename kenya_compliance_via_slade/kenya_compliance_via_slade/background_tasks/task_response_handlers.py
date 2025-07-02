@@ -45,7 +45,10 @@ def update_documents(
     data: dict | list,
     doctype_name: str,
     field_mapping: dict,
+    settings_name: str = None,
+    is_table: bool = False,
     filter_field: str = "code",
+    table_name: str = None
 ) -> None:
     if isinstance(data, str):
         try:
@@ -88,6 +91,20 @@ def update_documents(
             else:
                 setattr(doc, field, record.get(value, ""))
 
+        if is_table and table_name and hasattr(doc, table_name):
+            found = False
+            for child_row in getattr(doc, table_name):
+                if child_row.etims_setup == settings_name:
+                    child_row.slade360_id = record.get("id")
+                    child_row.is_active = 1
+                    found = True
+                    break
+            
+            if not found and settings_name:
+                new_row = doc.append(table_name)
+                new_row.etims_setup = settings_name
+                new_row.slade360_id = record.get("id")
+                new_row.is_active = 1 
         try:
             doc.save(ignore_permissions=True)
         except Exception:
@@ -96,7 +113,7 @@ def update_documents(
     frappe.db.commit()
 
 
-def update_unit_of_quantity(response: dict, **kwargs) -> None:
+def update_unit_of_quantity(response: dict, settings_name: str, **kwargs) -> None:
     field_mapping = {
         "slade_id": "id",
         "code": "code",
@@ -104,10 +121,10 @@ def update_unit_of_quantity(response: dict, **kwargs) -> None:
         "code_name": "name",
         "code_description": "description",
     }
-    update_documents(response, UNIT_OF_QUANTITY_DOCTYPE_NAME, field_mapping)
+    update_documents(response, UNIT_OF_QUANTITY_DOCTYPE_NAME, field_mapping, settings_name=settings_name, is_table=True, table_name="etims_setup_mapping")
 
 
-def update_packaging_units(response: dict, **kwargs) -> None:
+def update_packaging_units(response: dict, settings_name: str, **kwargs) -> None:
     field_mapping = {
         "slade_id": "id",
         "code": "code",
@@ -115,7 +132,8 @@ def update_packaging_units(response: dict, **kwargs) -> None:
         "sort_order": "sort_order",
         "code_description": "description",
     }
-    update_documents(response, PACKAGING_UNIT_DOCTYPE_NAME, field_mapping)
+    update_documents(response, PACKAGING_UNIT_DOCTYPE_NAME, field_mapping, settings_name=settings_name, is_table=True, table_name="etims_setup_mapping")
+
 
 
 def update_payment_methods(response: dict, **kwargs) -> None:
@@ -137,14 +155,14 @@ def update_payment_methods(response: dict, **kwargs) -> None:
     )
 
 
-def update_currencies(response: dict, **kwargs) -> None:
+def update_currencies(response: dict, settings_name: str, **kwargs) -> None:
     field_mapping = {
         "custom_slade_id": "id",
         "currency_name": "iso_code",
         "enabled": lambda x: 1 if x.get("active") else 0,
         "custom_conversion_rate": "conversion_rate",
     }
-    update_documents(response, "Currency", field_mapping, filter_field="currency_name")
+    update_documents(response, "Currency", field_mapping, filter_field="currency_name", settings_name=settings_name, is_table=True, table_name="custom_etims_setup_mapping")
 
 
 def update_item_classification_codes(response: dict | list, **kwargs) -> None:
@@ -165,36 +183,15 @@ def update_item_classification_codes(response: dict | list, **kwargs) -> None:
     )
 
 
-def update_taxation_type(response: dict, **kwargs) -> None:
-    doc: Document | None = None
-    tax_list = response.get("results", [])
-
-    for taxation_type in tax_list:
-        code = (
-            taxation_type["tax_code"]
-            if taxation_type["tax_code"]
-            else taxation_type["name"]
-        )
-        try:
-            doc_name = frappe.db.get_value(
-                TAXATION_TYPE_DOCTYPE_NAME, {"cd": code}, "name"
-            )
-            doc = frappe.get_doc(TAXATION_TYPE_DOCTYPE_NAME, doc_name)
-
-        except Exception:
-            doc = frappe.new_doc(TAXATION_TYPE_DOCTYPE_NAME)
-
-        finally:
-            doc.cd = code
-            doc.cdnm = taxation_type["name"]
-            doc.slade_id = taxation_type["id"]
-            doc.cddesc = taxation_type["description"]
-            doc.useyn = 1 if taxation_type["active"] else 0
-            doc.srtord = taxation_type["percentage"]
-
-            doc.save(ignore_permissions=True)
-
-    frappe.db.commit()
+def update_taxation_type(response: dict, settings_name: str, **kwargs) -> None:
+    field_mapping = {
+        "slade_id": "id",
+        "cd": "tax_code",
+        "srtord": "sort_order",
+        "cdnm": "name",
+        "cddesc": "description",
+    }
+    update_documents(response, TAXATION_TYPE_DOCTYPE_NAME, field_mapping, filter_field="cd", settings_name=settings_name, is_table=True, table_name="etims_setup_mapping")
 
 
 def update_countries(response: list, **kwargs) -> None:

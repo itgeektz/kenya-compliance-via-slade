@@ -262,7 +262,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
 
             if response.status_code in {200, 201}:
                 self._success_callback_handler(
-                    response=response_data, document_name=document_name, doctype=doctype
+                    response=response_data, document_name=document_name, doctype=doctype, payload=self._payload, settings_name=self._settings.name
                 )
 
                 current_page = response_data.get("current_page", None)

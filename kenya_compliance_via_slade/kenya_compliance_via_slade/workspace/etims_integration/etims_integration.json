@@ -222,66 +222,6 @@
    "type": "Link"
   },
   {
-   "description": "This card enumerates codes received from eTims servers",
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Codes",
-   "link_count": 5,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Mode of Payment",
-   "link_count": 0,
-   "link_to": "Mode of Payment",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "eTims Country",
-   "link_count": 0,
-   "link_to": "Navari eTims Country",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "eTims Taxation Type",
-   "link_count": 0,
-   "link_to": "Navari KRA eTims Taxation Type",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "eTims Unit of Quantity",
-   "link_count": 0,
-   "link_to": "Navari eTims Unit of Quantity",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "eTims Payment Type",
-   "link_count": 0,
-   "link_to": "Navari KRA eTims Payment Type",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Masters",
@@ -428,9 +368,79 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "description": "This card enumerates codes received from eTims servers",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Codes",
+   "link_count": 6,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Mode of Payment",
+   "link_count": 0,
+   "link_to": "Mode of Payment",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "eTims Country",
+   "link_count": 0,
+   "link_to": "Navari eTims Country",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "eTims Taxation Type",
+   "link_count": 0,
+   "link_to": "Navari KRA eTims Taxation Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "eTims Unit of Quantity",
+   "link_count": 0,
+   "link_to": "Navari eTims Unit of Quantity",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "eTims Payment Type",
+   "link_count": 0,
+   "link_to": "Navari KRA eTims Payment Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "eTims Packaging Unit",
+   "link_count": 0,
+   "link_to": "Navari eTims Packaging Unit",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2025-07-02 13:50:57.108688",
+ "modified": "2025-07-02 18:36:10.215959",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "eTims Integration",
