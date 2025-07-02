@@ -122,7 +122,7 @@ def perform_customer_search(request_data: str) -> None:
 
 
 @frappe.whitelist()
-def perform_item_registration(item_name: str) -> dict | None:
+def perform_item_registration(item_name: str, setting_name: str) -> dict | None:
     item = frappe.get_doc("Item", item_name)
 
     if item.custom_prevent_etims_registration or item.disabled:
@@ -206,6 +206,7 @@ def perform_item_registration(item_name: str) -> dict | None:
             item_registration_on_success,
             request_method="PATCH",
             doctype="Item",
+            setting_name=setting_name,
         )
     else:
         process_request(
@@ -214,6 +215,7 @@ def perform_item_registration(item_name: str) -> dict | None:
             item_registration_on_success,
             request_method="POST",
             doctype="Item",
+            setting_name=setting_name,
         )
 
 

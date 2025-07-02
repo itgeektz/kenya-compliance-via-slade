@@ -38,6 +38,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             method:
               "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.perform_notice_search",
             args: {
+              setting_name: frm.doc.name,
               request_data: {
                 document_name: frm.doc.name,
                 company_name: companyName,
@@ -60,6 +61,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             method:
               "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.refresh_code_lists",
             args: {
+              setting_name: frm.doc.name,
               request_data: {
                 document_name: frm.doc.name,
                 company_name: companyName,
@@ -71,6 +73,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
                 method:
                   "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.get_item_classification_codes",
                 args: {
+                  setting_name: frm.doc.name,
                   request_data: {
                     document_name: frm.doc.name,
                     company_name: companyName,
@@ -97,6 +100,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             method:
               "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.search_organisations_request",
             args: {
+              setting_name: frm.doc.name,
               request_data: {
                 document_name: frm.doc.name,
                 company_name: companyName,
@@ -118,7 +122,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
           frappe.call({
             method:
               "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.send_all_mode_of_payments",
-            args: {},
+            args: { setting_name: frm.doc.name },
 
             callback: (response) => {},
             error: (error) => {

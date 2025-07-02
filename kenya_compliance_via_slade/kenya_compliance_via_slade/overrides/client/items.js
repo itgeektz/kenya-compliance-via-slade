@@ -35,48 +35,19 @@ frappe.ui.form.on(itemDoctypName, {
           frm.add_custom_button(
             __("Register Item"),
             function () {
-              // call with all options
-              frappe.call({
-                method:
-                  "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.perform_item_registration",
-                args: {
-                  item_name: frm.doc.name,
-                },
-                callback: (response) => {
-                  frappe.msgprint(
-                    "Item Registration Queued. Please check in later."
-                  );
-                },
-                error: (error) => {
-                  // Error Handling is Defered to the Server
-                },
-              });
+              showCompanySelectionModal(frm, "register_item", activeSetting);
             },
             __("eTims Actions")
           );
         } else if (frm.doc.custom_sent_to_slade && frm.doc.custom_slade_id) {
           frm.add_custom_button(
-            __("Fetch Item Deatils"),
+            __("Fetch Item Details"),
             function () {
-              // call with all options
-              frappe.call({
-                method:
-                  "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.fetch_item_details",
-                args: {
-                  request_data: {
-                    document_name: frm.doc.name,
-                    id: frm.doc.custom_slade_id,
-                  },
-                },
-                callback: (response) => {
-                  frappe.msgprint(
-                    "Item Fetch Request Queued. Please check in later."
-                  );
-                },
-                error: (error) => {
-                  // Error Handling is Defered to the Server
-                },
-              });
+              showCompanySelectionModal(
+                frm,
+                "fetch_item_details",
+                activeSetting
+              );
             },
             __("eTims Actions")
           );
@@ -84,149 +55,21 @@ frappe.ui.form.on(itemDoctypName, {
           frm.add_custom_button(
             __("Update Item"),
             function () {
-              // call with all options
-              frappe.call({
-                method:
-                  "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.perform_item_registration",
-                args: {
-                  item_name: frm.doc.name,
-                },
-                callback: (response) => {
-                  frappe.msgprint("Item Upade Queued. Please check in later.");
-                },
-                error: (error) => {
-                  // Error Handling is Defered to the Server
-                },
-              });
+              showCompanySelectionModal(frm, "update_item", activeSetting);
             },
             __("eTims Actions")
           );
         }
-        {
-        }
+
         if (frm.doc.is_stock_item) {
           frm.add_custom_button(
             __("Submit Item Inventory"),
             function () {
-              frappe.call({
-                method:
-                  "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.submit_inventory",
-                args: {
-                  name: frm.doc.name,
-                },
-                callback: (response) => {
-                  frappe.msgprint("Inventory submission queued.");
-                },
-                error: (error) => {
-                  // Error Handling is Defered to the Server
-                },
-              });
+              showCompanySelectionModal(frm, "submit_inventory", activeSetting);
             },
             __("eTims Actions")
           );
         }
-
-        //  TODO: Fix later. Need more clarification on this
-        // if (
-        //   frm.doc.custom_referenced_imported_item &&
-        //   frm.doc.custom_item_classification &&
-        //   frm.doc.custom_taxation_type
-        // ) {
-
-        //   if (
-        //     !frm.doc.custom_imported_item_submitted ) {
-        //       frm.add_custom_button(
-        //         __("Submit Imported Item"),
-        //         function () {
-        //           frappe.call({
-        //             method: "frappe.client.get",
-        //             args: {
-        //               doctype: "Navari eTims Registered Imported Item",
-        //               name: frm.doc.custom_referenced_imported_item,
-        //             },
-        //             callback: function (response) {
-        //               if (response && response.message) {
-        //                 const referenced_item = response.message;
-
-        //                 frappe.call({
-        //                   method:
-        //                     "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.send_imported_item_request",
-        //                   args: {
-        //                     request_data: {
-        //                       company_name: companyName,
-        //                       document_name: frm.doc.name,
-        //                       item_name: frm.doc.item_name,
-        //                       package: referenced_item.package,
-        //                       quantity: referenced_item.quantity,
-        //                       declaration_date: referenced_item.declaration_date,
-        //                       organisation: organisation,
-        //                       branch: branch,
-        //                       product: frm.doc.custom_slade_id,
-        //                     },
-        //                   },
-        //                   callback: function (apiResponse) {
-        //                     if (apiResponse && apiResponse.message) {
-        //                       frappe.msgprint("Request queued. Check later.");
-        //                     }
-        //                   },
-        //                 });
-        //               } else {
-        //                 frappe.msgprint("Unable to fetch referenced item details.");
-        //               }
-        //             },
-        //           });
-        //         },
-        //         __("eTims Actions")
-        //       );
-
-        //   } else {
-        //     frm.add_custom_button(
-        //       __("Update Imported Item"),
-        //       function () {
-        //         frappe.call({
-        //           method: "frappe.client.get",
-        //           args: {
-        //             doctype: "Navari eTims Registered Imported Item",
-        //             name: frm.doc.custom_referenced_imported_item,
-        //           },
-        //           callback: function (response) {
-        //             if (response && response.message) {
-        //               const referenced_item = response.message;
-
-        //               frappe.call({
-        //                 method:
-        //                   "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.update_imported_item_request",
-        //                 args: {
-        //                   request_data: {
-        //                     company_name: companyName,
-        //                     document_name: frm.doc.name,
-        //                     item_name: frm.doc.item_name,
-        //                     package: referenced_item.package,
-        //                     quantity: referenced_item.quantity,
-        //                     id: referenced_item.name,
-        //                     declaration_date: referenced_item.declaration_date,
-        //                     organisation: organisation,
-        //                     branch: branch,
-        //                     product: frm.doc.custom_slade_id,
-        //                   },
-        //                 },
-        //                 callback: function (apiResponse) {
-        //                   if (apiResponse && apiResponse.message) {
-        //                     frappe.msgprint("Request queued. Check later.");
-        //                   }
-        //                 },
-        //               });
-        //             } else {
-        //               frappe.msgprint("Unable to fetch referenced item details.");
-        //             }
-        //           },
-        //         });
-        //       },
-        //       __("eTims Actions")
-        //     );
-        //   }
-
-        // }
       }
     }
   },
@@ -238,3 +81,103 @@ frappe.ui.form.on(itemDoctypName, {
     }
   },
 });
+
+async function showCompanySelectionModal(frm, actionType, activeSettings) {
+  if (!activeSettings || activeSettings.length === 0) {
+    frappe.msgprint(
+      __("No active eTims settings found. Please configure settings first.")
+    );
+    return;
+  }
+
+  const companyOptions = activeSettings.map((setting) => ({
+    label: `${setting.company} (${setting.name})`,
+    value: setting.name,
+    company_name: setting.company,
+  }));
+
+  const fields = [
+    {
+      label: __("Select Company Setup"),
+      fieldname: "selected_setting_name",
+      fieldtype: "Select",
+      options: companyOptions,
+      reqd: 1,
+      default: companyOptions[0] ? companyOptions[0].value : null,
+    },
+  ];
+
+  let dialog = new frappe.ui.Dialog({
+    title: __("Select Company Setup "),
+    fields: fields,
+    primary_action_label: __("Proceed"),
+    primary_action: (data) => {
+      const selectedSettingName = data.selected_setting_name;
+      dialog.hide();
+      executeItemAction(frm, actionType, selectedSettingName);
+    },
+  });
+
+  dialog.show();
+}
+
+function executeItemAction(frm, actionType, settingName) {
+  let method;
+  let args = {};
+
+  switch (actionType) {
+    case "register_item":
+    case "update_item":
+      method =
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.perform_item_registration";
+      args = {
+        item_name: frm.doc.name,
+        setting_name: settingName,
+      };
+      break;
+    case "fetch_item_details":
+      method =
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.fetch_item_details";
+      args = {
+        request_data: {
+          document_name: frm.doc.name,
+          id: frm.doc.custom_slade_id,
+          setting_name: settingName,
+        },
+      };
+      break;
+    case "submit_inventory":
+      method =
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.submit_inventory";
+      args = {
+        name: frm.doc.name,
+        setting_name: settingName,
+      };
+      break;
+    default:
+      frappe.msgprint(__("Unknown action type."));
+      return;
+  }
+
+  frappe.call({
+    method: method,
+    args: args,
+    callback: (response) => {
+      let message = "";
+      if (actionType === "register_item") {
+        message = "Item Registration Queued. Please check in later.";
+      } else if (actionType === "fetch_item_details") {
+        message = "Item Fetch Request Queued. Please check in later.";
+      } else if (actionType === "update_item") {
+        message = "Item Update Queued. Please check in later.";
+      } else if (actionType === "submit_inventory") {
+        message = "Inventory submission queued.";
+      }
+      frappe.msgprint(message);
+    },
+    error: (error) => {
+      frappe.msgprint(__("An error occurred during the request."));
+      console.error(error);
+    },
+  });
+}

@@ -198,7 +198,7 @@ def perform_notice_search(request_data: str) -> str:
 
 
 @frappe.whitelist()
-def refresh_code_lists(request_data: str) -> str:
+def refresh_code_lists(request_data: str, setting_name: str) -> str:
     """Refresh code lists based on request data."""
     tasks = [
         ("CurrencyCountrySearchReq", update_countries),
@@ -209,13 +209,13 @@ def refresh_code_lists(request_data: str) -> str:
         # ("PaymentMtdSearchReq", update_payment_methods),
     ]
 
-    messages = [process_request(request_data, task[0], task[1]) for task in tasks]
+    messages = [process_request(request_data, task[0], task[1], setting_name=setting_name) for task in tasks]
 
-    return " ".join(messages)
+    return messages
 
 
 @frappe.whitelist()
-def search_organisations_request(request_data: str | dict) -> str:
+def search_organisations_request(request_data: str | dict, setting_name: str) -> str:
     """Refresh code lists based on request data."""
     tasks = [
         # ("OrgSearchReq", update_organisations), # Shift to the auth API
@@ -224,8 +224,8 @@ def search_organisations_request(request_data: str | dict) -> str:
         ("WorkstationSearchReq", update_workstations),
     ]
 
-    messages = [process_request(request_data, task[0], task[1]) for task in tasks]
-
+    messages = [process_request(request_data, task[0], task[1], setting_name=setting_name) for task in tasks]
+    
     process_request(
         {"location_type": "internal"},
         "LocationsSearchReq",
@@ -233,14 +233,14 @@ def search_organisations_request(request_data: str | dict) -> str:
         doctype="Warehouse",
     )
 
-    return " ".join(messages)
+    return messages
 
 
 @frappe.whitelist()
-def get_item_classification_codes(request_data: str) -> str:
+def get_item_classification_codes(request_data: str, setting_name: str) -> str:
     """Function to get item classification codes."""
     message = process_request(
-        request_data, "ItemClsSearchReq", update_item_classification_codes
+        request_data, "ItemClsSearchReq", update_item_classification_codes, setting_name=setting_name
     )
     return message
 

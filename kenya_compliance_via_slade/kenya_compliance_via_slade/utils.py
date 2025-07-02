@@ -223,8 +223,8 @@ def get_current_environment_state(
     return environment
 
 
-def get_server_url(company_name: str, branch_id: str = "00") -> str | None:
-    settings = get_settings(company_name, branch_id)
+def get_server_url(company_name: str, branch_id: str = "00", setting_name: str = None) -> str | None:
+    settings = get_settings(company_name, branch_id, setting_name)
 
     if settings:
         server_url = settings.get("server_url")
@@ -234,7 +234,7 @@ def get_server_url(company_name: str, branch_id: str = "00") -> str | None:
     return
 
 
-def build_headers(company_name: str, branch_id: str) -> dict[str, str] | None:
+def build_headers(company_name: str, branch_id: str, setting_name: str = None) -> dict[str, str] | None:
     """
     Build headers for Slade360 API requests.
     Checks for token validity and refreshes the token if expired.
@@ -246,7 +246,7 @@ def build_headers(company_name: str, branch_id: str) -> dict[str, str] | None:
     Returns:
         dict[str, str] | None: The headers including the refreshed token or None if failed.
     """
-    settings = get_settings(company_name, branch_id)
+    settings = get_settings(company_name, branch_id, setting_name)
 
     if settings:
         access_token = settings.get("access_token")
@@ -298,7 +298,7 @@ def build_headers(company_name: str, branch_id: str) -> dict[str, str] | None:
     return None
 
 
-def get_settings(company_name: str = None, branch_id: str = None) -> dict | None:
+def get_settings(company_name: str = None, branch_id: str = None, setting_name: str = None) -> dict | None:
     """Fetch settings for a given company and branch.
 
     Args:
@@ -308,6 +308,10 @@ def get_settings(company_name: str = None, branch_id: str = None) -> dict | None
     Returns:
         dict | None: The settings if found, otherwise None.
     """
+    if setting_name:
+        if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"name": setting_name}):
+            return frappe.get_doc(SETTINGS_DOCTYPE_NAME, setting_name).as_dict()
+        
     company_name = (
         company_name
         or frappe.defaults.get_user_default("Company")
