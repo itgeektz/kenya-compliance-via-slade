@@ -15,7 +15,7 @@ frappe.ui.form.on(doctypeName, {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.message?.name) {
       frappe.db.get_value(
         settingsDoctypeName,
         {

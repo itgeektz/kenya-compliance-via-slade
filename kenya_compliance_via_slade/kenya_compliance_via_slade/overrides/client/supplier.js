@@ -12,7 +12,7 @@ frappe.ui.form.on(doctype, {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.message?.name) {
       if (!frm.is_new() && frm.doc.tax_id) {
         frm.add_custom_button(
           __("Perform Supplier Search"),

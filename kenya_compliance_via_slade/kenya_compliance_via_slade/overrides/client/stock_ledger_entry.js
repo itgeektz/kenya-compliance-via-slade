@@ -14,7 +14,7 @@ frappe.ui.form.on(doctypeName, {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.message?.name) {
       if (!frm.is_new()) {
         if (!frm.doc.custom_slade_id) {
           frm.add_custom_button(
