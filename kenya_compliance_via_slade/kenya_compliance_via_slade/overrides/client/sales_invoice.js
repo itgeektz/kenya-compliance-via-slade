@@ -24,7 +24,7 @@ frappe.ui.form.on(parentDoctype, {
     });
 
     if (
-      activeSetting?.name &&
+      activeSetting?.message?.name &&
       frm.doc.docstatus !== 0 &&
       !frm.doc.prevent_etims_submission
     ) {

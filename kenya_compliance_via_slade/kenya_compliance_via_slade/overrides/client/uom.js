@@ -15,7 +15,7 @@ frappe.ui.form.on(doctypeName, {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.message?.name) {
       if (!frm.is_new()) {
         const submit_name = !frm.doc.custom_slade_id
           ? "Submit UOM Details"

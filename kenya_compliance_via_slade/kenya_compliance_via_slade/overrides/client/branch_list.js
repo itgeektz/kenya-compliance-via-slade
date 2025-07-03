@@ -12,7 +12,7 @@ frappe.listview_settings[doctypeName] = {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.message?.name) {
       listview.page.add_inner_button(__("Get Branches"), function (listview) {
         frappe.call({
           method:
