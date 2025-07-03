@@ -13,7 +13,7 @@ frappe.ui.form.on(doctype, {
       },
     });
 
-    if (activeSetting?.name) {
+    if (activeSetting?.message?.name) {
       frappe.call({
         method: "frappe.client.get_value",
         args: {

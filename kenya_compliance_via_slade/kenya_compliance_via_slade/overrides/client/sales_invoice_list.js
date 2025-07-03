@@ -10,7 +10,7 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
     },
   });
 
-  if (activeSetting?.name) {
+  if (activeSetting?.message?.name) {
     listview.page.add_action_item(__("Bulk Submit to eTims"), function () {
       bulkSubmitInvoices(listview, doctypeName);
     });
