@@ -13,6 +13,7 @@ from ..apis.remote_response_status_handlers import notices_search_on_success
 from ..doctype.doctype_names_mapping import (
     OPERATION_TYPE_DOCTYPE_NAME,
     UOM_CATEGORY_DOCTYPE_NAME,
+    WORKSTATION_DOCTYPE_NAME,
 )
 from ..utils import get_settings, get_max_submission_attempts
 from .task_response_handlers import (
@@ -384,3 +385,15 @@ def update_setting_passwords() -> None:
     for setting in settings_list:
         doc = frappe.get_doc("Navari KRA ETIMS Settings", setting.name)
         doc.update_password()
+
+
+@frappe.whitelist()
+def fetch_workstations(setting_name: str) -> None:
+    itemprices = process_request(
+        {},
+        "WorkstationSearchReq",
+        update_workstations,
+        doctype=WORKSTATION_DOCTYPE_NAME,
+        setting_name=setting_name,
+    )
+    return itemprices

@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:slade_id",
+ "autoname": "hash",
  "creation": "2025-01-06 12:42:21.273500",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -26,8 +26,7 @@
   {
    "fieldname": "slade_id",
    "fieldtype": "Data",
-   "label": "Slade ID",
-   "unique": 1
+   "label": "Slade ID"
   },
   {
    "fieldname": "column_break_stkg",
@@ -93,11 +92,11 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-07-01 19:04:42.976482",
+ "modified": "2025-07-03 19:12:07.539588",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari KRA eTims Workstation",
- "naming_rule": "By fieldname",
+ "naming_rule": "Random",
  "nsm_parent_field": "parent_navari_slade360_organisation",
  "owner": "Administrator",
  "permissions": [

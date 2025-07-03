@@ -64,9 +64,17 @@ def update_documents(
 
         filter_key = field_mapping.get(filter_field)
         filter_value = record.get(filter_key)
-        doc_name = frappe.db.get_value(
-            doctype_name, {filter_field: filter_value}, "name"
-        )
+        
+        filters = {filter_field: filter_value}
+        
+        if settings_name:
+            if frappe.db.exists("DocField", {"parent": doctype_name, "fieldname": "settings"}):
+                filters["settings"] = settings_name
+            elif frappe.db.exists("DocField", {"parent": doctype_name, "fieldname": "custom_settings"}):
+                filters["custom_settings"] = settings_name
+        
+        doc_name = frappe.db.get_value(doctype_name, filters, "name")
+        
         if doc_name:
             doc = frappe.get_doc(doctype_name, doc_name)
         else:
@@ -105,13 +113,19 @@ def update_documents(
                 new_row.etims_setup = settings_name
                 new_row.slade360_id = record.get("id")
                 new_row.is_active = 1 
+                
+        if settings_name and not is_table:
+            if hasattr(doc, "settings"):
+                doc.settings = settings_name
+            elif hasattr(doc, "custom_settings"):
+                doc.custom_settings = settings_name
         try:
             doc.save(ignore_permissions=True)
         except Exception:
             continue
 
     frappe.db.commit()
-
+    
 
 def update_unit_of_quantity(response: dict, settings_name: str, **kwargs) -> None:
     field_mapping = {
@@ -383,7 +397,7 @@ def update_departments(response: dict, **kwargs) -> None:
     frappe.db.commit()
 
 
-def update_workstations(response: dict, **kwargs) -> None:
+def update_workstations(response: dict, settings_name: str, **kwargs) -> None:
     field_mapping = {
         "slade_id": "id",
         "active": lambda x: 1 if x.get("active") else 0,
@@ -391,12 +405,6 @@ def update_workstations(response: dict, **kwargs) -> None:
         "workstation_type_display": "workstation_type_display",
         "workstation_type": "workstation_type",
         "is_billing_point": lambda x: 1 if x.get("is_billing_point") else 0,
-        "company": {
-            "doctype": "Company",
-            "link_field": "organisation",
-            "filter_field": "custom_slade_id",
-            "extract_field": "name",
-        },
         "department": {
             "doctype": "Department",
             "link_field": "org_unit",
@@ -405,7 +413,7 @@ def update_workstations(response: dict, **kwargs) -> None:
         },
     }
     update_documents(
-        response, WORKSTATION_DOCTYPE_NAME, field_mapping, filter_field="slade_id"
+        response, WORKSTATION_DOCTYPE_NAME, field_mapping, filter_field="slade_id", settings_name=settings_name
     )
 
 
