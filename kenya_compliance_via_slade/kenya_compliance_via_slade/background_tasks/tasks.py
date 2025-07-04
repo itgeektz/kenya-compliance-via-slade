@@ -39,9 +39,22 @@ endpoints_builder = EndpointsBuilder()
 
 
 def refresh_notices() -> None:
-    company = frappe.defaults.get_user_default("Company")
-
-    perform_notice_search(json.dumps({"company_name": company}))
+    setups = frappe.get_all(
+        SETTINGS_DOCTYPE_NAME,
+        filters={"is_active": 1, "sandbox": 0},
+        fields=["name"],
+    )
+    for setup in setups:
+        setting_name = setup.name
+        if not setting_name:
+            continue
+        try:
+            perform_notice_search({}, setting_name)
+        except Exception as e:
+            frappe.log_error(
+                f"Error performing notice search for {setting_name}: {str(e)}"
+            )
+            continue
 
 
 def get_timeframe() -> timedelta:
@@ -192,10 +205,10 @@ def fetch_scu_data(invoices: list) -> None:
 
 
 @frappe.whitelist()
-def perform_notice_search(request_data: str) -> str:
+def perform_notice_search(request_data: str, setting_name: str)  -> str:
     """Function to perform notice search."""
     message = process_request(
-        request_data, "NoticeSearchReq", notices_search_on_success
+        request_data, "NoticeSearchReq", notices_search_on_success, setting_name=setting_name
     )
     return message
 
