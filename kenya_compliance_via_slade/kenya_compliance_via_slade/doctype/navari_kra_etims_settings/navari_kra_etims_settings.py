@@ -23,7 +23,7 @@ class NavariKRAeTimsSettings(Document):
                 "company_name": self.company,
                 "document_name": self.name,
             }
-            search_organisations_request(request_data)
+            search_organisations_request(request_data, self.name)
             user_details_fetch(self.name)
 
     def validate(self) -> None:

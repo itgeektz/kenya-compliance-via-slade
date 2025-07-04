@@ -2,7 +2,7 @@
  {
   "docstatus": 0,
   "doctype": "Navari eTims Routes",
-  "modified": "2025-04-30 09:12:57.934718",
+  "modified": "2025-07-04 15:59:10.494597",
   "name": "VSCU Slade 360",
   "routes_table": [
    {
@@ -43,7 +43,7 @@
    },
    {
     "description": null,
-    "last_request_date": "2025-07-04 15:23:06.420162",
+    "last_request_date": "2025-07-04 15:47:52.892933",
     "parent": "VSCU Slade 360",
     "parentfield": "routes_table",
     "parenttype": "Navari eTims Routes",
@@ -106,7 +106,7 @@
    },
    {
     "description": null,
-    "last_request_date": null,
+    "last_request_date": "2025-07-04 15:54:19.668481",
     "parent": "VSCU Slade 360",
     "parentfield": "routes_table",
     "parenttype": "Navari eTims Routes",
@@ -277,7 +277,7 @@
    },
    {
     "description": null,
-    "last_request_date": null,
+    "last_request_date": "2025-07-04 15:54:20.109290",
     "parent": "VSCU Slade 360",
     "parentfield": "routes_table",
     "parenttype": "Navari eTims Routes",
@@ -493,7 +493,7 @@
    },
    {
     "description": null,
-    "last_request_date": "2025-07-04 15:23:05.262736",
+    "last_request_date": "2025-07-04 15:47:52.485265",
     "parent": "VSCU Slade 360",
     "parentfield": "routes_table",
     "parenttype": "Navari eTims Routes",
@@ -589,6 +589,15 @@
     "parenttype": "Navari eTims Routes",
     "url_path": "/api/etims/sign_sales_credit_note/",
     "url_path_function": "CreditNoteSaveReq"
+   },
+   {
+    "description": null,
+    "last_request_date": null,
+    "parent": "VSCU Slade 360",
+    "parentfield": "routes_table",
+    "parenttype": "Navari eTims Routes",
+    "url_path": "/api/branches/clusters/",
+    "url_path_function": "ClusterSearchReq"
    }
   ],
   "vendor": "VSCU Slade 360"
