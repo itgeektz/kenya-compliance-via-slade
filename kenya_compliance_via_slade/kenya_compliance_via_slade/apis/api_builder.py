@@ -368,19 +368,20 @@ def update_integration_request(
     doc = frappe.get_doc("Integration Request", integration_request, for_update=True)
 
     if error:
-        doc.error = error if doc.error is None or "null" else (doc.error + "\n" + error)
+        new_error = error if doc.error is None or "null" else (doc.error + "\n" + error)
+        doc.error = new_error[:5000] if len(new_error) > 5000 else new_error
 
     if output:
-        doc.output = (
-            output if doc.output is None or "null" else (doc.output + "\n" + output)
-        )
+        new_output = output if doc.output is None or "null" else (doc.output + "\n" + output)
+        doc.output = new_output[:5000] if len(new_output) > 5000 else new_output
 
     if request_description:
-        doc.request_description = (
+        new_desc = (
             request_description
             if doc.request_description is None
             else (doc.request_description + " - " + request_description)
         )
+        doc.request_description = new_desc[:5000] if len(new_desc) > 5000 else new_desc
 
     doc.status = status
 
