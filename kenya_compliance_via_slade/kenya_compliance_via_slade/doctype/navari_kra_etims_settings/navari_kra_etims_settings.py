@@ -118,7 +118,7 @@ class NavariKRAeTimsSettings(Document):
         
         
 @frappe.whitelist()
-def update_companies_with_cluster_info(matched_data, setting_name):
+def update_companies_with_cluster_info(matched_data, settings_name):
     """Update company documents with cluster information"""
     try:
         # Convert string to dict/list if needed

@@ -99,7 +99,7 @@ async function showCompanySelectionModal(frm, actionType, activeSettings) {
   const fields = [
     {
       label: __("Select Company Setup"),
-      fieldname: "selected_setting_name",
+      fieldname: "selected_settings_name",
       fieldtype: "Select",
       options: companyOptions,
       reqd: 1,
@@ -112,7 +112,7 @@ async function showCompanySelectionModal(frm, actionType, activeSettings) {
     fields: fields,
     primary_action_label: __("Proceed"),
     primary_action: (data) => {
-      const selectedSettingName = data.selected_setting_name;
+      const selectedSettingName = data.selected_settings_name;
       dialog.hide();
       executeItemAction(frm, actionType, selectedSettingName);
     },
@@ -132,7 +132,7 @@ function executeItemAction(frm, actionType, settingName) {
         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.perform_item_registration";
       args = {
         item_name: frm.doc.name,
-        setting_name: settingName,
+        settings_name: settingName,
       };
       break;
     case "fetch_item_details":
@@ -142,7 +142,7 @@ function executeItemAction(frm, actionType, settingName) {
         request_data: {
           document_name: frm.doc.name,
           id: frm.doc.custom_slade_id,
-          setting_name: settingName,
+          settings_name: settingName,
         },
       };
       break;
@@ -151,7 +151,7 @@ function executeItemAction(frm, actionType, settingName) {
         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.submit_inventory";
       args = {
         name: frm.doc.name,
-        setting_name: settingName,
+        settings_name: settingName,
       };
       break;
     default:

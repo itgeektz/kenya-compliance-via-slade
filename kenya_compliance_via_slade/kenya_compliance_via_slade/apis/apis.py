@@ -122,7 +122,7 @@ def perform_customer_search(request_data: str) -> None:
 
 
 @frappe.whitelist()
-def perform_item_registration(item_name: str, setting_name: str) -> dict | None:
+def perform_item_registration(item_name: str, settings_name: str) -> dict | None:
     item = frappe.get_doc("Item", item_name)
 
     if item.custom_prevent_etims_registration or item.disabled:
@@ -206,7 +206,7 @@ def perform_item_registration(item_name: str, setting_name: str) -> dict | None:
             item_registration_on_success,
             request_method="PATCH",
             doctype="Item",
-            setting_name=setting_name,
+            settings_name=settings_name,
         )
     else:
         process_request(
@@ -215,7 +215,7 @@ def perform_item_registration(item_name: str, setting_name: str) -> dict | None:
             item_registration_on_success,
             request_method="POST",
             doctype="Item",
-            setting_name=setting_name,
+            settings_name=settings_name,
         )
 
 
@@ -1174,37 +1174,38 @@ def sync_operation_type(request_data: str) -> None:
 
 
 @frappe.whitelist()
-def send_all_mode_of_payments() -> None:
-    mode_of_payments = frappe.get_all(
-        "Mode of Payment",
-        filters={"custom_slade_id": ["is", "not set"]},
-        fields=["name"],
-    )
+def send_all_mode_of_payments(settings_name: str) -> None:
+    mode_of_payments = frappe.get_all("Mode of Payment", fields=["name"])
+    
     for mop in mode_of_payments:
-        frappe.enqueue(send_mode_of_payment_details, name=mop.name)
+        send_mode_of_payment_details(mop.name, settings_name)
+            
 
 
 @frappe.whitelist()
-def send_mode_of_payment_details(name: str) -> dict | None:
+def send_mode_of_payment_details(name: str, settings_name: str) -> dict | None:
     route_key = "AccountsSearchReq"
     on_success = reaceavable_accouct_search_on_success
-    # fetch the reaceavable account to link to the mode of payment
     request_data = {
         "number": "1000-0001",
         "document_name": name,
     }
-
-    process_request(
-        request_data,
+    
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
+        doctype="Mode of Payment",
+        request_data=request_data,
         route_key=route_key,
         handler_function=on_success,
         request_method="GET",
-        doctype="Mode of Payment",
+        settings_name=settings_name,
     )
 
 
 def reaceavable_accouct_search_on_success(
-    response: dict, document_name: str, **kwargs
+    response: dict, document_name: str, settings_name: str, **kwargs
 ) -> None:
     if isinstance(response, str):
         try:
@@ -1231,4 +1232,5 @@ def reaceavable_accouct_search_on_success(
         handler_function=mode_of_payment_on_success,
         request_method="POST",
         doctype="Mode of Payment",
+        settings_name=settings_name,
     )

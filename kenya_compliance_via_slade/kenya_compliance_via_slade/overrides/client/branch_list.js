@@ -30,7 +30,7 @@ frappe.listview_settings[doctypeName] = {
         fields: [
           {
             label: __("Select Company Setup"),
-            fieldname: "selected_setting_name",
+            fieldname: "selected_settings_name",
             fieldtype: "Select",
             options: settingOptions,
             reqd: 1,
@@ -39,7 +39,7 @@ frappe.listview_settings[doctypeName] = {
         ],
         primary_action_label: __("Proceed"),
         primary_action: (data) => {
-          const selectedSettingName = data.selected_setting_name;
+          const selectedSettingName = data.selected_settings_name;
           dialog.hide();
 
           const selectedSetting = activeSettings.find(
@@ -53,7 +53,7 @@ frappe.listview_settings[doctypeName] = {
             method:
               "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.search_branch_request",
             args: {
-              setting_name: selectedSettingName,
+              settings_name: selectedSettingName,
               request_data: {
                 company_name: companyName,
               },

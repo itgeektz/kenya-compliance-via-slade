@@ -45,14 +45,14 @@ def refresh_notices() -> None:
         fields=["name"],
     )
     for setup in setups:
-        setting_name = setup.name
-        if not setting_name:
+        settings_name = setup.name
+        if not settings_name:
             continue
         try:
-            perform_notice_search({}, setting_name)
+            perform_notice_search({}, settings_name)
         except Exception as e:
             frappe.log_error(
-                f"Error performing notice search for {setting_name}: {str(e)}"
+                f"Error performing notice search for {settings_name}: {str(e)}"
             )
             continue
 
@@ -205,16 +205,16 @@ def fetch_scu_data(invoices: list) -> None:
 
 
 @frappe.whitelist()
-def perform_notice_search(request_data: str, setting_name: str)  -> str:
+def perform_notice_search(request_data: str, settings_name: str)  -> str:
     """Function to perform notice search."""
     message = process_request(
-        request_data, "NoticeSearchReq", notices_search_on_success, setting_name=setting_name
+        request_data, "NoticeSearchReq", notices_search_on_success, settings_name=settings_name
     )
     return message
 
 
 @frappe.whitelist()
-def refresh_code_lists(request_data: str, setting_name: str) -> str:
+def refresh_code_lists(request_data: str, settings_name: str) -> str:
     """Refresh code lists based on request data."""
     tasks = [
         ("CurrencyCountrySearchReq", update_countries),
@@ -224,13 +224,13 @@ def refresh_code_lists(request_data: str, setting_name: str) -> str:
         ("TaxSearchReq", update_taxation_type),
     ]
 
-    messages = [process_request(request_data, task[0], task[1], setting_name=setting_name) for task in tasks]
+    messages = [process_request(request_data, task[0], task[1], settings_name=settings_name) for task in tasks]
 
     return messages
 
 
 @frappe.whitelist()
-def search_organisations_request(request_data: str | dict, setting_name: str) -> str:
+def search_organisations_request(request_data: str | dict, settings_name: str) -> str:
     """Refresh code lists based on request data."""
     tasks = [
         # ("OrgSearchReq", update_organisations), # Shift to the auth API 
@@ -240,7 +240,7 @@ def search_organisations_request(request_data: str | dict, setting_name: str) ->
         ("WorkstationSearchReq", update_workstations),
     ]
 
-    messages = [process_request(request_data, task[0], task[1], setting_name=setting_name) for task in tasks]
+    messages = [process_request(request_data, task[0], task[1], settings_name=settings_name) for task in tasks]
     
     process_request(
         {"location_type": "internal"},
@@ -252,7 +252,7 @@ def search_organisations_request(request_data: str | dict, setting_name: str) ->
     return messages
 
 @frappe.whitelist()
-def search_clusters(request_data: str | dict, setting_name: str) -> str:
+def search_clusters(request_data: str | dict, settings_name: str) -> str:
     """Search clusters and return data for modal matching"""
     if isinstance(request_data, str):
         try:
@@ -264,7 +264,7 @@ def search_clusters(request_data: str | dict, setting_name: str) -> str:
         request_data,
         "ClusterSearchReq",
         update_clusters,
-        setting_name=setting_name,
+        settings_name=settings_name,
         doctype=SETTINGS_DOCTYPE_NAME,
     )
     
@@ -272,10 +272,10 @@ def search_clusters(request_data: str | dict, setting_name: str) -> str:
 
 
 @frappe.whitelist()
-def get_item_classification_codes(request_data: str, setting_name: str) -> str:
+def get_item_classification_codes(request_data: str, settings_name: str) -> str:
     """Function to get item classification codes."""
     message = process_request(
-        request_data, "ItemClsSearchReq", update_item_classification_codes, setting_name=setting_name
+        request_data, "ItemClsSearchReq", update_item_classification_codes, settings_name=settings_name
     )
     return message
 
@@ -422,19 +422,19 @@ def update_setting_passwords() -> None:
 
 
 @frappe.whitelist()
-def fetch_workstations(setting_name: str) -> None:
+def fetch_workstations(settings_name: str) -> None:
     itemprices = process_request(
         {},
         "WorkstationSearchReq",
         update_workstations,
         doctype=WORKSTATION_DOCTYPE_NAME,
-        setting_name=setting_name,
+        settings_name=settings_name,
     )
     return itemprices
 
 
 @frappe.whitelist()
-def search_branch_request(request_data: str | dict, setting_name: str) -> None:
+def search_branch_request(request_data: str | dict, settings_name: str) -> None:
     return process_request(
-        request_data, "BhfSearchReq", update_branches, doctype="Branch", setting_name=setting_name
+        request_data, "BhfSearchReq", update_branches, doctype="Branch", settings_name=settings_name
     )

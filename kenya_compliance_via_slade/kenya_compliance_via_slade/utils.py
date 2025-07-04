@@ -223,8 +223,8 @@ def get_current_environment_state(
     return environment
 
 
-def get_server_url(company_name: str, branch_id: str = "00", setting_name: str = None) -> str | None:
-    settings = get_settings(company_name, branch_id, setting_name)
+def get_server_url(company_name: str, branch_id: str = "00", settings_name: str = None) -> str | None:
+    settings = get_settings(company_name, branch_id, settings_name)
 
     if settings:
         server_url = settings.get("server_url")
@@ -234,7 +234,7 @@ def get_server_url(company_name: str, branch_id: str = "00", setting_name: str =
     return
 
 
-def build_headers(company_name: str, branch_id: str, setting_name: str = None) -> dict[str, str] | None:
+def build_headers(company_name: str, branch_id: str, settings_name: str = None) -> dict[str, str] | None:
     """
     Build headers for Slade360 API requests.
     Checks for token validity and refreshes the token if expired.
@@ -246,7 +246,7 @@ def build_headers(company_name: str, branch_id: str, setting_name: str = None) -
     Returns:
         dict[str, str] | None: The headers including the refreshed token or None if failed.
     """
-    settings = get_settings(company_name, branch_id, setting_name)
+    settings = get_settings(company_name, branch_id, settings_name)
 
     if settings:
         access_token = settings.get("access_token")
@@ -298,7 +298,7 @@ def build_headers(company_name: str, branch_id: str, setting_name: str = None) -
     return None
 
 
-def get_settings(company_name: str = None, branch_id: str = None, setting_name: str = None) -> dict | None:
+def get_settings(company_name: str = None, branch_id: str = None, settings_name: str = None) -> dict | None:
     """Fetch settings for a given company and branch.
 
     Args:
@@ -308,9 +308,9 @@ def get_settings(company_name: str = None, branch_id: str = None, setting_name: 
     Returns:
         dict | None: The settings if found, otherwise None.
     """
-    if setting_name:
-        if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"name": setting_name}):
-            return frappe.get_doc(SETTINGS_DOCTYPE_NAME, setting_name).as_dict()
+    if settings_name:
+        if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"name": settings_name}):
+            return frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name).as_dict()
         
     company_name = (
         company_name
@@ -852,7 +852,7 @@ def user_details_fetch(document_name: str, **kwargs) -> None:
         "BhfUserSearchReq",
         user_details_fetch_on_success,
         request_method="GET",
-        setting_name=document_name,
+        settings_name=document_name,
         doctype=SETTINGS_DOCTYPE_NAME,
     )
     

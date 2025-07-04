@@ -25,22 +25,22 @@ def process_request(
     request_method: str = "GET",
     doctype: str = SETTINGS_DOCTYPE_NAME,
     error_callback: Callable = None,
-    setting_name: str = None,
+    settings_name: str = None,
 ) -> str:
     """Reusable function to process requests with common logic."""
-    if not setting_name or not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
+    if not settings_name or not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
         return
 
     data = parse_request_data(request_data)
     company_name, branch_id, document_name = extract_metadata(data)
 
-    headers = build_headers(company_name, branch_id, setting_name)
+    headers = build_headers(company_name, branch_id, settings_name)
 
-    server_url = get_server_url(company_name, branch_id, setting_name)
+    server_url = get_server_url(company_name, branch_id, settings_name)
     route_path, _ = get_route_path(route_key, "VSCU Slade 360")
     dynamic_route_path = process_dynamic_url(route_path, request_data)
     url = f"{server_url}{dynamic_route_path}"
-    settings = get_settings(company_name, branch_id, setting_name) 
+    settings = get_settings(company_name, branch_id, settings_name) 
     # if request_method != "GET":
     #     updates = add_organisation_branch_department(settings)
     #     # data.update(updates)

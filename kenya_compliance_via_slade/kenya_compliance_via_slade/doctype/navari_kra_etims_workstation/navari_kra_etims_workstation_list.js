@@ -32,7 +32,7 @@ frappe.listview_settings[doctypeName] = {
         const fields = [
           {
             label: __("Select Company Setup"),
-            fieldname: "selected_setting_name",
+            fieldname: "selected_settings_name",
             fieldtype: "Select",
             options: companyOptions,
             reqd: 1,
@@ -45,13 +45,13 @@ frappe.listview_settings[doctypeName] = {
           fields: fields,
           primary_action_label: __("Proceed"),
           primary_action: (data) => {
-            const selectedSettingName = data.selected_setting_name;
+            const selectedSettingName = data.selected_settings_name;
             dialog.hide();
             frappe.call({
               method:
                 "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_workstations",
               args: {
-                setting_name: selectedSettingName,
+                settings_name: selectedSettingName,
               },
               callback: (response) => {
                 frappe.msgprint(__("Workstation fetch request queued."));

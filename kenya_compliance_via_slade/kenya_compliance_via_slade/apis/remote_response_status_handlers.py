@@ -1111,7 +1111,20 @@ def operation_type_create_on_success(
     )
 
 
-def mode_of_payment_on_success(response: dict, document_name: str, **kwargs) -> None:
-    frappe.db.set_value(
-        "Mode of Payment", document_name, {"custom_slade_id": response.get("id")}
-    )
+def mode_of_payment_on_success(response: dict, document_name: str, settings_name: str, **kwargs) -> None:
+    # Get the Mode of Payment document
+    mop_doc = frappe.get_doc("Mode of Payment", document_name)
+    slade_id = response.get("id")
+    
+    # Find existing mapping or create new one
+    for mapping in mop_doc.get("etims_setup_mapping", []):
+        if mapping.etims_setup == settings_name:
+            mapping.slade360_id = slade_id
+            break
+    else:
+        mop_doc.append("etims_setup_mapping", {
+            "etims_setup": settings_name,
+            "slade360_id": slade_id
+        })
+        
+    mop_doc.save(ignore_permissions=True)
