@@ -1,5 +1,5 @@
 [pre_model_sync]
 
 [post_model_sync]
-kenya_compliance_via_slade.kenya_compliance_via_slade.patches.create_fields # 20/06/25 
+# kenya_compliance_via_slade.kenya_compliance_via_slade.patches.create_fields # 20/06/25 
 kenya_compliance_via_slade.kenya_compliance_via_slade.patches.create_connection_links # 20/06/25 

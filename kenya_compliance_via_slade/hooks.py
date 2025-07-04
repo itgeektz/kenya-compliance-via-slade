@@ -21,12 +21,12 @@ fixtures = [
     {"dt": ROUTES_TABLE_DOCTYPE_NAME},
     {"dt": ITEM_TYPE_DOCTYPE_NAME},
     {"dt": PRODUCT_TYPE_DOCTYPE_NAME},
-    {
-        "dt": "Custom Field",
-        "filters": [
-            ["module", "=", "Kenya Compliance Via Slade"]
-        ],
-    },
+    # {
+    #     "dt": "Custom Field",
+    #     "filters": [
+    #         ["module", "=", "Kenya Compliance Via Slade"]
+    #     ],
+    # },
 ]
 
 # Includes in <head>
