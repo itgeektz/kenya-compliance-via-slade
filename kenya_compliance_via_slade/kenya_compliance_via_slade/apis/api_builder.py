@@ -261,12 +261,20 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             update_last_request_date(datetime.now(), self._route_path)
 
             if response.status_code in {200, 201}:
+                frappe.db.set_value(
+                    "Integration Request",
+                    self.integration_request.name,
+                    "status",
+                    "Completed",
+                )
+                
                 self._success_callback_handler(
                     response=response_data, document_name=document_name, doctype=doctype, payload=self._payload, settings_name=self._settings.name
                 )
 
                 current_page = response_data.get("current_page", None)
                 total_pages = response_data.get("total_pages", 0)
+                
 
                 update_integration_request(
                     self.integration_request.name,
@@ -357,32 +365,37 @@ def update_integration_request(
     error: str | None = None,
     request_description: str | None = None,
 ) -> None:
-    """Updates the given integration request record.
+    """Updates the given integration request record silently without creating a version.
 
     Args:
         integration_request (str): The provided integration request.
         status (Literal["Completed", "Failed"]): The new status of the request.
         output (str | None, optional): The response message, if any. Defaults to None.
         error (str | None, optional): The error message, if any. Defaults to None.
+        request_description (str | None, optional): Additional description for the request.
     """
-    doc = frappe.get_doc("Integration Request", integration_request, for_update=True)
-
+    update_fields = {
+        "status": status
+    }
+    
     if error:
-        new_error = error if doc.error is None or "null" else (doc.error + "\n" + error)
-        doc.error = new_error[:5000] if len(new_error) > 5000 else new_error
-
+        current_error = frappe.db.get_value("Integration Request", integration_request, "error")
+        new_error = error if not current_error else (current_error + "\n" + error)
+        update_fields["error"] = new_error[:5000] if len(new_error) > 5000 else new_error
+    
     if output:
-        new_output = output if doc.output is None or "null" else (doc.output + "\n" + output)
-        doc.output = new_output[:5000] if len(new_output) > 5000 else new_output
-
+        current_output = frappe.db.get_value("Integration Request", integration_request, "output")
+        new_output = output if not current_output else (current_output + "\n" + output)
+        update_fields["output"] = new_output[:5000] if len(new_output) > 5000 else new_output
+    
     if request_description:
-        new_desc = (
-            request_description
-            if doc.request_description is None
-            else (doc.request_description + " - " + request_description)
-        )
-        doc.request_description = new_desc[:5000] if len(new_desc) > 5000 else new_desc
-
-    doc.status = status
-
-    doc.save(ignore_permissions=True)
+        current_desc = frappe.db.get_value("Integration Request", integration_request, "request_description")
+        new_desc = request_description if not current_desc else (current_desc + " - " + request_description)
+        update_fields["request_description"] = new_desc[:5000] if len(new_desc) > 5000 else new_desc
+    
+    frappe.db.set_value(
+        "Integration Request",
+        integration_request,
+        update_fields,
+        update_modified=False
+    )
