@@ -1,5 +1,5 @@
 from typing import Optional
-
+import json
 import frappe
 from frappe.model.document import Document
 
@@ -115,3 +115,42 @@ class NavariKRAeTimsSettings(Document):
     def update_token(self) -> None:
         """Update the password for the settings document."""
         update_navari_settings_with_token(self.name, True)
+        
+        
+@frappe.whitelist()
+def update_companies_with_cluster_info(matched_data, setting_name):
+    """Update company documents with cluster information"""
+    try:
+        # Convert string to dict/list if needed
+        if isinstance(matched_data, str):
+            matched_data = json.loads(matched_data)
+        
+        for match in matched_data:
+            if not isinstance(match, dict) or not match.get("company") or not match.get("cluster_id"):
+                continue
+            
+            if frappe.db.exists("Company", match["company"]):
+                company = frappe.get_doc("Company", match["company"])
+                
+                # Update standard fields or custom fields
+                if hasattr(company, 'cluster_id'):
+                    company.cluster_id = match["cluster_id"]
+                elif hasattr(company, 'custom_cluster_id'):
+                    company.custom_cluster_id = match["cluster_id"]
+                else:
+                    frappe.throw("Company doctype missing cluster_id field")
+                
+                if hasattr(company, 'slade_id'):
+                    company.slade_id = match.get("organisation", "")
+                elif hasattr(company, 'custom_slade_id'):
+                    company.custom_slade_id = match.get("organisation", "")
+                else:
+                    frappe.throw("Company doctype missing slade_id field")
+                
+                company.save()
+                
+        frappe.db.commit()
+        return {"success": True, "message": "Companies updated successfully"}
+    except Exception as e:
+        frappe.log_error(f"Company update failed: {str(e)}")
+        return {"success": False, "message": str(e)}

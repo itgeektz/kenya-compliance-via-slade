@@ -12,6 +12,7 @@ from ..apis.process_request import process_request
 from ..apis.remote_response_status_handlers import notices_search_on_success
 from ..doctype.doctype_names_mapping import (
     OPERATION_TYPE_DOCTYPE_NAME,
+    SETTINGS_DOCTYPE_NAME,
     UOM_CATEGORY_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
@@ -23,6 +24,7 @@ from .task_response_handlers import (
     uom_category_search_on_success,
     uom_search_on_success,
     update_branches,
+    update_clusters,
     update_countries,
     update_currencies,
     update_item_classification_codes,
@@ -207,7 +209,6 @@ def refresh_code_lists(request_data: str, setting_name: str) -> str:
         ("PackagingUnitSearchReq", update_packaging_units),
         ("QuantityUnitsSearchReq", update_unit_of_quantity),
         ("TaxSearchReq", update_taxation_type),
-        # ("PaymentMtdSearchReq", update_payment_methods),
     ]
 
     messages = [process_request(request_data, task[0], task[1], setting_name=setting_name) for task in tasks]
@@ -219,7 +220,8 @@ def refresh_code_lists(request_data: str, setting_name: str) -> str:
 def search_organisations_request(request_data: str | dict, setting_name: str) -> str:
     """Refresh code lists based on request data."""
     tasks = [
-        # ("OrgSearchReq", update_organisations), # Shift to the auth API
+        # ("OrgSearchReq", update_organisations), # Shift to the auth API 
+        # ("ClusterSearchReq", update_clusters),
         ("BhfSearchReq", update_branches),
         # ("DeptSearchReq", update_departments), # Shift to the auth API
         ("WorkstationSearchReq", update_workstations),
@@ -235,6 +237,25 @@ def search_organisations_request(request_data: str | dict, setting_name: str) ->
     )
 
     return messages
+
+@frappe.whitelist()
+def search_clusters(request_data: str | dict, setting_name: str) -> str:
+    """Search clusters and return data for modal matching"""
+    if isinstance(request_data, str):
+        try:
+            request_data = json.loads(request_data)
+        except json.JSONDecodeError:
+            raise ValueError(f"Invalid JSON string: {request_data}")
+
+    response = process_request(
+        request_data,
+        "ClusterSearchReq",
+        update_clusters,
+        setting_name=setting_name,
+        doctype=SETTINGS_DOCTYPE_NAME,
+    )
+    
+    return response if isinstance(response, list) else response.get("results", [response])
 
 
 @frappe.whitelist()
@@ -397,3 +418,10 @@ def fetch_workstations(setting_name: str) -> None:
         setting_name=setting_name,
     )
     return itemprices
+
+
+@frappe.whitelist()
+def search_branch_request(request_data: str | dict, setting_name: str) -> None:
+    return process_request(
+        request_data, "BhfSearchReq", update_branches, doctype="Branch", setting_name=setting_name
+    )

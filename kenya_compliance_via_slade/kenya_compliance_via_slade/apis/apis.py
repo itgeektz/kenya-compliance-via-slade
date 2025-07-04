@@ -523,13 +523,6 @@ def update_stock_quantity(name: str, id: str) -> None:
 
 
 @frappe.whitelist()
-def search_branch_request(request_data: str) -> None:
-    return process_request(
-        request_data, "BhfSearchReq", search_branch_request_on_success, doctype="Branch"
-    )
-
-
-@frappe.whitelist()
 def send_imported_item_request(request_data: str) -> None:
     process_request(
         request_data,

@@ -134,11 +134,11 @@ def execute_request(
     document_name: str,
     error_callback: Callable = None,
     settings: dict = None,
-) -> str:
-
-    # Clean data for GET request
+) -> str | dict | None: 
     if request_method == "GET":
         clean_data_for_get_request(data)
+
+    last_response_data = None 
 
     while url:
         endpoints_builder.headers = headers
@@ -156,9 +156,11 @@ def execute_request(
             document_name=document_name,
         )
 
-        if isinstance(response, dict) and "next" in response:
+        if isinstance(response, dict) and "next" in response and response.get("next") != url:
             url = response["next"]
+            last_response_data = response 
         else:
-            url = None
+            last_response_data = response
+            url = None 
 
-    return f"{route_key} completed successfully."
+    return last_response_data 
