@@ -891,6 +891,7 @@ def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) 
         
         company_link = branch_company or company or get_link_value("Company", "cluster_id", cluster_id)
         department_link = get_department(department_id, company_link)
+        warehouse_link = frappe.db.get_value("Warehouse", {"is_group": 1, "company": company_link}, "name")
         
         frappe.log_error(
             title="Workstation Link",
@@ -907,6 +908,7 @@ def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) 
                     "department": department_link,
                     "company": company_link,
                     "branch": branch_link,
+                    "warehouse": warehouse_link,
                     "is_active": 1
                 }
             )
@@ -918,6 +920,7 @@ def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) 
                 "department": department_link,
                 "company": company_link,
                 "branch": branch_link,
+                "warehouse": warehouse_link,
                 "is_active": 1
             })
             settings_doc.save(ignore_permissions=True)
