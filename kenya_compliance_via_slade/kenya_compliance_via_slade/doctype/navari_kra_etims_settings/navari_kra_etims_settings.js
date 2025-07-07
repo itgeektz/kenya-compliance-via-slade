@@ -237,10 +237,10 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
 function showClusterMatchingModal(clusterData, form) {
   let tableData = clusterData.map((cluster) => {
     return {
-      cluster_id: cluster.id,
-      cluster_name: cluster.name,
+      cluster_id: cluster.cluster_id,
+      cluster_name: cluster.cluster_name,
       organisation: cluster.organisation,
-      company: "",
+      company: cluster.company,
     };
   });
 

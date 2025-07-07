@@ -115,13 +115,12 @@ class NavariKRAeTimsSettings(Document):
     def update_token(self) -> None:
         """Update the password for the settings document."""
         update_navari_settings_with_token(self.name, True)
-        
-        
+    
+    
 @frappe.whitelist()
 def update_companies_with_cluster_info(matched_data, settings_name):
-    """Update company documents with cluster information"""
+    """Update company documents with cluster information using setup_mapping table"""
     try:
-        # Convert string to dict/list if needed
         if isinstance(matched_data, str):
             matched_data = json.loads(matched_data)
         
@@ -129,25 +128,37 @@ def update_companies_with_cluster_info(matched_data, settings_name):
             if not isinstance(match, dict) or not match.get("company") or not match.get("cluster_id"):
                 continue
             
-            if frappe.db.exists("Company", match["company"]):
-                company = frappe.get_doc("Company", match["company"])
+            company_name = match["company"]
+            if not frappe.db.exists("Company", company_name):
+                continue
                 
-                # Update standard fields or custom fields
-                if hasattr(company, 'cluster_id'):
-                    company.cluster_id = match["cluster_id"]
-                elif hasattr(company, 'custom_cluster_id'):
-                    company.custom_cluster_id = match["cluster_id"]
-                else:
-                    frappe.throw("Company doctype missing cluster_id field")
-                
-                if hasattr(company, 'slade_id'):
-                    company.slade_id = match.get("organisation", "")
-                elif hasattr(company, 'custom_slade_id'):
-                    company.custom_slade_id = match.get("organisation", "")
-                else:
-                    frappe.throw("Company doctype missing slade_id field")
-                
-                company.save()
+            company = frappe.get_doc("Company", company_name)
+            
+            existing_mapping = None
+            duplicate_mappings = []
+            
+            for mapping in company.setup_mapping:
+                if mapping.etims_setup == settings_name:
+                    if existing_mapping:
+                        duplicate_mappings.append(mapping)
+                    else:
+                        existing_mapping = mapping
+            for duplicate in duplicate_mappings:
+                company.setup_mapping.remove(duplicate)
+            
+            if existing_mapping:
+                existing_mapping.organisation = match.get("organisation", "")
+                existing_mapping.cluster = match["cluster_id"]
+                existing_mapping.is_active = 1
+            else:
+                company.append("setup_mapping", {
+                    "etims_setup": settings_name,
+                    "organisation": match.get("organisation", ""),
+                    "cluster": match["cluster_id"],
+                    "is_active": 1,
+                })
+            
+            company.save(ignore_permissions=True)
                 
         frappe.db.commit()
         return {"success": True, "message": "Companies updated successfully"}

@@ -268,8 +268,70 @@ def search_clusters(request_data: str | dict, settings_name: str) -> str:
         doctype=SETTINGS_DOCTYPE_NAME,
     )
     
-    return response if isinstance(response, list) else response.get("results", [response])
+    return get_cluster_company_matches(response if isinstance(response, list) else response.get("results", [response]))
 
+@frappe.whitelist()
+def get_cluster_company_matches(cluster_data):
+    """Process cluster data and attempt to match with companies"""
+    try:
+        if isinstance(cluster_data, str):
+            cluster_data = json.loads(cluster_data)
+
+        companies = frappe.get_all("Company", pluck="name")
+
+        matched_data = []
+        
+        for cluster in cluster_data:
+            if not isinstance(cluster, dict):
+                continue
+
+            match_info = {
+                "cluster_id": cluster.get("id"),
+                "cluster_name": cluster.get("name"),
+                "organisation": cluster.get("organisation"),
+                "company": find_best_company_match(cluster.get("name"), companies)
+            }
+            
+            matched_data.append(match_info)
+
+        return matched_data
+
+    except Exception as e:
+        frappe.log_error(f"Cluster matching failed: {str(e)}")
+        return {"error": str(e)}
+
+def find_best_company_match(cluster_name, companies):
+    """Simple company matching using string comparison"""
+    if not cluster_name or not companies:
+        return ""
+    
+    cluster_lower = cluster_name.lower()
+    
+    for company in companies:
+        if company.lower() == cluster_lower:
+            return company
+    
+    for company in companies:
+        company_lower = company.lower()
+        if cluster_lower in company_lower or company_lower in cluster_lower:
+            return company
+    
+    cluster_words = get_significant_words(cluster_lower)
+    if cluster_words:
+        for company in companies:
+            company_words = get_significant_words(company.lower())
+            if any(word in company_words for word in cluster_words):
+                return company
+    
+    return ""
+
+def get_significant_words(text):
+    """Extract meaningful words for matching"""
+    common_words = {'the', 'and', 'of', 'for', 'in', 'with', 'company', 'co', 'ltd', 'pty'}
+    return [
+        word for word in text.split() 
+        if len(word) > 3 and word not in common_words
+    ]
 
 @frappe.whitelist()
 def get_item_classification_codes(request_data: str, settings_name: str) -> str:
