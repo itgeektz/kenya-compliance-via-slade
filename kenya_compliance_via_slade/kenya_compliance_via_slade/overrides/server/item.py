@@ -5,7 +5,7 @@ from frappe.model.document import Document
 
 from ...apis.apis import perform_item_registration
 from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
-from ...utils import generate_custom_item_code_etims
+from ...utils import generate_custom_item_code_etims, get_active_settings
 
 
 def on_update(doc: Document, method: str = None) -> None:
@@ -15,7 +15,9 @@ def on_update(doc: Document, method: str = None) -> None:
         return
 
     if not doc.custom_sent_to_slade:
-        perform_item_registration(doc.name)
+        settings = get_active_settings()
+        for setting in settings:
+            perform_item_registration(doc.name, setting.name)
 
 
 def validate(doc: Document, method: str = None) -> None:

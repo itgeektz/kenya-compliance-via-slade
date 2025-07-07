@@ -4,7 +4,7 @@ const settingsDoctypeName = "Navari KRA eTims Settings";
 frappe.listview_settings[doctypeName].onload = async function (listview) {
   const { message: activeSetting } = await frappe.call({
     method:
-      "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_setting",
+      "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_settings",
     args: {
       doctype: settingsDoctypeName,
     },

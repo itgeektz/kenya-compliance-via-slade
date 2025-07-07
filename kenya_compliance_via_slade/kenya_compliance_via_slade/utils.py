@@ -1233,7 +1233,7 @@ def reset_auth_password(docname: str) -> None:
         
 
 @frappe.whitelist()
-def get_active_setting(doctype):
+def get_active_settings(doctype):
     try:
         results = frappe.get_all(
             doctype,
@@ -1245,3 +1245,4 @@ def get_active_setting(doctype):
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), _("Failed to get active settings"))
         frappe.throw(_("An error occurred while fetching settings"))
+
