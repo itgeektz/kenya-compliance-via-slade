@@ -856,75 +856,125 @@ def user_details_fetch(document_name: str, **kwargs) -> None:
         doctype=SETTINGS_DOCTYPE_NAME,
     )
     
-    
 @frappe.whitelist()
 def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) -> None:
     settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, document_name)
-    company = settings_doc.company
-
+    default_company = settings_doc.company  
+    
     result = response.get("results", [])[0] if response.get("results") else response
     user_workstations = result.get("user_workstations") or []
+    organisation_id = result.get("organisation_id")
 
     if not user_workstations:
         frappe.throw("No user workstations found in response.")
 
-    organisation_id = result.get("organisation_id")
-
-    existing_workstations = {
-        mapping.workstation: mapping.cluster
+    existing_mappings = {
+        mapping.workstation: mapping 
         for mapping in settings_doc.get("organisation_mapping", [])
     }
 
+    processed_companies = set()  
     for workstation_entry in user_workstations:
         workstation_id = workstation_entry.get("workstation")
-        department_id = workstation_entry.get("workstation__org_unit")
-        branch_id = workstation_entry.get("workstation__org_unit__parent")
         cluster_id = workstation_entry.get("workstation__org_unit__parent__parent")
-        cluster_name = workstation_entry.get("workstation__org_unit__parent__parent__name")
+        
+        if not workstation_id or not cluster_id:
+            continue
 
         workstation_link = get_link_value(WORKSTATION_DOCTYPE_NAME, "slade_id", workstation_id)
-        branch_link = get_link_value("Branch", "slade_id", branch_id)
-        
-        branch_company = None
-        if branch_link:
-            branch_company = frappe.db.get_value("Branch", branch_link, "company")
-        
-        company_link = branch_company or company or get_link_value("Company", "cluster_id", cluster_id)
-        department_link = get_department(department_id, company_link)
-        warehouse_link = frappe.db.get_value("Warehouse", {"is_group": 1, "company": company_link}, "name")
+        if not workstation_link:
+            continue
 
-        if workstation_id in existing_workstations:
-            frappe.db.set_value(
-                ORGANISATION_MAPPING_DOCTYPE_NAME,
-                {"parent": settings_doc.name, "workstation": workstation_link},
-                {
-                    "cluster": cluster_id,
-                    "cluster_name": cluster_name,
-                    "department": department_link,
-                    "company": company_link,
-                    "branch": branch_link,
-                    "warehouse": warehouse_link,
-                    "is_active": 1
-                }
-            )
+        company_link = get_company_from_setup_mapping(cluster_id, document_name) or default_company
+        
+        if not company_link:
+            continue
+
+        branch_id = workstation_entry.get("workstation__org_unit__parent")
+        branch_link = frappe.db.get_value("Branch", {"slade_id": branch_id, "company": company_link}, "name") if branch_id else None
+        
+        department_id = workstation_entry.get("workstation__org_unit")
+        department_link = get_department(department_id, company_link) if department_id else None
+        
+        warehouse_link = get_default_warehouse(company_link)
+
+        cluster_name = workstation_entry.get("workstation__org_unit__parent__parent__name")
+
+        mapping_data = {
+            "workstation": workstation_link,
+            "cluster": cluster_id,
+            "cluster_name": cluster_name,
+            "department": department_link,
+            "company": company_link,
+            "branch": branch_link,
+            "warehouse": warehouse_link,
+            "is_active": 1
+        }
+
+        if workstation_link in existing_mappings:
+            update_existing_mapping(settings_doc.name, workstation_link, mapping_data)
         else:
-            settings_doc.append("organisation_mapping", {
-                "workstation": workstation_link,
-                "cluster": cluster_id,
-                "cluster_name": cluster_name,
-                "department": department_link,
-                "company": company_link,
-                "branch": branch_link,
-                "warehouse": warehouse_link,
-                "is_active": 1
-            })
-            settings_doc.save(ignore_permissions=True)
+            settings_doc.append("organisation_mapping", mapping_data)
+            processed_companies.add(company_link)  
 
-    if company:
-        frappe.db.set_value("Company", company, "slade_id", organisation_id)
+    if settings_doc.get("organisation_mapping"):
+        settings_doc.save(ignore_permissions=True)
+
+    update_company_slade_ids(processed_companies, organisation_id)
         
     frappe.db.commit()
 
+def get_company_from_setup_mapping(cluster_id: str, setup_name: str) -> str:
+    """Get company from active eTims Setup Mapping that matches cluster and setup"""
+    mappings = frappe.get_all(
+        "eTims Company Setup Mapping",
+        filters={
+            "etims_setup": setup_name,
+            "cluster": cluster_id,
+            "parenttype": "Company",
+            "is_active": 1
+        },
+        fields=["parent"],
+        distinct=True
+    )
+    
+    return mappings[0].parent if mappings else None
+
+def get_default_warehouse(company: str) -> str:
+    """Get default warehouse for company"""
+    warehouses = frappe.get_all(
+        "Warehouse",
+        filters={
+            "is_group": 1,
+            "company": company
+        },
+        fields=["name"],
+        limit=1
+    )
+    return warehouses[0].name if warehouses else None
+
+def update_existing_mapping(parent: str, workstation: str, data: dict) -> None:
+    """Update existing organisation mapping"""
+    mapping_name = frappe.get_value(
+        ORGANISATION_MAPPING_DOCTYPE_NAME,
+        filters={
+            "parent": parent,
+            "workstation": workstation
+        },
+        fieldname="name"
+    )
+    
+    if mapping_name:
+        mapping_doc = frappe.get_doc(ORGANISATION_MAPPING_DOCTYPE_NAME, mapping_name)
+        mapping_doc.update(data)
+        mapping_doc.save(ignore_permissions=True)
+
+def update_company_slade_ids(companies: set, organisation_id: str) -> None:
+    """Update slade_id for multiple companies"""
+    for company in companies:
+        if frappe.db.exists("Company", company):
+            frappe.db.set_value("Company", company, "slade_id", organisation_id)
+            
 
 def get_department(id: str, company: str) -> str:
     department_name = f"{company} - eTims Department"

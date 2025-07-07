@@ -16,7 +16,7 @@ from ..doctype.doctype_names_mapping import (
     UOM_CATEGORY_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_link_value
+from ..utils import get_link_value, get_company_from_setup_mapping
 
 
 def send_pos_invoices_information() -> None:
@@ -301,41 +301,59 @@ def update_organisations(response: dict, **kwargs) -> None:
     doc.save(ignore_permissions=True)
 
     frappe.db.commit()
-
-
+    
+    
 def update_branches(response: dict, settings_name: str, **kwargs) -> None:
     if isinstance(response, str):
         try:
-            response = json.loads(response)
-        except json.JSONDecodeError:
-            raise ValueError(f"Invalid JSON string: {response}")
+            response = frappe.parse_json(response)
+        except ValueError:
+            frappe.throw("Invalid JSON string in response")
 
-    settings = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
-    field_mapping = {
-        "slade_id": "id",
-        "tax_id": "organisation_tax_pin",
-        "branch": {
-            "fields": ["company", "name"], 
-        },
-        "etims_device_serial_no": "etims_device_serial_no",
-        "branch_code": "etims_branch_id",
-        "pin": "organisation_tax_pin",
-        "branch_name": "name",
-        "is_head_office": lambda x: 1 if x.get("is_headquater") else 0,
-        "is_etims_branch": lambda x: 1 if x.get("branch_status") else 0,
-        "is_etims_verified": lambda x: (1 if x.get("is_etims_verified") else 0),
-    }
+    results = response.get("results", [response])
 
-    update_documents(
-        response, 
-        "Branch", 
-        field_mapping, 
-        filter_field="branch", 
-        settings_name=settings_name,
-        fixed_values={
-            "company": settings.company
+    for branch_data in results:
+        if not isinstance(branch_data, dict):
+            continue
+
+        cluster_id = branch_data.get("parent")
+        company = get_company_from_setup_mapping(cluster_id, settings_name)
+        
+        if not company:
+            frappe.log_error(f"No company found for cluster {cluster_id}", "Branch Update Skipped")
+            continue
+
+        original_branch_name = branch_data.get('name', '').strip()
+        if not original_branch_name:
+            continue
+            
+        branch_name = f"eTims - {original_branch_name}"
+
+        branch_filters = {
+            "branch": branch_name,
         }
-    )
+        branch_exists = frappe.db.exists("Branch", branch_filters)
+        
+        if branch_exists:
+            branch = frappe.get_doc("Branch", branch_filters)
+        else:
+            branch = frappe.new_doc("Branch")
+
+        branch.update({
+            "company": company,
+            "branch": branch_name,
+            "slade_id": branch_data.get("id"),
+            "tax_id": branch_data.get("organisation_tax_pin"),
+            "etims_device_serial_no": branch_data.get("etims_device_serial_no"),
+            "branch_code": branch_data.get("etims_branch_id"),
+            "pin": branch_data.get("organisation_tax_pin"),
+            "is_head_office": 1 if branch_data.get("is_headquater") else 0,
+            "is_etims_branch": 1 if branch_data.get("branch_status") else 0,
+            "is_etims_verified": 1 if branch_data.get("is_etims_verified") else 0,
+        })
+
+        branch.save(ignore_permissions=True)
+        frappe.db.commit()
 
 
 def update_departments(response: dict, **kwargs) -> None:

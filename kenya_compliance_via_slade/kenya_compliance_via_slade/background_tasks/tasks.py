@@ -236,7 +236,7 @@ def search_organisations_request(request_data: str | dict, settings_name: str) -
         # ("OrgSearchReq", update_organisations), # Shift to the auth API 
         # ("ClusterSearchReq", update_clusters),
         ("BhfSearchReq", update_branches),
-        # ("DeptSearchReq", update_departments), # Shift to the auth API
+        # ("DeptSearchReq", update_departments),  # Shift to the auth API
         ("WorkstationSearchReq", update_workstations),
     ]
 
