@@ -204,7 +204,7 @@ def update_currencies(response: dict, settings_name: str, **kwargs) -> None:
         "enabled": lambda x: 1 if x.get("active") else 0,
         "custom_conversion_rate": "conversion_rate",
     }
-    update_documents(response, "Currency", field_mapping, filter_field="currency_name", settings_name=settings_name, is_table=True, table_name="custom_etims_setup_mapping")
+    update_documents(response, "Currency", field_mapping, filter_field="currency_name", settings_name=settings_name, is_table=True, table_name="etims_setup_mapping")
 
 
 def update_item_classification_codes(response: dict | list, **kwargs) -> None:

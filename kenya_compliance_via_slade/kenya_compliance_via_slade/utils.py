@@ -28,6 +28,7 @@ from .doctype.doctype_names_mapping import (
     ROUTES_TABLE_CHILD_DOCTYPE_NAME,
     ROUTES_TABLE_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
+    SLADE_ID_MAPPING_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
 from .logger import etims_logger
@@ -1233,7 +1234,7 @@ def reset_auth_password(docname: str) -> None:
         
 
 @frappe.whitelist()
-def get_active_settings(doctype):
+def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME) -> list[dict]:
     try:
         results = frappe.get_all(
             doctype,
@@ -1246,3 +1247,18 @@ def get_active_settings(doctype):
         frappe.log_error(frappe.get_traceback(), _("Failed to get active settings"))
         frappe.throw(_("An error occurred while fetching settings"))
 
+def get_slade360_id(doctype: str, name: str, setting: str) -> str:        
+    if not frappe.db.exists(doctype, name):
+        frappe.throw(_("Document {0} with name {1} does not exist.").format(doctype, name))
+    
+    slade_id = frappe.db.get_value(
+        SLADE_ID_MAPPING_DOCTYPE_NAME,
+        filters={
+            "etims_setup": setting,
+            "parenttype": doctype,
+            "parent": name
+        },
+        fieldname="slade360_id"
+    )
+    
+    return slade_id

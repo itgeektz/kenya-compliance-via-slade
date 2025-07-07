@@ -23,6 +23,7 @@ from ..utils import (
     generate_custom_item_code_etims,
     get_link_value,
     get_settings,
+    get_slade360_id,
     make_get_request,
 )
 from .api_builder import EndpointsBuilder
@@ -123,15 +124,38 @@ def perform_customer_search(request_data: str) -> None:
 
 @frappe.whitelist()
 def perform_item_registration(item_name: str, settings_name: str) -> dict | None:
+    """Main function to handle item registration with SLADE"""
     item = frappe.get_doc("Item", item_name)
 
-    if item.custom_prevent_etims_registration or item.disabled:
-        return
+    if not is_item_eligible_for_registration(item):
+        return None
 
-    missing_fields = []
+    missing_fields = validate_required_fields(item)
+    if missing_fields:
+        return None
 
+    if not item.custom_item_code_etims:
+        generate_and_set_etims_code(item)
+
+    request_data = build_item_payload(item, settings_name)
+    request_method = "PATCH" if (item.custom_sent_to_slade and item.custom_slade_id) else "POST"
+    
+    process_request(
+        request_data,
+        "ItemsSearchReq",
+        item_registration_on_success,
+        request_method=request_method,
+        doctype="Item",
+        settings_name=settings_name,
+    )
+
+def is_item_eligible_for_registration(item) -> bool:
+    """Check if item meets basic registration criteria"""
+    return not (item.custom_prevent_etims_registration or item.disabled)
+
+def validate_required_fields(item) -> list:
+    """Validate required fields for item registration"""
     required_fields = [
-        # "custom_item_code_etims",
         "custom_item_classification",
         "custom_product_type",
         "custom_item_type",
@@ -140,83 +164,67 @@ def perform_item_registration(item_name: str, settings_name: str) -> dict | None
         "custom_unit_of_quantity",
         "custom_taxation_type",
     ]
+    return [field for field in required_fields if not item.get(field)]
 
-    for field in required_fields:
-        if not item.get(field):
-            missing_fields.append(field)
-
-    if missing_fields:
-        return
-    if not item.custom_item_code_etims:
-        item.custom_item_code_etims = generate_custom_item_code_etims(item)
-        frappe.db.set_value(
-            "Item", item.name, "custom_item_code_etims", item.custom_item_code_etims
-        )
-
-    tax = get_link_value(
-        TAXATION_TYPE_DOCTYPE_NAME, "cd", item.get("custom_taxation_type"), "slade_id"
+def generate_and_set_etims_code(item) -> None:
+    """Generate and set ETIMS code for item"""
+    item.custom_item_code_etims = generate_custom_item_code_etims(item)
+    frappe.db.set_value(
+        "Item", item.name, "custom_item_code_etims", item.custom_item_code_etims
     )
-    sent_to_slade = item.get("custom_sent_to_slade", False)
-    custom_slade_id = item.get("custom_slade_id", None)
-    selling_price = round(item.get("valuation_rate", 1), 2) or 1
+    frappe.db.commit()
 
-    request_data = {
-        "name": item.get("name"),
-        "document_name": item.get("name"),
-        "description": item.get("description"),
-        "can_be_sold": True if item.get("is_sales_item") == 1 else False,
-        "can_be_purchased": True if item.get("is_purchase_item") == 1 else False,
+def build_item_payload(item, settings_name: str) -> dict:
+    """Construct the payload for item registration"""
+    selling_price = round(item.get("valuation_rate", 1), 2) or 1
+    purchasing_price = round(item.get("last_purchase_rate", 1), 2)
+    tax = get_slade360_id(
+        TAXATION_TYPE_DOCTYPE_NAME, 
+        item.get("custom_taxation_type"), 
+        settings_name
+    )
+    id = next((row.slade360_id for row in item.etims_setup_mapping if row.etims_setup == settings_name), None) \
+     or (item.custom_slade_id if item.custom_slade_id else None)
+
+    payload = {
+        "name": item.name,
+        "document_name": item.name,
+        "description": item.description,
+        "can_be_sold": bool(item.is_sales_item),
+        "can_be_purchased": bool(item.is_purchase_item),
         "company_name": frappe.defaults.get_user_default("Company"),
-        "code": item.get("item_code"),
-        "scu_item_code": item.get("custom_item_code_etims"),
-        "scu_item_classification": get_link_value(
+        "code": item.item_code,
+        "scu_item_code": item.custom_item_code_etims,
+        "scu_item_classification": get_slade360_id(
             ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
-            "itemclscd",
-            item.get("custom_item_classification"),
-            "slade_id",
+            item.custom_item_classification,
+            settings_name,
         ),
-        "product_type": item.get("custom_product_type"),
-        "item_type": item.get("custom_item_type"),
-        "preferred_name": item.get("item_name"),
-        "country_of_origin": item.get("custom_etims_country_of_origin_code"),
-        "packaging_unit": get_link_value(
-            PACKAGING_UNIT_DOCTYPE_NAME,
-            "code",
-            item.get("custom_packaging_unit"),
-            "slade_id",
-        ),
-        "quantity_unit": get_link_value(
-            UNIT_OF_QUANTITY_DOCTYPE_NAME,
-            "code",
-            item.get("custom_unit_of_quantity"),
-            "slade_id",
-        ),
-        "sale_taxes": [tax],
+        "product_type": item.custom_product_type,
+        "item_type": item.custom_item_type,
+        "preferred_name": item.item_name,
+        "country_of_origin": item.custom_etims_country_of_origin_code,
         "selling_price": selling_price,
-        "purchasing_price": round(item.get("last_purchase_rate", 1), 2),
+        "packaging_unit": get_slade360_id(
+            PACKAGING_UNIT_DOCTYPE_NAME,
+            item.custom_packaging_unit,
+            settings_name,
+        ),
+        "quantity_unit": get_slade360_id(
+            UNIT_OF_QUANTITY_DOCTYPE_NAME,
+            item.custom_unit_of_quantity,
+            settings_name,
+        ),
+        "purchasing_price": purchasing_price,
         "categories": [],
         "purchase_taxes": [],
+        "sale_taxes": [tax] if tax else [],
     }
 
-    if sent_to_slade and custom_slade_id:
-        request_data["id"] = custom_slade_id
-        process_request(
-            request_data,
-            "ItemsSearchReq",
-            item_registration_on_success,
-            request_method="PATCH",
-            doctype="Item",
-            settings_name=settings_name,
-        )
-    else:
-        process_request(
-            request_data,
-            "ItemsSearchReq",
-            item_registration_on_success,
-            request_method="POST",
-            doctype="Item",
-            settings_name=settings_name,
-        )
+    if id:
+        payload["id"] = item.custom_slade_id
+
+    return payload
 
 
 @frappe.whitelist()
