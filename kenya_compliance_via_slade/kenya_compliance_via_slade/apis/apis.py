@@ -229,9 +229,9 @@ def build_item_payload(item, settings_name: str) -> dict:
 
 
 @frappe.whitelist()
-def fetch_item_details(request_data: str) -> None:
+def fetch_item_details(request_data: str, settings_name: str) -> None:
     process_request(
-        request_data, "ItemSearchReq", item_search_on_success, doctype="Item"
+        request_data, "ItemSearchReq", item_search_on_success, doctype="Item", settings_name=settings_name
     )
 
 

@@ -988,14 +988,14 @@ def search_branch_request_on_success(response: dict, **kwargs) -> None:
             doc.save(ignore_permissions=True)
 
 
-def item_search_on_success(response: dict, **kwargs) -> None:
+def item_search_on_success(response: dict, settings_name : str, **kwargs) -> None:
     items = response.get("results", []) or [response]
 
     for item_data in items:
         try:
             slade_id = item_data.get("id")
             existing_item = frappe.db.get_value(
-                "Item", {"custom_slade_id": slade_id}, "name", order_by="creation desc"
+                SLADE_ID_MAPPING_DOCTYPE_NAME, {"slade360_id": slade_id, "etims_setup": settings_name}, "parent", order_by="creation desc"
             )
             country_of_origin_code = item_data.get("country_of_origin", "KE")[
                 :2
@@ -1003,18 +1003,12 @@ def item_search_on_success(response: dict, **kwargs) -> None:
             country_of_origin = get_link_value(
                 COUNTRIES_DOCTYPE_NAME, "code", country_of_origin_code
             )
-            item_code = item_data.get("code")
 
             if existing_item:
                 item_doc = frappe.get_doc("Item", existing_item)
-                item_code = item_doc.item_code
 
             request_data = {
-                "item_name": item_data.get("name"),
-                "item_code": item_code,
                 "custom_item_registered": 1 if item_data.get("sent_to_etims") else 0,
-                "custom_slade_id": item_data.get("id"),
-                "custom_sent_to_slade": 1,
                 "description": item_data.get("description"),
                 "is_sales_item": item_data.get("can_be_sold", False),
                 "is_purchase_item": item_data.get("can_be_purchased", False),

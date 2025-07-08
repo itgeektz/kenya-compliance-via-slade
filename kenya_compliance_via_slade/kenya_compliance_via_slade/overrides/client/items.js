@@ -151,6 +151,14 @@ function executeItemAction(frm, actionType, settingName) {
   let method;
   let args = {};
 
+  let sladeId = "";
+  if (frm.doc.etims_setup_mapping) {
+    const mappingRow = frm.doc.etims_setup_mapping.find(
+      (row) => row.etims_setup === settingName
+    );
+    sladeId = mappingRow ? mappingRow.slade360_id : "";
+  }
+
   switch (actionType) {
     case "register_item":
     case "update_item":
@@ -166,10 +174,10 @@ function executeItemAction(frm, actionType, settingName) {
       method =
         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.fetch_item_details";
       args = {
+        settings_name: settingName,
         request_data: {
           document_name: frm.doc.name,
-          id: frm.doc.custom_slade_id,
-          settings_name: settingName,
+          id: sladeId,
         },
       };
       break;
