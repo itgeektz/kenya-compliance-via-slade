@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 from io import BytesIO
 from urllib.parse import urlencode
+from typing import Any
 
 import aiohttp
 import qrcode
@@ -1262,3 +1263,48 @@ def get_slade360_id(doctype: str, name: str, setting: str) -> str:
     )
     
     return slade_id
+
+
+
+@frappe.whitelist()
+def get_etims_action_data(doctype: str, docname: str) -> dict[str, Any]:
+    try:
+        doc = frappe.get_doc(doctype, docname)
+    except frappe.DoesNotExistError:
+        frappe.throw(f"{doctype} '{docname}' does not exist.")
+
+    active_settings = get_active_settings()
+
+    if not active_settings:
+        return {
+            "settings": [],
+            "has_mappings": False,
+            "registered_mappings": [],
+            "unregistered_settings": []
+        }
+
+    active_setting_names = [s["name"] for s in active_settings]
+
+    registered_mappings = []
+    registered_setup_names = set()
+
+    for row in getattr(doc, "etims_setup_mapping", []):
+        if row.etims_setup in active_setting_names:
+            registered_mappings.append({
+                "etims_setup": row.etims_setup,
+                "slade360_id": row.slade360_id,
+                "name": row.name
+            })
+            registered_setup_names.add(row.etims_setup)
+
+    unregistered_settings = [
+        s for s in active_settings if s["name"] not in registered_setup_names
+    ]
+
+    return {
+        "settings": active_settings,
+        "has_mappings": bool(registered_mappings),
+        "registered_mappings": registered_mappings,
+        "unregistered_settings": unregistered_settings
+    }
+

@@ -17,6 +17,7 @@ from ..doctype.doctype_names_mapping import (
     REGISTERED_IMPORTED_ITEM_DOCTYPE_NAME,
     REGISTERED_PURCHASES_DOCTYPE_NAME,
     REGISTERED_PURCHASES_DOCTYPE_NAME_ITEM,
+    SLADE_ID_MAPPING_DOCTYPE_NAME,
     TAXATION_TYPE_DOCTYPE_NAME,
     UNIT_OF_QUANTITY_DOCTYPE_NAME,
     USER_DOCTYPE_NAME,
@@ -69,16 +70,43 @@ def customer_search_on_success(response: dict, document_name: str, **kwargs) -> 
     )
 
 
-def item_registration_on_success(response: dict, document_name: str, **kwargs) -> None:
-    updates = {
-        "custom_item_registered": 1 if response.get("sent_to_etims") else 0,
-        "custom_slade_id": response.get("id"),
-        "custom_sent_to_slade": 1,
-    }
-    frappe.db.set_value("Item", document_name, updates)
+def update_document_mapping(doc_type: str, document_name: str, settings_name: str, slade_id: str) -> None:
+    """Common function to update document mapping with Slade IDs
+    
+    Args:
+        doc_type (str): The document type to update
+        document_name (str): The name of the document to update
+        settings_name (str): The name of the eTims settings
+        slade_id (str): The Slade ID to set
+    """
+    doc = frappe.get_doc(doc_type, document_name)
+    found = False
+    for row in doc.get("etims_setup_mapping", []):
+        if row.etims_setup == settings_name:
+            frappe.db.set_value(
+                SLADE_ID_MAPPING_DOCTYPE_NAME,
+                row.name,
+                {
+                    "slade360_id": slade_id,
+                },
+            )
+            found = True
+            break
 
-    item_doc = frappe.get_doc("Item", document_name)
-    if item_doc.is_stock_item:
+    if not found:
+        doc.append("etims_setup_mapping", {
+            "etims_setup": settings_name,
+            "slade360_id": slade_id,
+        })
+        doc.save(ignore_permissions=True)
+        
+    return doc
+
+
+def item_registration_on_success(response: dict, document_name: str, settings_name: str, **kwargs) -> None:
+    item = update_document_mapping("Item", document_name, settings_name, response.get("id"))
+    
+    if item.is_stock_item:
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.submit_inventory",
             name=document_name,
@@ -87,14 +115,10 @@ def item_registration_on_success(response: dict, document_name: str, **kwargs) -
 
 
 def customer_branch_details_submission_on_success(
-    response: dict, document_name: str, **kwargs
+    response: dict, document_name: str, settings_name: str, **kwargs
 ) -> None:
     doctype = "Supplier" if response.get("is_supplier") else "Customer"
-    frappe.db.set_value(
-        doctype,
-        document_name,
-        {"custom_details_submitted_successfully": 1, "slade_id": response.get("id")},
-    )
+    update_document_mapping(doctype, document_name, settings_name, response.get("id"))
 
 
 def user_details_submission_on_success(
@@ -1056,16 +1080,11 @@ def customers_search_on_success(response: dict, **kwargs) -> None:
     for customer in data:
         existing_customer = frappe.db.exists("Customer", {"slade_id": customer["id"]})
         data = {
-            "slade_id": customer["id"],
-            "customer_name": customer["partner_name"],
             "email_id": customer["email_address"],
             "mobile_no": customer["phone_number"],
             "tax_id": customer.get("customer_tax_pin"),
-            "organisation": customer.get("organisation"),
             "currency": customer.get("currency"),
-            "primary_address": customer.get("physical_address"),
             "active": 1 if customer.get("active") else 0,
-            "custom_details_submitted_successfully": 1,
             "customer_type": (
                 customer.get("customer_type").title()
                 if customer.get("customer_type")

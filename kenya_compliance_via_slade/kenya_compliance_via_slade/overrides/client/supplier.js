@@ -3,92 +3,196 @@ const settingsDoctypeName = "Navari KRA eTims Settings";
 
 frappe.ui.form.on(doctype, {
   refresh: async function (frm) {
-    const companyName = frappe.boot.sysdefaults.company;
-    const { message: activeSetting } = await frappe.call({
+    const { message: data } = await frappe.call({
       method:
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_settings",
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_etims_action_data",
       args: {
-        doctype: settingsDoctypeName,
+        doctype: frm.doctype,
+        docname: frm.doc.name,
       },
     });
 
-    if (activeSetting?.length > 0) {
-      if (!frm.is_new() && frm.doc.tax_id) {
-        frm.add_custom_button(
-          __("Perform Supplier Search"),
-          function () {
-            frappe.call({
-              method:
-                "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.perform_customer_search",
-              args: {
-                request_data: {
-                  doc_name: frm.doc.name,
-                  customer_pin: frm.doc.tax_id,
-                  company_name: companyName,
-                },
-              },
-              callback: (response) => {
-                frappe.msgprint("Search queued. Please check in later.");
-              },
-              error: (r) => {
-                // Error Handling is Defered to the Server
-              },
-            });
-          },
-          __("eTims Actions")
-        );
+    const allSettings = data?.settings || [];
+    const registeredMappings = data?.registered_mappings || [];
+    const unregisteredSettings = data?.unregistered_settings || [];
 
-        if (!frm.doc.custom_details_submitted_successfully) {
-          frm.add_custom_button(
-            __("Send Supplier Details"),
-            function () {
-              frappe.call({
-                method:
-                  "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.send_branch_customer_details",
-                args: {
-                  name: frm.doc.name,
-                  is_customer: false,
-                },
-                callback: (response) => {},
-                error: (r) => {
-                  // Error Handling is Defered to the Server
-                },
-              });
-            },
-            __("eTims Actions")
-          );
-        }
-      }
-    }
-  },
-  customer_group: function (frm) {
-    frappe.db.get_value(
-      "Customer Group",
-      {
-        name: frm.doc.customer_group,
-      },
-      ["custom_insurance_applicable"],
-      (response) => {
-        const customerGroupInsuranceApplicable =
-          response.custom_insurance_applicable;
+    if (!allSettings.length || frm.is_new()) return;
 
-        if (customerGroupInsuranceApplicable) {
-          frappe.msgprint(
-            `The Customer Group ${frm.doc.customer_group} has Insurance Applicable on. Please fill the relevant insurance fields under Tax tab`
-          );
-          frm.toggle_reqd("custom_insurance_code", true);
-          frm.toggle_reqd("custom_insurance_name", true);
-          frm.toggle_reqd("custom_premium_rate", true);
-
-          frm.set_value("custom_insurance_applicable", 1);
-        } else {
-          frm.toggle_reqd("custom_insurance_code", false);
-          frm.toggle_reqd("custom_insurance_name", false);
-          frm.toggle_reqd("custom_premium_rate", false);
-
-          frm.set_value("custom_insurance_applicable", 0);
-        }
-      }
-    );
+    // Add action buttons based on registration status
+    addSupplierActionButtons(frm, {
+      allSettings,
+      registeredMappings,
+      unregisteredSettings,
+    });
   },
 });
+
+function addSupplierActionButtons(frm, data) {
+  const { allSettings, registeredMappings, unregisteredSettings } = data;
+
+  if (frm.doc.tax_id && registeredMappings.length > 0) {
+    frm.add_custom_button(
+      __("Perform Supplier Search"),
+      () =>
+        showCompanySelectionModal(
+          frm,
+          "search_supplier",
+          registeredMappings.map((r) => ({
+            name: r.etims_setup,
+            company: getCompanyName(allSettings, r.etims_setup),
+          }))
+        ),
+      __("eTims Actions")
+    );
+  }
+
+  if (unregisteredSettings.length > 0) {
+    frm.add_custom_button(
+      __("Send Supplier Details"),
+      () =>
+        showCompanySelectionModal(frm, "send_supplier", unregisteredSettings),
+      __("eTims Actions")
+    );
+  }
+
+  if (registeredMappings.length > 0) {
+    frm.add_custom_button(
+      __("Update Supplier Details"),
+      () =>
+        showCompanySelectionModal(
+          frm,
+          "update_supplier",
+          registeredMappings.map((r) => ({
+            name: r.etims_setup,
+            company: getCompanyName(allSettings, r.etims_setup),
+          }))
+        ),
+      __("eTims Actions")
+    );
+  }
+
+  // if (registeredMappings.length > 0) {
+  //   frm.add_custom_button(
+  //     __("Get Supplier Details"),
+  //     () =>
+  //       showCompanySelectionModal(
+  //         frm,
+  //         "get_supplier_details",
+  //         registeredMappings.map((r) => ({
+  //           name: r.etims_setup,
+  //           company: getCompanyName(allSettings, r.etims_setup),
+  //         }))
+  //       ),
+  //     __("eTims Actions")
+  //   );
+  // }
+}
+
+function getCompanyName(allSettings, settingName) {
+  const match = allSettings.find((s) => s.name === settingName);
+  return match ? match.company : "Unknown";
+}
+
+function showCompanySelectionModal(frm, actionType, availableSettings) {
+  if (!availableSettings.length) {
+    frappe.msgprint(__("No available eTims settings for this action."));
+    return;
+  }
+
+  const options = availableSettings.map((setting) => ({
+    label: `${setting.company} (${setting.name})`,
+    value: setting.name,
+  }));
+
+  const dialog = new frappe.ui.Dialog({
+    title: __("Select Company Setup"),
+    fields: [
+      {
+        label: __("Select Company Setup"),
+        fieldname: "selected_settings_name",
+        fieldtype: "Select",
+        options: options,
+        reqd: 1,
+        default: options[0]?.value || null,
+      },
+    ],
+    primary_action_label: __("Proceed"),
+    primary_action: (data) => {
+      dialog.hide();
+      executeSupplierAction(frm, actionType, data.selected_settings_name);
+    },
+  });
+
+  dialog.show();
+}
+
+function executeSupplierAction(frm, actionType, settingsName) {
+  let method, args, successMessage;
+
+  let sladeId = "";
+  if (frm.doc.etims_setup_mapping) {
+    const mappingRow = frm.doc.etims_setup_mapping.find(
+      (row) => row.etims_setup === settingsName
+    );
+    sladeId = mappingRow ? mappingRow.slade360_id : "";
+  }
+
+  switch (actionType) {
+    case "search_supplier":
+      method =
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.perform_customer_search";
+      args = {
+        settings_name: settingsName,
+        request_data: {
+          doc_name: frm.doc.name,
+          customer_pin: frm.doc.tax_id,
+          is_customer: false,
+        },
+      };
+      successMessage = "Supplier search queued. Please check in later.";
+      break;
+
+    case "send_supplier":
+    case "update_supplier":
+      method =
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.send_branch_customer_details";
+      args = {
+        name: frm.doc.name,
+        settings_name: settingsName,
+        is_customer: false,
+      };
+      successMessage =
+        actionType === "send_supplier"
+          ? "Supplier details queued for registration."
+          : "Supplier details queued for update.";
+      break;
+
+    case "get_supplier_details":
+      method =
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_customer_details";
+      args = {
+        settings_name: settingsName,
+        request_data: {
+          doc_name: frm.doc.name,
+          id: sladeId,
+          is_customer: false,
+        },
+      };
+      successMessage = "Supplier details fetch queued.";
+      break;
+
+    default:
+      frappe.msgprint(__("Unknown action type."));
+      return;
+  }
+
+  frappe.call({
+    method: method,
+    args: args,
+    callback: () => frappe.msgprint(__(successMessage)),
+    error: (err) => {
+      console.error(err);
+      frappe.msgprint(__("An error occurred during the request."));
+    },
+  });
+}

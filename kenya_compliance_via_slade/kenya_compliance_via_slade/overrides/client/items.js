@@ -1,96 +1,122 @@
 const itemDoctypName = "Item";
-const settingsDoctypeName = "Navari KRA eTims Settings";
 
 frappe.ui.form.on(itemDoctypName, {
   refresh: async function (frm) {
-    const { message: activeSetting } = await frappe.call({
+    const { message: data } = await frappe.call({
       method:
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_settings",
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_etims_action_data",
       args: {
-        doctype: settingsDoctypeName,
+        doctype: frm.doctype,
+        docname: frm.doc.name,
       },
     });
 
-    if (activeSetting?.length > 0) {
-      if (frm.doc.custom_item_registered) {
-        frm.toggle_enable("custom_item_classification", false);
-        frm.toggle_enable("custom_etims_country_of_origin", false);
-        frm.toggle_enable("custom_taxation_type", false);
-        frm.toggle_enable("custom_packaging_unit", false);
-        frm.toggle_enable("custom_unit_of_quantity", false);
-        frm.toggle_enable("custom_product_type", false);
+    const allSettings = data?.settings || [];
+    const registeredMappings = data?.registered_mappings || [];
+    const unregisteredSettings = data?.unregistered_settings || [];
+
+    if (!allSettings.length) return;
+
+    if (frm.doc.custom_imported_item_submitted) {
+      frm.toggle_enable("custom_referenced_imported_item", false);
+      frm.toggle_enable("custom_imported_item_status", false);
+    }
+
+    if (!frm.is_new()) {
+      const canRegister =
+        frm.doc.custom_item_classification &&
+        frm.doc.custom_taxation_type &&
+        unregisteredSettings.length;
+
+      if (canRegister) {
+        frm.add_custom_button(
+          __("Register Item"),
+          function () {
+            showCompanySelectionModal(
+              frm,
+              "register_item",
+              unregisteredSettings
+            );
+          },
+          __("eTims Actions")
+        );
       }
 
-      if (frm.doc.custom_imported_item_submitted) {
-        frm.toggle_enable("custom_referenced_imported_item", false);
-        frm.toggle_enable("custom_imported_item_status", false);
+      if (registeredMappings.length) {
+        frm.add_custom_button(
+          __("Fetch Item Details"),
+          function () {
+            showCompanySelectionModal(
+              frm,
+              "fetch_item_details",
+              registeredMappings.map((r) => ({
+                name: r.etims_setup,
+                company: getCompanyName(allSettings, r.etims_setup),
+              }))
+            );
+          },
+          __("eTims Actions")
+        );
+
+        frm.add_custom_button(
+          __("Update Item"),
+          function () {
+            showCompanySelectionModal(
+              frm,
+              "update_item",
+              registeredMappings.map((r) => ({
+                name: r.etims_setup,
+                company: getCompanyName(allSettings, r.etims_setup),
+              }))
+            );
+          },
+          __("eTims Actions")
+        );
       }
 
-      if (!frm.is_new()) {
-        if (
-          !frm.doc.custom_sent_to_slade &&
-          frm.doc.custom_item_classification &&
-          frm.doc.custom_taxation_type
-        ) {
-          frm.add_custom_button(
-            __("Register Item"),
-            function () {
-              showCompanySelectionModal(frm, "register_item", activeSetting);
-            },
-            __("eTims Actions")
-          );
-        } else if (frm.doc.custom_sent_to_slade && frm.doc.custom_slade_id) {
-          frm.add_custom_button(
-            __("Fetch Item Details"),
-            function () {
-              showCompanySelectionModal(
-                frm,
-                "fetch_item_details",
-                activeSetting
-              );
-            },
-            __("eTims Actions")
-          );
-
-          frm.add_custom_button(
-            __("Update Item"),
-            function () {
-              showCompanySelectionModal(frm, "update_item", activeSetting);
-            },
-            __("eTims Actions")
-          );
-        }
-
-        if (frm.doc.is_stock_item) {
-          frm.add_custom_button(
-            __("Submit Item Inventory"),
-            function () {
-              showCompanySelectionModal(frm, "submit_inventory", activeSetting);
-            },
-            __("eTims Actions")
-          );
-        }
+      if (frm.doc.is_stock_item && registeredMappings.length) {
+        frm.add_custom_button(
+          __("Submit Item Inventory"),
+          function () {
+            showCompanySelectionModal(
+              frm,
+              "submit_inventory",
+              registeredMappings.map((r) => ({
+                name: r.etims_setup,
+                company: getCompanyName(allSettings, r.etims_setup),
+              }))
+            );
+          },
+          __("eTims Actions")
+        );
       }
     }
   },
+
   custom_product_type_name: function (frm) {
-    if (frm.doc.custom_product_type_name === "Service") {
-      frm.set_value("is_stock_item", 0);
-    } else {
-      frm.set_value("is_stock_item", 1);
-    }
+    frm.set_value(
+      "is_stock_item",
+      frm.doc.custom_product_type_name !== "Service" ? 1 : 0
+    );
   },
 });
 
-async function showCompanySelectionModal(frm, actionType, activeSettings) {
-  if (!activeSettings || activeSettings.length === 0) {
+function getCompanyName(allSettings, settingName) {
+  const match = allSettings.find((s) => s.name === settingName);
+  return match ? match.company : "Unknown";
+}
+
+async function showCompanySelectionModal(frm, actionType, availableSettings) {
+  if (!availableSettings.length) {
     frappe.msgprint(
-      __("No active eTims settings found. Please configure settings first.")
+      __(
+        "No available eTims settings for this action. Please check configuration."
+      )
     );
     return;
   }
 
-  const companyOptions = activeSettings.map((setting) => ({
+  const options = availableSettings.map((setting) => ({
     label: `${setting.company} (${setting.name})`,
     value: setting.name,
     company_name: setting.company,
@@ -101,14 +127,14 @@ async function showCompanySelectionModal(frm, actionType, activeSettings) {
       label: __("Select Company Setup"),
       fieldname: "selected_settings_name",
       fieldtype: "Select",
-      options: companyOptions,
+      options: options,
       reqd: 1,
-      default: companyOptions[0] ? companyOptions[0].value : null,
+      default: options[0]?.value || null,
     },
   ];
 
-  let dialog = new frappe.ui.Dialog({
-    title: __("Select Company Setup "),
+  const dialog = new frappe.ui.Dialog({
+    title: __("Select Company Setup"),
     fields: fields,
     primary_action_label: __("Proceed"),
     primary_action: (data) => {
@@ -135,6 +161,7 @@ function executeItemAction(frm, actionType, settingName) {
         settings_name: settingName,
       };
       break;
+
     case "fetch_item_details":
       method =
         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.fetch_item_details";
@@ -146,6 +173,7 @@ function executeItemAction(frm, actionType, settingName) {
         },
       };
       break;
+
     case "submit_inventory":
       method =
         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.submit_inventory";
@@ -154,6 +182,7 @@ function executeItemAction(frm, actionType, settingName) {
         settings_name: settingName,
       };
       break;
+
     default:
       frappe.msgprint(__("Unknown action type."));
       return;
@@ -162,18 +191,14 @@ function executeItemAction(frm, actionType, settingName) {
   frappe.call({
     method: method,
     args: args,
-    callback: (response) => {
-      let message = "";
-      if (actionType === "register_item") {
-        message = "Item Registration Queued. Please check in later.";
-      } else if (actionType === "fetch_item_details") {
-        message = "Item Fetch Request Queued. Please check in later.";
-      } else if (actionType === "update_item") {
-        message = "Item Update Queued. Please check in later.";
-      } else if (actionType === "submit_inventory") {
-        message = "Inventory submission queued.";
-      }
-      frappe.msgprint(message);
+    callback: () => {
+      const messages = {
+        register_item: "Item Registration Queued. Please check in later.",
+        fetch_item_details: "Item Fetch Request Queued. Please check in later.",
+        update_item: "Item Update Queued. Please check in later.",
+        submit_inventory: "Inventory submission queued.",
+      };
+      frappe.msgprint(messages[actionType] || "Request queued.");
     },
     error: (error) => {
       frappe.msgprint(__("An error occurred during the request."));
