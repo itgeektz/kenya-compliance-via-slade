@@ -294,13 +294,12 @@ def submit_all_suppliers(settings_name: str = None) -> None:
             )
             .select(Supplier.name)
             .where(
-                (Supplier.custom_details_submitted_successfully == 0) & 
                 (Mapping.name.isnull())
             )
         )
         
         suppliers = query.run(as_dict=True)
-        
+                
         for supplier in suppliers:
             frappe.enqueue(
                 send_branch_customer_details, 
@@ -357,8 +356,7 @@ def submit_all_customers(settings_name: str = None) -> None:
                 (Mapping.etims_setup == setting.name)
             )
             .select(Customer.name)
-            .where(
-                (Customer.custom_details_submitted_successfully == 0) & 
+            .where( 
                 (Mapping.name.isnull())
             )
         )

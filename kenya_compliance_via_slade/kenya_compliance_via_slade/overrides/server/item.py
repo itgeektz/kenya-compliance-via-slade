@@ -4,19 +4,22 @@ from frappe import _
 from frappe.model.document import Document
 
 from ...apis.apis import perform_item_registration
-from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
+from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME, SLADE_ID_MAPPING_DOCTYPE_NAME
 from ...utils import generate_custom_item_code_etims, get_active_settings
 
 
 def on_update(doc: Document, method: str = None) -> None:
     """Item doctype before insertion hook"""
-
-    if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
-        return
-
-    if not doc.custom_sent_to_slade:
-        settings = get_active_settings()
-        for setting in settings:
+    active_settings = get_active_settings()
+    
+    for setting in active_settings:
+        setup_mapping = frappe.db.get_value(
+            SLADE_ID_MAPPING_DOCTYPE_NAME,
+            {"parent": doc.name, "etims_setup": setting.name},
+            "name"
+        )
+        
+        if not setup_mapping:
             perform_item_registration(doc.name, setting.name)
 
 
