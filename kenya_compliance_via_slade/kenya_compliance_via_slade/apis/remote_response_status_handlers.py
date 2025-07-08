@@ -1082,14 +1082,37 @@ def item_search_on_success(response: dict, settings_name : str, **kwargs) -> Non
                 item_doc.flags.ignore_mandatory = True
                 item_doc.save(ignore_permissions=True)
             else:
-                request_data["item_group"] = "All Item Groups"
-                new_item = frappe.get_doc({"doctype": "Item", **request_data})
-                new_item.flags.ignore_mandatory = True
-                new_item.insert(
+                request_data["item_group"] = frappe.db.get_value("Item Group", {"is_group": 1}, "name") or "All Item Groups"
+                item_doc = frappe.get_doc({"doctype": "Item", **request_data})
+                item_doc.flags.ignore_mandatory = True
+                item_doc.insert(
                     ignore_permissions=True,
                     ignore_mandatory=True,
                     ignore_if_duplicate=True,
                 )
+                
+            existing_mapping = frappe.db.exists(SLADE_ID_MAPPING_DOCTYPE_NAME, {
+                "parent": item_doc.name,
+                "parenttype": "Item",
+                "parentfield": "etims_setup_mapping",
+                "etims_setup": settings_name
+            })
+            
+            if existing_mapping:
+                frappe.db.set_value(
+                    SLADE_ID_MAPPING_DOCTYPE_NAME,
+                    existing_mapping,
+                    {"slade360_id": slade_id}
+                )
+            else:
+                frappe.get_doc({
+                    "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
+                    "parent": item_doc.name,
+                    "parenttype": "Item",
+                    "parentfield": "etims_setup_mapping",
+                    "slade360_id": slade_id,
+                    "etims_setup": settings_name,
+                }).insert(ignore_permissions=True)
 
         except Exception as e:
             frappe.log_error(

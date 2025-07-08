@@ -29,8 +29,7 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
       allSettings,
       (settings_name) => {
         return {
-          method:
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.bulk_register_item",
+          method: "bulk_register_items",
           args: {
             docs_list: itemsToRegister,
             settings_name: settings_name,
@@ -56,7 +55,7 @@ function addItemListActions(listview, allSettings) {
       label: __("Get Registered Items"),
       getCallArgs: (settings_name) => ({
         method: "perform_item_search",
-        args: { settings_name: settings_name },
+        args: { settings_name: settings_name, request_data: {} },
         success_msg: "Registered items search queued",
       }),
     },
