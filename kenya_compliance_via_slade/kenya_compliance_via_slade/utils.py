@@ -9,7 +9,8 @@ from datetime import datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 from io import BytesIO
 from urllib.parse import urlencode
-from typing import Any
+from typing import Union, List, Dict, Any
+
 
 import aiohttp
 import qrcode
@@ -1248,6 +1249,7 @@ def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME) -> list[dict]:
         frappe.log_error(frappe.get_traceback(), _("Failed to get active settings"))
         frappe.throw(_("An error occurred while fetching settings"))
 
+
 def get_slade360_id(doctype: str, name: str, setting: str) -> str:        
     if not frappe.db.exists(doctype, name):
         frappe.throw(_("Document {0} with name {1} does not exist.").format(doctype, name))
@@ -1265,15 +1267,46 @@ def get_slade360_id(doctype: str, name: str, setting: str) -> str:
     return slade_id
 
 
+def get_parent_by_slade360_id(doctype: str, slade360_id: str, setting: str) -> str:
+    """Returns the parent document name for a given Slade360 ID.
+    
+    Args:
+        doctype (str): The parent doctype
+        slade360_id (str): The Slade360 ID to search for
+        setting (str): The eTims setting name
+        
+    Returns:
+        str: The parent document name if found, None otherwise
+    """
+    parent_name = frappe.db.get_value(
+        SLADE_ID_MAPPING_DOCTYPE_NAME,
+        filters={
+            "etims_setup": setting,
+            "parenttype": doctype,
+            "slade360_id": slade360_id
+        },
+        fieldname="parent"
+    )
+    
+    return parent_name
+
+
 
 @frappe.whitelist()
-def get_etims_action_data(doctype: str, docname: str) -> dict[str, Any]:
+def get_etims_action_data(doctype: str, docname: str = None) -> dict[str, Any]:
+    active_settings = get_active_settings()
+    if not docname:
+        return {
+            "settings": active_settings,
+            "has_mappings": False,
+            "registered_mappings": [],
+            "unregistered_settings": []
+        }
     try:
         doc = frappe.get_doc(doctype, docname)
     except frappe.DoesNotExistError:
         frappe.throw(f"{doctype} '{docname}' does not exist.")
 
-    active_settings = get_active_settings()
 
     if not active_settings:
         return {
@@ -1308,3 +1341,45 @@ def get_etims_action_data(doctype: str, docname: str) -> dict[str, Any]:
         "unregistered_settings": unregistered_settings
     }
 
+
+def parse_response_data(
+    response: Union[str, bytes, dict, list], 
+    expected_type: type = list
+) -> Union[List[Any], Dict[str, Any], Any]:
+    """Parse and convert response data to expected type using standard json.
+    
+    Args:
+        response: Input data (JSON string, bytes, or Python object)
+        expected_type: Desired output type (list, dict, or other)
+        
+    Returns:
+        Data converted to expected type
+        
+    Raises:
+        ValueError: If JSON parsing fails
+        TypeError: If type conversion fails
+    """
+    if isinstance(response, (str, bytes)):
+        try:
+            response = json.loads(response)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {str(e)}") from e
+    
+    if response is None:
+        return expected_type()
+    
+    try:
+        if expected_type is list:
+            if isinstance(response, dict):
+                return response.get('results', [response])
+            return response if isinstance(response, list) else [response]
+            
+        elif expected_type is dict:
+            if isinstance(response, list):
+                return response[0] if response else {}
+            return response if isinstance(response, dict) else {'data': response}
+            
+        return expected_type(response) if response else expected_type()
+        
+    except (TypeError, AttributeError) as e:
+        raise TypeError(f"Cannot convert to {expected_type}: {str(e)}") from e

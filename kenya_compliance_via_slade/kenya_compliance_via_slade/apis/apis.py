@@ -456,12 +456,13 @@ def perform_item_search(request_data: str) -> None:
 
 
 @frappe.whitelist()
-def perform_import_item_search(request_data: str) -> None:
+def perform_import_item_search(request_data: str, settings_name: str) -> None:
     process_request(
         request_data,
         "ImportItemSearchReq",
         imported_items_search_on_success,
         doctype="Item",
+        settings_name=settings_name,
     )
 
 
@@ -477,7 +478,7 @@ def perform_import_item_search_all_branches() -> None:
             {"company_name": credential.company, "branch_code": credential.bhfid}
         )
 
-        perform_import_item_search(request_data)
+        perform_import_item_search(request_data, settings_name=credential.name)
 
 
 @frappe.whitelist()

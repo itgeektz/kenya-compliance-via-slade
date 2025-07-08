@@ -23,7 +23,7 @@ from ..doctype.doctype_names_mapping import (
     USER_DOCTYPE_NAME,
 )
 from ..handlers import handle_slade_errors
-from ..utils import get_link_value, get_or_create_link
+from ..utils import get_link_value, get_or_create_link, get_parent_by_slade360_id, parse_response_data
 
 
 def on_slade_error(
@@ -813,7 +813,7 @@ def create_notice_if_new(notice: dict) -> None:
         )
 
 
-def imported_items_search_on_success(response: dict, **kwargs) -> None:
+def imported_items_search_on_success(response: dict,  settings_name: str, **kwargs) -> None:
     items = response.get("results", [])
     batch_size = 20
     counter = 0
@@ -896,29 +896,56 @@ def imported_items_search_on_success(response: dict, **kwargs) -> None:
                 )
 
             if item.get("product"):
-                product_name = get_link_value(
-                    "Item", "custom_slade_id", item.get("product")
-                )
-                product = frappe.get_doc("Item", product_name)
-                product.custom_referenced_imported_item = item_doc.name
-                product.custom_imported_item_task_code = item_doc.task_code
-                product.custom_hs_code = item_doc.hs_code
-                product.custom_branch = item_doc.branch
-                product.custom_organisation = item_doc.organisation
-                product.custom_imported_item_submitted = item_doc.sent_to_etims
-                product.custom_imported_item_status = item_doc.imported_item_status
-                product.custom_imported_item_status_code = (
-                    item_doc.imported_item_status_code
-                )
-                product.flags.ignore_mandatory = True
-                product.save(ignore_permissions=True)
+                product_name = None
+                if frappe.db.exists(SLADE_ID_MAPPING_DOCTYPE_NAME, {"slade360_id": item.get("product"), "etims_setup": settings_name}):
+                    product_name = frappe.db.get_value(
+                        SLADE_ID_MAPPING_DOCTYPE_NAME, 
+                        {"slade360_id": item.get("product"), "etims_setup": settings_name}, 
+                        "parent", 
+                        order_by="creation desc"
+                    )
+                    product = frappe.get_doc("Item", product_name)
+                else:
+                    item_name = item.get("item_name") or item.get("product_name", "Imported Item")
+                    product_code = item.get("product_code") or item_name
+                    
+                    if product_code and frappe.db.exists("Item", {"item_code": product_code}):
+                        product = frappe.get_doc("Item", {"item_code": product_code})
+                    else:
+                        product = frappe.new_doc("Item")
+                        product.item_name = item_name
+                        product.item_code = product_code or item_name
+                        default_item_group = frappe.get_all("Item Group", filters={"is_group": 1}, fields=["name"], limit=1)
+                        product.item_group = default_item_group[0].name if default_item_group else "All Item Groups"
+                        product.flags.ignore_mandatory = True
+                        product.insert(ignore_permissions=True)
+                    frappe.get_doc(
+                        {
+                            "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
+                            "parent": product.name,
+                            "parenttype": "Item",
+                            "parentfield": "etims_setup_mapping",
+                            "slade360_id": item.get("product"),
+                            "etims_setup": settings_name,
+                        }
+                    ).insert(ignore_permissions=True)
+                
+                update_data = {
+                    "custom_referenced_imported_item": item_doc.name,
+                    "custom_imported_item_task_code": item_doc.task_code,
+                    "custom_hs_code": item_doc.hs_code,
+                    "custom_imported_item_submitted": item_doc.sent_to_etims,
+                    "custom_imported_item_status": item_doc.imported_item_status,
+                    "custom_imported_item_status_code": item_doc.imported_item_status_code
+                }
+                frappe.db.set_value("Item", product.name, update_data, update_modified=False)
 
             counter += 1
             if counter % batch_size == 0:
                 frappe.db.commit()
 
         except Exception as e:
-            continue
+            raise e
 
     if counter % batch_size != 0:
         frappe.db.commit()
@@ -989,17 +1016,16 @@ def search_branch_request_on_success(response: dict, **kwargs) -> None:
 
 
 def item_search_on_success(response: dict, settings_name : str, **kwargs) -> None:
-    items = response.get("results", []) or [response]
-
+    items = parse_response_data(response, list)
     for item_data in items:
         try:
             slade_id = item_data.get("id")
             existing_item = frappe.db.get_value(
                 SLADE_ID_MAPPING_DOCTYPE_NAME, {"slade360_id": slade_id, "etims_setup": settings_name}, "parent", order_by="creation desc"
             )
-            country_of_origin_code = item_data.get("country_of_origin", "KE")[
+            country_of_origin_code = item_data.get("country_of_origin")[
                 :2
-            ].upper()
+            ] if item_data.get("country_of_origin") else "ke"
             country_of_origin = get_link_value(
                 COUNTRIES_DOCTYPE_NAME, "code", country_of_origin_code
             )
@@ -1008,39 +1034,47 @@ def item_search_on_success(response: dict, settings_name : str, **kwargs) -> Non
                 item_doc = frappe.get_doc("Item", existing_item)
 
             request_data = {
-                "custom_item_registered": 1 if item_data.get("sent_to_etims") else 0,
-                "description": item_data.get("description"),
+                "item_name": item_data.get("description", "Unknown Item"),
+                "item_code": item_data.get("code", ""),
+                "description": item_data.get("description", ""),
                 "is_sales_item": item_data.get("can_be_sold", False),
                 "is_purchase_item": item_data.get("can_be_purchased", False),
-                "code": item_data.get("code"),
-                "custom_item_code_etims": item_data.get("scu_item_code"),
-                "custom_etims_country_of_origin_code": country_of_origin_code,
+                "custom_item_code_etims": item_data.get("scu_item_code", ""),
+                "custom_etims_country_of_origin_code": country_of_origin_code or "",
                 "valuation_rate": round(item_data.get("selling_price", 0.0), 2),
                 "last_purchase_rate": round(item_data.get("purchasing_price", 0.0), 2),
-                "custom_item_classification": get_link_value(
-                    ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
-                    "slade_id",
-                    item_data.get("scu_item_classification"),
-                ),
-                "custom_etims_country_of_origin": country_of_origin,
-                "custom_packaging_unit": get_link_value(
-                    PACKAGING_UNIT_DOCTYPE_NAME,
-                    "slade_id",
-                    item_data.get("packaging_unit"),
-                ),
-                "custom_unit_of_quantity": get_link_value(
-                    UNIT_OF_QUANTITY_DOCTYPE_NAME,
-                    "slade_id",
-                    item_data.get("quantity_unit"),
-                ),
-                "custom_item_type": item_data.get("item_type"),
-                "custom_taxation_type": get_link_value(
-                    TAXATION_TYPE_DOCTYPE_NAME,
-                    "slade_id",
-                    item_data.get("sale_taxes")[0],
-                ),
-                "custom_product_type": item_data.get("product_type"),
+                "custom_etims_country_of_origin": country_of_origin or "",
+                "custom_item_type": item_data.get("item_type", ""),
+                "custom_product_type": item_data.get("product_type", ""),
             }
+
+            if item_data.get("scu_item_classification"):
+                request_data["custom_item_classification"] = get_parent_by_slade360_id(
+                    ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
+                    item_data.get("scu_item_classification"),
+                    settings_name,
+                )
+
+            if item_data.get("packaging_unit"):
+                request_data["custom_packaging_unit"] = get_parent_by_slade360_id(
+                    PACKAGING_UNIT_DOCTYPE_NAME,
+                    item_data.get("packaging_unit"),
+                    settings_name,
+                )
+
+            if item_data.get("quantity_unit"):
+                request_data["custom_unit_of_quantity"] = get_parent_by_slade360_id(
+                    UNIT_OF_QUANTITY_DOCTYPE_NAME,
+                    item_data.get("quantity_unit"),
+                    settings_name,
+                )
+
+            if item_data.get("sale_taxes") and len(item_data.get("sale_taxes", [])) > 0:
+                request_data["custom_taxation_type"] = get_parent_by_slade360_id(
+                    TAXATION_TYPE_DOCTYPE_NAME,
+                    item_data.get("sale_taxes")[0],
+                    settings_name,
+                )
 
             if existing_item:
                 item_doc = frappe.get_doc("Item", existing_item)
@@ -1058,8 +1092,12 @@ def item_search_on_success(response: dict, settings_name : str, **kwargs) -> Non
                 )
 
         except Exception as e:
+            frappe.log_error(
+                title="Item Search Error",
+                message=f"Error processing item {item_data.get('code')}: {str(e)}",
+            )
             continue
-
+        
     frappe.db.commit()
 
 

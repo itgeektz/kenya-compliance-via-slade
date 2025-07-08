@@ -2,122 +2,136 @@ const doctypeName = "Item";
 const settingsDoctypeName = "Navari KRA eTims Settings";
 
 frappe.listview_settings[doctypeName].onload = async function (listview) {
-  const companyName = frappe.boot.sysdefaults.company;
-  const { message: activeSetting } = await frappe.call({
+  const { message: data } = await frappe.call({
     method:
-      "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_settings",
+      "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_etims_action_data",
     args: {
-      doctype: settingsDoctypeName,
+      doctype: doctypeName,
     },
   });
-  if (activeSetting?.length > 0) {
-    listview.page.add_inner_button(
-      __("Get Imported Items"),
-      function (listview) {
-        frappe.call({
+
+  const allSettings = data?.settings || [];
+  if (!allSettings.length) return;
+
+  addItemListActions(listview, allSettings);
+
+  listview.page.add_action_item(__("Bulk Register Items"), function () {
+    const itemsToRegister = listview
+      .get_checked_items()
+      .map((item) => item.name);
+    if (!itemsToRegister.length) {
+      frappe.msgprint(__("Please select items to register"));
+      return;
+    }
+
+    showSettingsModalAndExecute(
+      "Bulk Register Items",
+      allSettings,
+      (settings_name) => {
+        return {
           method:
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.perform_import_item_search",
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.bulk_register_item",
           args: {
-            request_data: {
-              company_name: companyName,
-            },
+            docs_list: itemsToRegister,
+            settings_name: settings_name,
           },
-          callback: (response) => {},
-          error: (r) => {
-            // Error Handling is Defered to the Server
-          },
-        });
-      },
-      __("eTims Actions")
+          success_msg: "Bulk registration queued",
+        };
+      }
     );
+  });
+};
 
+function addItemListActions(listview, allSettings) {
+  const actions = [
+    {
+      label: __("Get Imported Items"),
+      getCallArgs: (settings_name) => ({
+        method: "perform_import_item_search",
+        args: { settings_name: settings_name, request_data: {} },
+        success_msg: "Import items search queued",
+      }),
+    },
+    {
+      label: __("Get Registered Items"),
+      getCallArgs: (settings_name) => ({
+        method: "perform_item_search",
+        args: { settings_name: settings_name },
+        success_msg: "Registered items search queued",
+      }),
+    },
+    {
+      label: __("Submit Inventory"),
+      getCallArgs: (settings_name) => ({
+        method: "send_entire_stock_balance",
+        args: { settings_name: settings_name },
+        success_msg: "Inventory submission queued",
+      }),
+    },
+    {
+      label: __("Update all Items"),
+      getCallArgs: (settings_name) => ({
+        method: "update_all_items",
+        args: { settings_name: settings_name },
+        success_msg: "Items update queued",
+      }),
+    },
+    {
+      label: __("Register all Items"),
+      getCallArgs: (settings_name) => ({
+        method: "register_all_items",
+        args: { settings_name: settings_name },
+        success_msg: "Items registration queued",
+      }),
+    },
+  ];
+
+  actions.forEach((action) => {
     listview.page.add_inner_button(
-      __("Get Registered Items"),
-      function (listview) {
-        frappe.call({
-          method:
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.perform_item_search",
-          args: {
-            request_data: {
-              company_name: companyName,
-              // sent_to_etims: true,
-            },
-          },
-          callback: (response) => {},
-          error: (r) => {
-            // Error Handling is Defered to the Server
-          },
-        });
+      action.label,
+      function () {
+        showSettingsModalAndExecute(
+          action.label,
+          allSettings,
+          (settings_name) => action.getCallArgs(settings_name)
+        );
       },
       __("eTims Actions")
     );
+  });
+}
 
-    listview.page.add_inner_button(
-      __("Submit Inventory"),
-      function (listview) {
-        frappe.call({
-          method:
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.send_entire_stock_balance",
-          args: {},
-          callback: (response) => {},
-          error: (r) => {
-            // Error Handling is Defered to the Server
-          },
-        });
+function showSettingsModalAndExecute(title, settings, getCallArgs) {
+  const dialog = new frappe.ui.Dialog({
+    title: __(title),
+    fields: [
+      {
+        label: __("Select eTims Settings"),
+        fieldname: "settings_name",
+        fieldtype: "Select",
+        options: settings.map((s) => ({
+          label: `${s.company} (${s.name})`,
+          value: s.name,
+        })),
+        reqd: 1,
+        default: settings[0]?.name,
       },
-      __("eTims Actions")
-    );
-
-    listview.page.add_inner_button(
-      __("Update all Items"),
-      function (listview) {
-        frappe.call({
-          method:
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.update_all_items",
-          args: {},
-          callback: (response) => {},
-          error: (r) => {
-            // Error Handling is Defered to the Server
-          },
-        });
-      },
-      __("eTims Actions")
-    );
-
-    listview.page.add_inner_button(
-      __("Register all Items"),
-      function (listview) {
-        frappe.call({
-          method:
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.register_all_items",
-          args: {},
-          callback: (response) => {},
-          error: (r) => {
-            // Error Handling is Defered to the Server
-          },
-        });
-      },
-      __("eTims Actions")
-    );
-
-    listview.page.add_action_item(__("Bulk Register Items"), function () {
-      const itemsToRegister = listview
-        .get_checked_items()
-        .map((item) => item.name);
+    ],
+    primary_action_label: __("Proceed"),
+    primary_action: ({ settings_name }) => {
+      dialog.hide();
+      const { method, args, success_msg } = getCallArgs(settings_name);
 
       frappe.call({
-        method:
-          "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.bulk_register_item",
-        args: {
-          docs_list: itemsToRegister,
-        },
-        callback: (response) => {
-          frappe.msgprint("Bulk submission queued.");
-        },
-        error: (r) => {
-          // Error Handling is Defered to the Server
+        method: `kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.${method}`,
+        args: args,
+        callback: () => frappe.msgprint(__(success_msg)),
+        error: (err) => {
+          console.error(err);
+          frappe.msgprint(__("An error occurred during the request."));
         },
       });
-    });
-  }
-};
+    },
+  });
+  dialog.show();
+}
