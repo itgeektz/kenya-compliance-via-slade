@@ -18,9 +18,7 @@ frappe.ui.form.on(parentDoctype, {
     const { message: activeSetting } = await frappe.call({
       method:
         "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_settings",
-      args: {
-        doctype: settingsDoctypeName,
-      },
+      args: { doctype: settingsDoctypeName },
     });
 
     if (
@@ -32,37 +30,66 @@ frappe.ui.form.on(parentDoctype, {
         frm.add_custom_button(
           __("Send Invoice"),
           function () {
-            frappe.call({
-              method:
-                "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.send_invoice_details",
-              args: {
-                name: frm.doc.name,
-              },
-              callback: (response) => {},
-              error: (r) => {
-                // Error Handling is Defered to the Server
-              },
-            });
+            showSettingsModalAndExecute(
+              "Send Invoice",
+              activeSetting,
+              (settings_name) => ({
+                method:
+                  "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.send_invoice_details",
+                args: {
+                  name: frm.doc.name,
+                  settings_name: settings_name,
+                },
+                success_msg: "Invoice submission queued",
+              })
+            );
           },
           __("eTims Actions")
         );
-      } else if (!frm.doc.custom_qr_code) {
+        frm.add_custom_button(
+          __("Check Submission Status"),
+          function () {
+            showSettingsModalAndExecute(
+              "Check Invoice Status",
+              activeSetting,
+              (settings_name) => ({
+                method:
+                  "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
+                args: {
+                  id: frm.doc.custom_slade_id,
+                  document_name: frm.doc.name,
+                  invoice_type: "Sales Invoice",
+                  settings_name: settings_name,
+                  company: frm.doc.company,
+                },
+                success_msg: "Status check queued",
+              })
+            );
+          },
+          __("eTims Actions")
+        );
+      }
+
+      if (frm.doc.custom_successfully_submitted && !frm.doc.custom_qr_code) {
         frm.add_custom_button(
           __("Sync Invoice Details"),
           function () {
-            frappe.call({
-              method:
-                "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
-              args: {
-                id: frm.doc.custom_slade_id,
-                document_name: frm.doc.name,
-                invoice_type: "Sales Invoice",
-              },
-              callback: (response) => {},
-              error: (r) => {
-                // Error Handling is Defered to the Server
-              },
-            });
+            showSettingsModalAndExecute(
+              "Sync Invoice",
+              activeSetting,
+              (settings_name) => ({
+                method:
+                  "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
+                args: {
+                  id: frm.doc.custom_slade_id,
+                  document_name: frm.doc.name,
+                  invoice_type: "Sales Invoice",
+                  settings_name: settings_name,
+                  company: frm.doc.company,
+                },
+                success_msg: "Invoice sync queued",
+              })
+            );
           },
           __("eTims Actions")
         );
@@ -71,6 +98,40 @@ frappe.ui.form.on(parentDoctype, {
   },
 });
 
+function showSettingsModalAndExecute(title, settings, getCallArgs) {
+  const dialog = new frappe.ui.Dialog({
+    title: __(title),
+    fields: [
+      {
+        label: __("Select eTims Settings"),
+        fieldname: "settings_name",
+        fieldtype: "Select",
+        options: settings.map((s) => ({
+          label: `${s.company} (${s.name})`,
+          value: s.name,
+        })),
+        reqd: 1,
+        default: settings[0]?.name,
+      },
+    ],
+    primary_action_label: __("Proceed"),
+    primary_action: ({ settings_name }) => {
+      dialog.hide();
+      const { method, args, success_msg } = getCallArgs(settings_name);
+
+      frappe.call({
+        method: method,
+        args: args,
+        callback: () => frappe.msgprint(__(success_msg)),
+        error: (err) => {
+          console.error(err);
+          frappe.msgprint(__("An error occurred during the request."));
+        },
+      });
+    },
+  });
+  dialog.show();
+}
 frappe.ui.form.on(childDoctype, {
   item_code: function (frm, cdt, cdn) {
     const item = locals[cdt][cdn].item_code;

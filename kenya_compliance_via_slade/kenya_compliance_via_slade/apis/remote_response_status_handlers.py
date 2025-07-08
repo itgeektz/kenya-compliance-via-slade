@@ -268,13 +268,12 @@ def process_inventory_transition(response: dict, document_name: str, **kwargs) -
     pass
 
 
-def sales_information_submission_on_success(response: dict, document_name: str, doctype: str, **kwargs) -> None:
+def sales_information_submission_on_success(response: dict, document_name: str, doctype: str, settings_name: str, **kwargs) -> None:
     """
     Callback after successful submission. Maps SCU data and signature_link.
     """
     updates = {
         "custom_successfully_submitted": 1,
-        **map_scu_fields(response, document_name, doctype, qr_key="signature_link")
     }
 
     frappe.db.set_value(doctype, document_name, updates)
@@ -283,6 +282,7 @@ def sales_information_submission_on_success(response: dict, document_name: str, 
         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
         document_name=document_name,
         invoice_type=doctype,
+        settings_name=settings_name,
         queue="long",
     )
 

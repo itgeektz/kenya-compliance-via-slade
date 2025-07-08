@@ -986,7 +986,7 @@ def initialize_device(request_data: str) -> None:
 
 @frappe.whitelist()
 def get_invoice_details(
-    id: str = None, document_name: str = None, invoice_type: str = "Sales Invoice"
+    id: str = None, document_name: str = None, invoice_type: str = "Sales Invoice", settings_name: str = None, company: str = None
 ) -> None:
     invoice = frappe.get_doc(invoice_type, document_name)
 
@@ -1011,6 +1011,8 @@ def get_invoice_details(
         route_key,
         update_invoice_info,
         doctype=invoice_type,
+        settings_name=settings_name,
+        company=company,
     )
 
 

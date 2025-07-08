@@ -26,15 +26,18 @@ def process_request(
     doctype: str = SETTINGS_DOCTYPE_NAME,
     error_callback: Callable = None,
     settings_name: str = None,
+    company: str = None,
 ) -> str:
     """Reusable function to process requests with common logic."""
-    if not settings_name or not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
+    if not settings_name and not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
         return
 
     data = parse_request_data(request_data)
-    company_name, branch_id, document_name = extract_metadata(data)
+    extracted_company, branch_id, document_name = extract_metadata(data)
+    company_name = company or extracted_company or frappe.defaults.get_user_default("Company") or frappe.get_value("Company", {}, "name")
 
     headers = build_headers(company_name, branch_id, settings_name)
+    print(f"Headers: {headers}, Company: {company_name}, Branch: {branch_id}, Settings: {settings_name}, data: {data}")
 
     server_url = get_server_url(company_name, branch_id, settings_name)
     route_path, _ = get_route_path(route_key, "VSCU Slade 360")

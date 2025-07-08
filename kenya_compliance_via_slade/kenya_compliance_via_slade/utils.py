@@ -273,14 +273,6 @@ def build_headers(company_name: str, branch_id: str, settings_name: str = None) 
 
             access_token = new_settings.access_token
 
-        logged_user = frappe.session.user
-        user_data = frappe.db.get_value(
-            "Navari eTims User",
-            {"system_user": logged_user},
-            ["workstation"],
-            as_dict=True,
-        )
-
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
@@ -288,12 +280,13 @@ def build_headers(company_name: str, branch_id: str, settings_name: str = None) 
         }
 
         workstation = None
-        if settings and settings.get("workstation"):
-            workstation = settings.get("workstation")
-        elif user_data and user_data.get("workstation"):
-            workstation = user_data.get("workstation")
+        if company_name:
+            mapping = next((m for m in settings.get("organisation_mapping", []) 
+                  if m.get("company") == company_name), None)
+            if mapping:
+                workstation = frappe.db.get_value(WORKSTATION_DOCTYPE_NAME, {"name": mapping.get("workstation")}, "slade_id")
 
-        if workstation:
+        if workstation: 
             headers["X-Workstation"] = workstation
 
         return headers
@@ -320,23 +313,18 @@ def get_settings(company_name: str = None, branch_id: str = None, settings_name:
         or frappe.defaults.get_user_default("Company")
         or frappe.get_value("Company", {}, "name")
     )
-    branch_id = (
-        branch_id
-        or frappe.defaults.get_user_default("Branch")
-        or frappe.get_value("Branch", {}, "name")
-    )
-
     if frappe.db.exists(
-        SETTINGS_DOCTYPE_NAME, 
-        {"company": company_name, "bhfid": branch_id, "is_active": 1}
+        ORGANISATION_MAPPING_DOCTYPE_NAME, 
+        {"company": company_name, "is_active": 1}
     ):
-        settings = frappe.db.get_value(
-            SETTINGS_DOCTYPE_NAME,
-            {"company": company_name, "bhfid": branch_id, "is_active": 1},
-            "*",
+        mapping = frappe.db.get_value(
+            ORGANISATION_MAPPING_DOCTYPE_NAME,
+            {"company": company_name, "is_active": 1},
+            "parent",
             as_dict=True,
         )
-        return settings
+        if mapping and mapping.parent:
+            return frappe.get_doc(SETTINGS_DOCTYPE_NAME, mapping.parent).as_dict()
     
     if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
         settings = frappe.db.get_value(
@@ -905,6 +893,7 @@ def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) 
 
         mapping_data = {
             "workstation": workstation_link,
+            "organisation": organisation_id,
             "cluster": cluster_id,
             "cluster_name": cluster_name,
             "department": department_link,
@@ -919,11 +908,9 @@ def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) 
         else:
             settings_doc.append("organisation_mapping", mapping_data)
             processed_companies.add(company_link)  
-
-    if settings_doc.get("organisation_mapping"):
-        settings_doc.save(ignore_permissions=True)
-
-    update_company_slade_ids(processed_companies, organisation_id)
+            settings_doc.save(ignore_permissions=True)
+        
+    update_company_slade_ids(processed_companies, organisation_id, settings_doc.name)
         
     frappe.db.commit()
 
@@ -968,15 +955,39 @@ def update_existing_mapping(parent: str, workstation: str, data: dict) -> None:
     )
     
     if mapping_name:
-        mapping_doc = frappe.get_doc(ORGANISATION_MAPPING_DOCTYPE_NAME, mapping_name)
-        mapping_doc.update(data)
-        mapping_doc.save(ignore_permissions=True)
-
-def update_company_slade_ids(companies: set, organisation_id: str) -> None:
-    """Update slade_id for multiple companies"""
+        frappe.db.set_value(ORGANISATION_MAPPING_DOCTYPE_NAME, mapping_name, data, update_modified=False)
+        
+def update_company_slade_ids(companies: set, organisation_id: str, setting_name: str) -> None:
     for company in companies:
-        if frappe.db.exists("Company", company):
-            frappe.db.set_value("Company", company, "slade_id", organisation_id)
+        if not frappe.db.exists("Company", company):
+            continue
+      
+        company_doc = frappe.get_doc("Company", company)
+      
+        existing_mapping = next(
+            (m for m in company_doc.get("etims_setup_mapping", []) 
+            if m.etims_setup == setting_name),
+            None
+        )
+        
+        if existing_mapping:
+            frappe.db.set_value(
+                "eTims Company Setup Mapping",
+                existing_mapping.name,
+                {
+                    "organisation": organisation_id,
+                    "is_active": 1
+                }
+            )
+        else:
+            company_doc.append("etims_setup_mapping", {
+                "etims_setup": setting_name,
+                "organisation": organisation_id,
+                "is_active": 1
+            })
+            
+        if not existing_mapping:
+            company_doc.save(ignore_permissions=True)
             
 
 def get_department(id: str, company: str) -> str:

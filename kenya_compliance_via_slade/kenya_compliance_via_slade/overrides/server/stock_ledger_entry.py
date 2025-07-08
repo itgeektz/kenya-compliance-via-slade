@@ -68,9 +68,9 @@ def prepare_payload(doc: dict, record: dict) -> dict:
     payload = {
         "name": doc.name,
         "document_name": doc.name,
-        "organisation": frappe.get_value("Company", company_name, "custom_slade_id"),
+        "organisation": settings.organisation_mapping[0].organisation,
         "source_organisation_unit": frappe.get_value(
-            "Department", settings.department, "custom_slade_id"
+            "Department", settings.organisation_mapping[0].department, "custom_slade_id"
         ),
         "document_number": doc.name,
         "document_count": series_no,
