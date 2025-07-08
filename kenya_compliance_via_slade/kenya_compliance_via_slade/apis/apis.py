@@ -573,27 +573,44 @@ def perform_purchase_search(request_data: str) -> None:
         doctype=REGISTERED_PURCHASES_DOCTYPE_NAME,
     )
 
-
 @frappe.whitelist()
-def send_entire_stock_balance() -> None:
-    all_items = frappe.get_all(
-        "Item",
-        filters={"is_stock_item": 1, "custom_sent_to_slade": 1},
-        fields=["name", "item_code", "item_name"],
+def send_entire_stock_balance(settings_name: str) -> None:
+    Item = frappe.qb.DocType("Item")
+    Mapping = frappe.qb.DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
+    
+    query = (
+        frappe.qb.from_(Item)
+        .inner_join(Mapping)
+        .on(
+            (Mapping.parent == Item.name) &
+            (Mapping.parenttype == "Item") &
+            (Mapping.etims_setup == settings_name)
+        )
+        .select(Item.name, Item.item_code, Item.item_name)
+        .where(
+            (Item.is_stock_item == 1) &
+            (Item.custom_sent_to_slade == 1)
+        )
     )
-
-    for item in all_items:
-        frappe.enqueue(submit_inventory, name=item.name)
+    
+    items = query.run(as_dict=True)
+    
+    for item in items:
+        frappe.enqueue(
+            submit_inventory,
+            name=item.name,
+            settings_name=settings_name
+        )
 
 
 @frappe.whitelist()
-def submit_inventory(name: str) -> None:
+def submit_inventory(name: str, settings_name: str) -> None:
     # TODO: Redesign this function to work with the new structure for Stock Submission
     # pass
     if not name:
         frappe.throw("Item name is required.")
 
-    settings = get_settings()
+    settings = get_settings(settings_name=settings_name)
 
     request_data = {
         "document_name": name,
@@ -603,13 +620,13 @@ def submit_inventory(name: str) -> None:
         "source_organisation_unit": get_link_value(
             "Department",
             "name",
-            settings.department,
+            settings.organisation_mapping[0].department,
             "custom_slade_id",
         ),
         "location": get_link_value(
             "Warehouse",
             "name",
-            settings.get("warehouse"),
+            settings.organisation_mapping[0].get("warehouse"),
             "custom_slade_id",
         ),
     }
@@ -619,6 +636,7 @@ def submit_inventory(name: str) -> None:
         handler_function=submit_inventory_on_success,
         request_method="POST",
         doctype="Item",
+        settings_name=settings_name,
     )
 
 

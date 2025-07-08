@@ -453,7 +453,7 @@ def uom_search_on_success(response: dict, **kwargs) -> None:
     update_documents(response, "UOM", field_mapping, filter_field="uom_name")
 
 
-def warehouse_search_on_success(response: dict, **kwargs) -> None:
+def warehouse_search_on_success(response: dict, settings_name: str, **kwargs) -> None:
     from ..apis.process_request import process_request
     from ..utils import get_settings
 
@@ -467,7 +467,7 @@ def warehouse_search_on_success(response: dict, **kwargs) -> None:
         response if isinstance(response, list) else response.get("results", [response])
     )
 
-    settings = get_settings()
+    settings = get_settings(settings_name=settings_name)
 
     bhfid_slade_id = frappe.db.get_value("Branch", settings.bhfid, "slade_id")
     selected_record = (
@@ -512,6 +512,7 @@ def warehouse_search_on_success(response: dict, **kwargs) -> None:
                 request_data=request_data,
                 route_key="LocationSearchReq",
                 request_method="PATCH",
+                settings_name=settings_name,
             )
 
 

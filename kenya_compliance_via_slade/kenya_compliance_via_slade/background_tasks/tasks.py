@@ -247,6 +247,7 @@ def search_organisations_request(request_data: str | dict, settings_name: str) -
         "LocationsSearchReq",
         warehouse_search_on_success,
         doctype="Warehouse",
+        settings_name=settings_name,
     )
 
     return messages

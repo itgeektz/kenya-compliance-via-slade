@@ -23,7 +23,7 @@ from ..doctype.doctype_names_mapping import (
     USER_DOCTYPE_NAME,
 )
 from ..handlers import handle_slade_errors
-from ..utils import get_link_value, get_or_create_link, get_parent_by_slade360_id, parse_response_data
+from ..utils import get_link_value, get_or_create_link, get_parent_by_slade360_id, get_slade360_id, parse_response_data
 
 
 def on_slade_error(
@@ -212,7 +212,7 @@ def imported_item_submission_on_success(
     frappe.db.set_value("Item", document_name, {"custom_imported_item_submitted": 1})
 
 
-def submit_inventory_on_success(response: dict, document_name: str, **kwargs) -> None:
+def submit_inventory_on_success(response: dict, document_name: str, settings_name: str, **kwargs) -> None:
     from .process_request import process_request
 
     # item = frappe.get_doc("Item", document_name)
@@ -224,7 +224,7 @@ def submit_inventory_on_success(response: dict, document_name: str, **kwargs) ->
 
     request_data = {
         "document_name": document_name,
-        "product": frappe.get_value("Item", document_name, "custom_slade_id"),
+        "product": get_slade360_id("Item", document_name, settings_name),
         "quantity": sum([float(stock.get("actual_qty", 0)) for stock in stock_levels]),
         "inventory_adjustment": response.get("id"),
     }
@@ -238,11 +238,12 @@ def submit_inventory_on_success(response: dict, document_name: str, **kwargs) ->
         route_key="StockMasterLineReq",
         handler_function=submit_inventory_item_on_success,
         request_method="POST",
+        settings_name=settings_name,
     )
 
 
 def submit_inventory_item_on_success(
-    response: dict, document_name: str, **kwargs
+    response: dict, document_name: str, settings_name: str, **kwargs
 ) -> None:
     from .process_request import process_request
 
@@ -259,6 +260,7 @@ def submit_inventory_item_on_success(
         route_key="StockAdjustmentTransitionReq",
         handler_function=process_inventory_transition,
         request_method="PATCH",
+        settings_name=settings_name,
     )
 
 
