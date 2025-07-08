@@ -88,6 +88,7 @@ def bulk_register_items(docs_list: str, settings_name: str = None) -> None:
                 settings_name=setting.name
             )
 
+
 @frappe.whitelist()
 def update_all_items(settings_name: str = None) -> None:
     settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
@@ -308,6 +309,36 @@ def submit_all_suppliers(settings_name: str = None) -> None:
                 is_customer=False
             )
 
+            
+            
+@frappe.whitelist()
+def bulk_submit_suppliers(docs_list: str, settings_name: str = None) -> None:
+    suppliers = json.loads(docs_list)
+    settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    
+    for setting in settings:
+        for supplier in suppliers:
+            frappe.enqueue(
+                send_branch_customer_details,
+                name=supplier, 
+                is_customer=False,
+                settings_name=setting.name
+            )
+            
+            
+@frappe.whitelist()
+def bulk_submit_customers(docs_list: str, settings_name: str = None) -> None:
+    customers = json.loads(docs_list)
+    settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    
+    for setting in settings:
+        for customer in customers:
+            frappe.enqueue(
+                send_branch_customer_details,
+                name=customer, 
+                is_customer=True,
+                settings_name=setting.name
+            )
 
 @frappe.whitelist()
 def submit_all_customers(settings_name: str = None) -> None:
@@ -346,6 +377,9 @@ def submit_all_customers(settings_name: str = None) -> None:
 def send_branch_customer_details(name: str, settings_name: str, is_customer: bool = True) -> None:
     doctype = "Customer" if is_customer else "Supplier"
     data = frappe.get_doc(doctype, name)
+    
+    if hasattr(data, 'disabled') and data.disabled:
+        return
 
     payload = {
         "document_name": name,
