@@ -990,6 +990,7 @@ def get_invoice_details(
 
     request_data = {
         "document_name": document_name,
+        "company": company or invoice.company,
     }
     route_key = "TrnsSalesSearchReq"
     if invoice.is_return:

@@ -8,7 +8,6 @@ from ...apis.process_request import process_request
 from ...apis.remote_response_status_handlers import (
     purchase_invoice_submission_on_success,
 )
-from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
 from ...utils import get_taxation_types, get_settings
 
 endpoints_builder = EndpointsBuilder()

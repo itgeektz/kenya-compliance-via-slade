@@ -18,9 +18,14 @@ endpoints_builder = EndpointsBuilder()
 
 
 def on_update(doc: Document, method: str | None = None) -> None:
-    if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
+    company_name = (
+        doc.company
+        or frappe.defaults.get_user_default("Company")
+        or frappe.get_value("Company", {}, "name")
+    )
+    settings = get_settings(company_name=company_name)
+    if not settings:
         return
-    settings = get_settings(company_name=doc.company)
     if not settings.get("stock_auto_submission_enabled"):
         return
     max_tries = get_max_submission_attempts("Stock Ledger Entry")
