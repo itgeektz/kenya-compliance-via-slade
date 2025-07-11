@@ -37,7 +37,6 @@ def process_request(
     company_name = company or extracted_company or frappe.defaults.get_user_default("Company") or frappe.get_value("Company", {}, "name")
 
     headers = build_headers(company_name, branch_id, settings_name)
-    print(f"Headers: {headers}, Company: {company_name}, Branch: {branch_id}, Settings: {settings_name}, data: {data}")
 
     server_url = get_server_url(company_name, branch_id, settings_name)
     route_path, _ = get_route_path(route_key, "VSCU Slade 360")

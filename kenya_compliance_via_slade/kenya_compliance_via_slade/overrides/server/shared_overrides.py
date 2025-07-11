@@ -7,6 +7,7 @@ from ...apis.api_builder import EndpointsBuilder
 from ...apis.process_request import process_request
 from ...apis.remote_response_status_handlers import (
     sales_information_submission_on_success,
+    sales_information_submission_on_error,
 )
 # from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
 from ...utils import build_invoice_payload, get_settings, get_slade360_id
@@ -99,6 +100,7 @@ def generic_invoices_on_submit_override(
         doctype=invoice_type,
         settings_name=settings_doc.name,
         company=company_name,
+        error_callback=sales_information_submission_on_error,
     )
 
 

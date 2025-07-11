@@ -285,7 +285,18 @@ def sales_information_submission_on_success(response: dict, document_name: str, 
         settings_name=settings_name,
         queue="long",
     )
-
+    
+    
+def sales_information_submission_on_error(response: dict, document_name: str, doctype: str, settings_name: str, **kwargs) -> None:
+    from ..overrides.server.sales_invoice import send_invoice_details
+    from .apis import perform_item_registration
+    doc = frappe.get_doc(doctype, document_name)
+    error_message = response if isinstance(response, str) else str(response)
+    if "get() returned more than one Product -- it returned 2!" in error_message:
+        for item in doc.items:
+            perform_item_registration(item.item_code, settings_name)
+            
+        send_invoice_details(doc.name)
     
     
 # def sales_information_submission_on_success(
@@ -1204,3 +1215,29 @@ def mode_of_payment_on_success(response: dict, document_name: str, settings_name
         })
         
     mop_doc.save(ignore_permissions=True)
+
+
+def fetch_matching_items_on_success(response: dict, document_name: str, settings_name: str, **kwargs) -> None:
+    from .process_request import process_request
+    items = parse_response_data(response, list)
+    item_doc = frappe.get_doc("Item", document_name)
+    for item in items:
+        existing_id = next((row.slade360_id for row in item_doc.etims_setup_mapping if row.etims_setup == settings_name), None)
+        
+        if existing_id != item.get("id"):
+            process_request(
+                {
+                    "document_name": item_doc.name,
+                    "name": f"{item_doc.name} - Archived",
+                    "id": item.get("id"),
+                    "active": False, 
+                },
+                "ItemsSearchReq",
+                item_archive_on_success,
+                request_method="PATCH",
+                doctype="Item",
+                settings_name=settings_name,
+            )
+
+def item_archive_on_success(response: dict, document_name: str, **kwargs) -> None:
+    pass

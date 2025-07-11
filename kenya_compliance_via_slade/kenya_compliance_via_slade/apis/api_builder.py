@@ -312,10 +312,12 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                 )
                 if self._error_callback_handler:
                     self._error_callback_handler(
-                        response_data,
+                        response=response_data,
                         url=route_path,
                         doctype=doctype,
                         document_name=document_name,
+                        payload=self._payload,
+                        settings_name=self._settings.name
                     )
                     
                 if response.status_code == 401 and not retrying:

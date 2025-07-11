@@ -35,6 +35,7 @@ from .remote_response_status_handlers import (
     customer_branch_details_submission_on_success,
     customer_search_on_success,
     customers_search_on_success,
+    fetch_matching_items_on_success,
     imported_item_submission_on_success,
     imported_items_search_on_success,
     initialize_device_submission_on_success,
@@ -182,6 +183,16 @@ def perform_item_registration(item_name: str, settings_name: str) -> dict | None
 
     request_data = build_item_payload(item, settings_name)
     request_method = "PATCH" if "id" in request_data else "POST"
+    if request_method == "PATCH":
+        request_data["id"] = request_data.pop("name")
+        process_request(
+            {"name": item.name, "document_name": item.name},
+            "ItemsSearchReq",
+            fetch_matching_items_on_success,
+            request_method="GET",
+            doctype="Item",
+            settings_name=settings_name,
+        )
     
     process_request(
         request_data,
