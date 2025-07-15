@@ -19,7 +19,7 @@ def on_submit(doc: Document, method: str = None) -> None:
     
     if (
         doc.custom_successfully_submitted == 0
-        and doc.custom_defer_etims_submission == 0
+        and doc.prevent_etims_submission == 0
         and doc.is_opening == "No"
         and settings_doc.sales_auto_submission_enabled
     ):

@@ -1108,7 +1108,7 @@
       "fetch_from": "custom_item_classification.itemclsnm",
       "fetch_if_empty": 0,
       "fieldname": "custom_item_classification_code",
-      "fieldtype": "Data",
+      "fieldtype": "Small Text",
       "hidden": 0,
       "hide_border": 0,
       "hide_days": 0,

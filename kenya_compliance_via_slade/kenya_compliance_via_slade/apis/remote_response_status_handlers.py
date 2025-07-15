@@ -459,19 +459,9 @@ def update_invoice_info(response: dict, document_name: str, **kwargs) -> None:
     custom_slade_id = data.get("id")
     sales_invoice_tax_table = data.get("sales_invoice_tax_table", {})
 
-    tax_amounts = {
-        f"custom_taxbl_amount_{k.lower()}": float(v.get("total_taxable_amount", 0.0))
-        for k, v in sales_invoice_tax_table.items()
-    }
-    tax_amounts.update({
-        f"custom_tax_{k.lower()}": float(v.get("total_tax_amount", 0.0))
-        for k, v in sales_invoice_tax_table.items()
-    })
-
     updates = {
         "custom_slade_id": custom_slade_id,
         **map_scu_fields(scu_data, custom_slade_id, doctype, qr_key="qr_code_url"),
-        **tax_amounts,
     }
 
     if document_name:
