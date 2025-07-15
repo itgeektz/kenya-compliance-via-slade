@@ -123,22 +123,22 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
         __("eTims Actions")
       );
 
-      frm.add_custom_button(
-        __("Submit Mode of Payments"),
-        function () {
-          frappe.call({
-            method:
-              "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.send_all_mode_of_payments",
-            args: { settings_name: frm.doc.name },
+      // frm.add_custom_button(
+      //   __("Submit Mode of Payments"),
+      //   function () {
+      //     frappe.call({
+      //       method:
+      //         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.send_all_mode_of_payments",
+      //       args: { settings_name: frm.doc.name },
 
-            callback: (response) => {},
-            error: (error) => {
-              // Error Handling is Defered to the Server
-            },
-          });
-        },
-        __("eTims Actions")
-      );
+      //       callback: (response) => {},
+      //       error: (error) => {
+      //         // Error Handling is Defered to the Server
+      //       },
+      //     });
+      //   },
+      //   __("eTims Actions")
+      // );
     }
 
     frm.add_custom_button(
