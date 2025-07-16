@@ -636,33 +636,101 @@ def split_user_email(email_string: str) -> str:
 
 
 def calculate_tax(doc: "Document") -> None:
-    """Calculate tax for each item in the document based on item-level or document-level tax template."""
+    """
+    Calculate tax for each item in the document using either:
+    - Item-level tax templates (if any item has one), or
+    - Document-level taxes (if no items have tax templates)
+    Then set taxation type codes for all items.
+    """
     taxes = doc.get("taxes", [])
+    has_item_level_tax = any(item.item_tax_template for item in doc.items)
+    
+    if has_item_level_tax:
+        _calculate_item_level_taxes(doc)
+    elif taxes:
+        _calculate_document_level_taxes(doc, taxes)
+    
+    _set_taxation_type_codes(doc)
+
+
+def _calculate_item_level_taxes(doc: "Document") -> None:
+    """Calculate taxes using each item's individual tax template"""
     for item in doc.items:
-        tax: float = 0
-        tax_rate: float | None = None
-
-        # Check if the item has its own Item Tax Template
-        if item.item_tax_template:
-            tax_rate = get_item_tax_rate(item.item_tax_template)
-        else:
-            continue
-
-        # Calculate tax if we have a valid tax rate
-        if tax_rate is not None:
-            tax = item.base_net_amount * tax_rate / 100
-
-        # Set the custom tax fields in the item
-        item.custom_tax_amount = tax
+        tax_rate = get_item_tax_rate(item.item_tax_template) if item.item_tax_template else None
+        tax_amount = item.base_net_amount * tax_rate / 100 if tax_rate else 0
+        
+        item.custom_tax_amount = tax_amount
         item.custom_tax_rate = tax_rate if tax_rate else 0
 
 
-def get_item_tax_rate(item_tax_template: str) -> float | None:
-    """Fetch the combined tax rate from the Item Tax Template."""
+def _calculate_document_level_taxes(doc: "Document", taxes: list) -> None:
+    """
+    Distribute document-level taxes proportionally across all items.
+    Tax rates are calculated from the distributed tax amount and item net amount.
+    """
+    total_net_amount = sum(item.base_net_amount for item in doc.items)
+    if total_net_amount == 0:
+        return
+    
+    total_tax_amount = sum(tax.tax_amount for tax in taxes)
+    
+    for item in doc.items:
+        item_ratio = item.base_net_amount / total_net_amount
+        item.custom_tax_amount = total_tax_amount * item_ratio
+        
+        if item.base_net_amount > 0:
+            item.custom_tax_rate = (item.custom_tax_amount / item.base_net_amount) * 100
+        else:
+            item.custom_tax_rate = 0
+
+
+def get_item_tax_rate(item_tax_template: str) -> float:
+    """Return the sum of all tax rates in the given Item Tax Template"""
     tax_template = frappe.get_doc("Item Tax Template", item_tax_template)
-    if tax_template.taxes:
-        return sum(tax.tax_rate for tax in tax_template.taxes)
-    return None
+    return sum(tax.tax_rate for tax in tax_template.taxes) if tax_template.taxes else 0
+
+
+def _set_taxation_type_codes(doc: "Document") -> None:
+    """
+    Determine taxation type code for each item using this priority:
+    1. From item's tax template (if exists)
+    2. From item master data
+    3. Based on tax rate (B for ≥16%, E for ≥8%, A for 0%)
+    4. Default to B if none of the above apply
+    """
+    for item in doc.items:
+        item.taxation_type_code = (
+            _get_taxation_type_from_template(item) or
+            _get_taxation_type_from_item(item) or
+            _get_taxation_type_from_rate(item) or
+            "B"
+        )
+
+
+def _get_taxation_type_from_template(item) -> str:
+    """Get taxation type from item's tax template if available"""
+    if item.item_tax_template:
+        return frappe.get_value("Item Tax Template", item.item_tax_template, "etims_taxation_type")
+    return ""
+
+
+def _get_taxation_type_from_item(item) -> str:
+    """Get taxation type from item master data if available"""
+    return frappe.get_value("Item", item.item_code, "custom_taxation_type") or ""
+
+
+def _get_taxation_type_from_rate(item) -> str:
+    """Determine taxation type based on item's tax rate"""
+    if not hasattr(item, 'custom_tax_rate'):
+        return ""
+    
+    if item.custom_tax_rate >= 16:
+        return "B"
+    if item.custom_tax_rate >= 8:
+        return "E"
+    if item.custom_tax_rate == 0:
+        return "A"
+    return ""
 
 
 """Uncomment this function if you need document-level tax rate calculation in the future
