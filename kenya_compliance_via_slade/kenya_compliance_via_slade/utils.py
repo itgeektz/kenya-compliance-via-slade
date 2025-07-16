@@ -401,11 +401,12 @@ def build_invoice_payload(
             # converted_tax_amount = round(tax_amount * conversion_rate, 4) if tax_amount else 0
             qty = abs(item.get("qty"))
             base_net_rate = round(item.get("base_net_rate") or 0, 4)
-            tax_code = (item.item_tax_template and frappe.get_value("Item Tax Template", item.item_tax_template, "custom_etims_taxation_type")) or frappe.get_value("Item", item.item_code, "custom_taxation_type")
+            discount = round(item.get("discount_amount") or 0, 4)
+            tax_code = item.get("taxation_type_code", "A") or "A"
             payload["itemDetails"].append({
                 "product_name": item.item_code,
-                "unit_price": round(base_net_rate + (tax_amount / qty if qty else 0), 4),
-                "discount": round(item.discount_amount, 4) or 0,
+                "unit_price": round(base_net_rate + discount + (tax_amount / qty if qty else 0), 4),
+                "discount": discount,
                 "quantity": qty,
                 "uom": item.uom or "Pcs",
                 "tax_code": tax_code
@@ -636,6 +637,7 @@ def split_user_email(email_string: str) -> str:
 
 def calculate_tax(doc: "Document") -> None:
     """Calculate tax for each item in the document based on item-level or document-level tax template."""
+    taxes = doc.get("taxes", [])
     for item in doc.items:
         tax: float = 0
         tax_rate: float | None = None
