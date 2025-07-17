@@ -389,8 +389,8 @@ def build_invoice_payload(
             "document_name": invoice.name,
             "reference_number": invoice.name,
             "sales_type": "credit",
-            "customer_pin": frappe.get_value("Customer", invoice.customer, "tax_id") or "None",
-            "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name") or "None",
+            "customer_pin": frappe.get_value("Customer", invoice.customer, "tax_id") or None,
+            "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name") or None,
             "itemDetails": []
         }
         
@@ -405,8 +405,8 @@ def build_invoice_payload(
             tax_code = item.get("taxation_type_code", "A") or "A"
             payload["itemDetails"].append({
                 "product_name": item.item_code,
-                "unit_price": round(base_net_rate + discount + (tax_amount / qty if qty else 0), 4),
-                "discount": discount,
+                "unit_price": round(base_net_rate + (tax_amount / qty if qty else 0), 4),
+                # "discount": discount,
                 "quantity": qty,
                 "uom": item.uom or "Pcs",
                 "tax_code": tax_code
