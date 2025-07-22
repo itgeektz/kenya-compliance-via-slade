@@ -2,8 +2,7 @@ import frappe
 from frappe.model.document import Document
 
 from .shared_overrides import generic_invoices_on_submit_override
-from ...utils import calculate_tax
-from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
+from ...utils import calculate_tax, get_settings
 
 
 def on_submit(doc: Document, method: str = None) -> None:
@@ -12,16 +11,15 @@ def on_submit(doc: Document, method: str = None) -> None:
         or frappe.defaults.get_user_default("Company")
         or frappe.get_value("Company", {}, "name")
     )
-    if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1, "company": company_name}):
+    settings_doc = get_settings(company_name=company_name)
+    if not settings_doc:
         return
-    
-    settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, {"is_active": 1, "company": company_name})
-    
+        
     calculate_tax(doc)
     
     if (
         doc.custom_successfully_submitted == 0
-        and doc.custom_defer_etims_submission == 0
+        and doc.prevent_etims_submission == 0
         and doc.is_opening == "No"
         and settings_doc.sales_auto_submission_enabled
     ):

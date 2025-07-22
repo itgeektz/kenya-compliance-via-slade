@@ -2,10 +2,7 @@ from .kenya_compliance_via_slade.doctype.doctype_names_mapping import (
     IMPORTED_ITEMS_STATUS_DOCTYPE_NAME,
     ITEM_TYPE_DOCTYPE_NAME,
     PRODUCT_TYPE_DOCTYPE_NAME,
-    PURCHASE_RECEIPT_DOCTYPE_NAME,
     ROUTES_TABLE_DOCTYPE_NAME,
-    TRANSACTION_PROGRESS_DOCTYPE_NAME,
-    TRANSACTION_TYPE_DOCTYPE_NAME,
 )
 
 app_name = "kenya_compliance_via_slade"
@@ -20,35 +17,16 @@ required_apps = ["erpnext"]
 # Fixtures
 # --------
 fixtures = [
-    {"dt": TRANSACTION_TYPE_DOCTYPE_NAME},
-    {"dt": PURCHASE_RECEIPT_DOCTYPE_NAME},
     {"dt": IMPORTED_ITEMS_STATUS_DOCTYPE_NAME},
     {"dt": ROUTES_TABLE_DOCTYPE_NAME},
     {"dt": ITEM_TYPE_DOCTYPE_NAME},
     {"dt": PRODUCT_TYPE_DOCTYPE_NAME},
-    {
-        "dt": TRANSACTION_PROGRESS_DOCTYPE_NAME,
-        "filters": [
-            [
-                "name",
-                "in",
-                (
-                    "Wait for Approval",
-                    "Approved",
-                    "Cancel Requested",
-                    "Canceled",
-                    "Credit Note Generated",
-                    "Transferred",
-                ),
-            ]
-        ],
-    },
-    {
-        "dt": "Custom Field",
-        "filters": [
-            ["module", "=", "Kenya Compliance Via Slade"]
-        ],
-    },
+    # {
+    #     "dt": "Custom Field",
+    #     "filters": [
+    #         ["module", "=", "Kenya Compliance Via Slade"]
+    #     ],
+    # },
 ]
 
 # Includes in <head>
@@ -139,7 +117,7 @@ doctype_list_js = {
 # ------------
 
 # before_install = "kenya_compliance_via_slade.install.before_install"
-after_install = "kenya_compliance_via_slade.kenya_compliance_via_slade.patches.after_install.create_fields_and_links"
+# after_install = "kenya_compliance_via_slade.kenya_compliance_via_slade.patches.after_install.create_fields_and_links"
 
 # Uninstallation
 # ------------
@@ -284,6 +262,8 @@ scheduler_events = {
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.get_item_classification_codes",
     ],
 }
+
+after_migrate = ["kenya_compliance_via_slade.kenya_compliance_via_slade.patches.migrate_to_multi_company.execute"]
 
 # Testing
 # -------

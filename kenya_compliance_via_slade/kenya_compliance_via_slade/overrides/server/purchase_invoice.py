@@ -8,15 +8,12 @@ from ...apis.process_request import process_request
 from ...apis.remote_response_status_handlers import (
     purchase_invoice_submission_on_success,
 )
-from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
-from ...utils import get_taxation_types
+from ...utils import get_taxation_types, get_settings
 
 endpoints_builder = EndpointsBuilder()
 
 
 def validate(doc: Document, method: str = None) -> None:
-    if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
-        return
     get_itemised_tax_breakup_data(doc)
     if not doc.taxes:
         vat_acct = frappe.get_value(
@@ -42,11 +39,16 @@ def on_submit(doc: Document, method: str = None) -> None:
 
 
 def submit_purchase_invoice(doc: Document) -> None:
-    if doc.is_return == 0 and doc.update_stock == 1:
+    if doc.is_return == 0:
         # TODO: Handle cases when item tax templates have not been picked
 
-        if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
-            return
+        company_name = (
+            doc.company
+            or frappe.defaults.get_user_default("Company")
+            or frappe.get_value("Company", {}, "name")
+        )
+
+        settings_doc = get_settings(company_name=company_name)
 
         company_name = (
             doc.company
@@ -60,6 +62,7 @@ def submit_purchase_invoice(doc: Document) -> None:
             purchase_invoice_submission_on_success,
             request_method="POST",
             doctype="Purchase Invoice",
+            settings_name=settings_doc.name,
         )
 
 

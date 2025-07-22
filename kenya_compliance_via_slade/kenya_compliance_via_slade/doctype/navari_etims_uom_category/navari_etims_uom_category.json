@@ -10,7 +10,9 @@
   "slade_id",
   "column_break_wflh",
   "measure_type",
-  "active"
+  "active",
+  "section_break_sghp",
+  "etims_setup_mapping"
  ],
  "fields": [
   {
@@ -51,11 +53,21 @@
    "fieldname": "active",
    "fieldtype": "Check",
    "label": "Active"
+  },
+  {
+   "fieldname": "section_break_sghp",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "etims_setup_mapping",
+   "fieldtype": "Table",
+   "label": "eTims Setup Mapping",
+   "options": "eTims Slade360 ID Mapping"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-11 13:38:36.703388",
+ "modified": "2025-07-01 18:54:51.524521",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari eTims UOM Category",
@@ -75,6 +87,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "category_name,measure_type",
  "show_title_field_in_link": 1,
  "sort_field": "modified",

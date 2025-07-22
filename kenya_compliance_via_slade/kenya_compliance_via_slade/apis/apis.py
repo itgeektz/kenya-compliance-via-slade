@@ -2,27 +2,31 @@ import asyncio
 import json
 
 import aiohttp
-
 import frappe
 import frappe.defaults
 from frappe.model.document import Document
+from frappe.query_builder import DocType
 
+from ..background_tasks.task_response_handlers import (
+    operation_types_search_on_success,
+    uom_category_search_on_success,
+    uom_search_on_success,
+)
 from ..doctype.doctype_names_mapping import (
     COUNTRIES_DOCTYPE_NAME,
-    ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
     OPERATION_TYPE_DOCTYPE_NAME,
-    PACKAGING_UNIT_DOCTYPE_NAME,
     REGISTERED_PURCHASES_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
-    TAXATION_TYPE_DOCTYPE_NAME,
-    UNIT_OF_QUANTITY_DOCTYPE_NAME,
+    SLADE_ID_MAPPING_DOCTYPE_NAME,
     UOM_CATEGORY_DOCTYPE_NAME,
     USER_DOCTYPE_NAME,
 )
 from ..utils import (
     generate_custom_item_code_etims,
+    get_active_settings,
     get_link_value,
     get_settings,
+    get_slade360_id,
     make_get_request,
 )
 from .api_builder import EndpointsBuilder
@@ -31,17 +35,17 @@ from .remote_response_status_handlers import (
     customer_branch_details_submission_on_success,
     customer_search_on_success,
     customers_search_on_success,
+    fetch_matching_items_on_success,
+    fetch_matching_partner_on_success,
     imported_item_submission_on_success,
     imported_items_search_on_success,
     initialize_device_submission_on_success,
     item_composition_submission_on_success,
     item_price_update_on_success,
-    item_registration_on_success,
     item_search_on_success,
     mode_of_payment_on_success,
     pricelist_update_on_success,
     purchase_search_on_success,
-    search_branch_request_on_success,
     submit_inventory_on_success,
     update_invoice_info,
     user_details_fetch_on_success,
@@ -49,12 +53,6 @@ from .remote_response_status_handlers import (
 )
 
 endpoints_builder = EndpointsBuilder()
-from ..background_tasks.task_response_handlers import (
-    operation_types_search_on_success,
-    uom_category_search_on_success,
-    uom_search_on_success,
-)
-
 
 @frappe.whitelist()
 def bulk_submit_sales_invoices(docs_list: str) -> None:
@@ -71,38 +69,78 @@ def bulk_submit_sales_invoices(docs_list: str) -> None:
                 doc = frappe.get_doc("Sales Invoice", record, for_update=False)
                 frappe.enqueue(on_submit, doc=doc)
 
-
 @frappe.whitelist()
-def bulk_register_item(docs_list: str) -> None:
-    data = json.loads(docs_list)
-
-    for record in data:
-        is_registered = frappe.db.get_value("Item", record, "custom_sent_to_slade")
-        if is_registered == 0:
-            item_name = frappe.db.get_value("Item", record, "name")
-            frappe.enqueue(perform_item_registration, item_name=str(item_name))
-
-
-@frappe.whitelist()
-def update_all_items() -> None:
-    data = frappe.db.get_all(
-        "Item", filters={"custom_sent_to_slade": 1}, fields=["name"]
-    )
-
-    for record in data:
-        item_name = frappe.db.get_value("Item", record, "name")
-        frappe.enqueue(perform_item_registration, item_name=str(item_name))
+def bulk_register_items(docs_list: str, settings_name: str = None) -> None:
+    item_names = json.loads(docs_list)
+    settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    
+    for setting in settings:
+        for item_name in item_names:
+            frappe.enqueue(
+                perform_item_registration,
+                item_name=item_name,
+                settings_name=setting.name
+            )
 
 
 @frappe.whitelist()
-def register_all_items() -> None:
-    data = frappe.db.get_all(
-        "Item", filters={"custom_sent_to_slade": 0}, fields=["name"]
-    )
+def update_all_items(settings_name: str = None) -> None:
+    settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    
+    for setting in settings:
+        Item = DocType("Item")
+        Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
+        
+        items = (
+            frappe.qb.from_(Item)
+            .inner_join(Mapping)
+            .on(
+                (Mapping.parent == Item.name) &
+                (Mapping.parenttype == "Item") &
+                (Mapping.etims_setup == setting.name)
+            )
+            .select(Item.name)
+            .where(Item.custom_sent_to_slade == 1)
+            .run(as_dict=True)
+        )
+        
+        for item in items:
+            frappe.enqueue(
+                perform_item_registration,
+                item_name=item.name,
+                settings_name=setting.name,
+            )
 
-    for record in data:
-        item_name = frappe.db.get_value("Item", record, "name")
-        frappe.enqueue(perform_item_registration, item_name=str(item_name))
+@frappe.whitelist()
+def register_all_items(settings_name: str = None) -> None:
+    settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    
+    for setting in settings:
+        Item = DocType("Item")
+        Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
+        
+        items = (
+            frappe.qb.from_(Item)
+            .left_join(Mapping)
+            .on(
+                (Mapping.parent == Item.name) &
+                (Mapping.parenttype == "Item") &
+                (Mapping.etims_setup == setting.name)
+            )
+            .select(Item.name)
+            .where(
+                (Item.custom_sent_to_slade == 0) &
+                (Mapping.name.isnull())
+            )
+            .run(as_dict=True)
+        )
+        
+        for item in items:
+            frappe.enqueue(
+                perform_item_registration,
+                item_name=item.name,
+                settings_name=setting.name
+            )
 
 
 @frappe.whitelist()
@@ -122,16 +160,41 @@ def perform_customer_search(request_data: str) -> None:
 
 
 @frappe.whitelist()
-def perform_item_registration(item_name: str) -> dict | None:
+def perform_item_registration(item_name: str, settings_name: str) -> dict | None:
+    """Main function to handle item registration with SLADE"""
     item = frappe.get_doc("Item", item_name)
 
-    if item.custom_prevent_etims_registration or item.disabled:
-        return
+    if not is_item_eligible_for_registration(item):
+        return None
 
-    missing_fields = []
+    missing_fields = validate_required_fields(item)
+    if missing_fields:
+        return None
 
+    if not item.custom_item_code_etims:
+        generate_and_set_etims_code(item)
+    
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
+        request_data={"name": item.name, "document_name": item.name},
+        route_key="ItemsSearchReq",
+        handler_function=fetch_matching_items_on_success,
+        request_method="GET",
+        doctype="Item",
+        settings_name=settings_name,
+    )
+    
+    
+
+def is_item_eligible_for_registration(item) -> bool:
+    """Check if item meets basic registration criteria"""
+    return not (item.custom_prevent_etims_registration or item.disabled)
+
+def validate_required_fields(item) -> list:
+    """Validate required fields for item registration"""
     required_fields = [
-        # "custom_item_code_etims",
         "custom_item_classification",
         "custom_product_type",
         "custom_item_type",
@@ -140,193 +203,151 @@ def perform_item_registration(item_name: str) -> dict | None:
         "custom_unit_of_quantity",
         "custom_taxation_type",
     ]
+    return [field for field in required_fields if not item.get(field)]
 
-    for field in required_fields:
-        if not item.get(field):
-            missing_fields.append(field)
-
-    if missing_fields:
-        return
-    if not item.custom_item_code_etims:
-        item.custom_item_code_etims = generate_custom_item_code_etims(item)
-        frappe.db.set_value(
-            "Item", item.name, "custom_item_code_etims", item.custom_item_code_etims
-        )
-
-    tax = get_link_value(
-        TAXATION_TYPE_DOCTYPE_NAME, "cd", item.get("custom_taxation_type"), "slade_id"
+def generate_and_set_etims_code(item) -> None:
+    """Generate and set ETIMS code for item"""
+    item.custom_item_code_etims = generate_custom_item_code_etims(item)
+    frappe.db.set_value(
+        "Item", item.name, "custom_item_code_etims", item.custom_item_code_etims
     )
-    sent_to_slade = item.get("custom_sent_to_slade", False)
-    custom_slade_id = item.get("custom_slade_id", None)
-    selling_price = round(item.get("valuation_rate", 1), 2) or 1
-
-    request_data = {
-        "name": item.get("name"),
-        "document_name": item.get("name"),
-        "description": item.get("description"),
-        "can_be_sold": True if item.get("is_sales_item") == 1 else False,
-        "can_be_purchased": True if item.get("is_purchase_item") == 1 else False,
-        "company_name": frappe.defaults.get_user_default("Company"),
-        "code": item.get("item_code"),
-        "scu_item_code": item.get("custom_item_code_etims"),
-        "scu_item_classification": get_link_value(
-            ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
-            "itemclscd",
-            item.get("custom_item_classification"),
-            "slade_id",
-        ),
-        "product_type": item.get("custom_product_type"),
-        "item_type": item.get("custom_item_type"),
-        "preferred_name": item.get("item_name"),
-        "country_of_origin": item.get("custom_etims_country_of_origin_code"),
-        "packaging_unit": get_link_value(
-            PACKAGING_UNIT_DOCTYPE_NAME,
-            "code",
-            item.get("custom_packaging_unit"),
-            "slade_id",
-        ),
-        "quantity_unit": get_link_value(
-            UNIT_OF_QUANTITY_DOCTYPE_NAME,
-            "code",
-            item.get("custom_unit_of_quantity"),
-            "slade_id",
-        ),
-        "sale_taxes": [tax],
-        "selling_price": selling_price,
-        "purchasing_price": round(item.get("last_purchase_rate", 1), 2),
-        "categories": [],
-        "purchase_taxes": [],
-    }
-
-    if sent_to_slade and custom_slade_id:
-        request_data["id"] = custom_slade_id
-        process_request(
-            request_data,
-            "ItemsSearchReq",
-            item_registration_on_success,
-            request_method="PATCH",
-            doctype="Item",
-        )
-    else:
-        process_request(
-            request_data,
-            "ItemsSearchReq",
-            item_registration_on_success,
-            request_method="POST",
-            doctype="Item",
-        )
+    frappe.db.commit()
 
 
 @frappe.whitelist()
-def fetch_item_details(request_data: str) -> None:
+def fetch_item_details(request_data: str, settings_name: str) -> None:
     process_request(
-        request_data, "ItemSearchReq", item_search_on_success, doctype="Item"
+        request_data, "ItemSearchReq", item_search_on_success, doctype="Item", settings_name=settings_name
     )
 
 
 @frappe.whitelist()
-def submit_all_suppliers() -> None:
-    suppliers: list[Document] = frappe.get_all(
-        "Supplier",
-        {
-            "custom_details_submitted_successfully": 0,
-        },
-        ["name"],
-    )
-    for supplier in suppliers:
-        frappe.enqueue(
-            send_branch_customer_details, name=supplier.name, is_customer=False
+def submit_all_suppliers(settings_name: str = None) -> None:
+    active_settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    for setting in active_settings:
+        
+        Supplier = DocType("Supplier")
+        Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
+        
+        query = (
+            frappe.qb.from_(Supplier)
+            .left_join(Mapping)
+            .on(
+                (Mapping.parent == Supplier.name) & 
+                (Mapping.parenttype == "Supplier") & 
+                (Mapping.etims_setup == setting.name)
+            )
+            .select(Supplier.name)
+            .where(
+                (Mapping.name.isnull())
+            )
         )
+        
+        suppliers = query.run(as_dict=True)
+                
+        for supplier in suppliers:
+            frappe.enqueue(
+                send_branch_customer_details, 
+                settings_name=setting.name, 
+                name=supplier.name, 
+                is_customer=False
+            )
+
+            
+            
+@frappe.whitelist()
+def bulk_submit_suppliers(docs_list: str, settings_name: str = None) -> None:
+    suppliers = json.loads(docs_list)
+    settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    
+    for setting in settings:
+        for supplier in suppliers:
+            frappe.enqueue(
+                send_branch_customer_details,
+                name=supplier, 
+                is_customer=False,
+                settings_name=setting.name
+            )
+            
+            
+@frappe.whitelist()
+def bulk_submit_customers(docs_list: str, settings_name: str = None) -> None:
+    customers = json.loads(docs_list)
+    settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    
+    for setting in settings:
+        for customer in customers:
+            frappe.enqueue(
+                send_branch_customer_details,
+                name=customer, 
+                is_customer=True,
+                settings_name=setting.name
+            )
+
+@frappe.whitelist()
+def submit_all_customers(settings_name: str = None) -> None:
+    active_settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    for setting in active_settings:
+        
+        Customer = DocType("Customer")
+        Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
+        
+        query = (
+            frappe.qb.from_(Customer)
+            .left_join(Mapping)
+            .on(
+                (Mapping.parent == Customer.name) & 
+                (Mapping.parenttype == "Customer") & 
+                (Mapping.etims_setup == setting.name)
+            )
+            .select(Customer.name)
+            .where( 
+                (Mapping.name.isnull())
+            )
+        )
+        
+        customers = query.run(as_dict=True)
+        
+        for customer in customers:
+            frappe.enqueue(
+                send_branch_customer_details, 
+                settings_name=setting.name, 
+                name=customer.name
+            )
 
 
 @frappe.whitelist()
-def submit_all_customers() -> None:
-    customers: list[Document] = frappe.get_all(
-        "Customer",
-        {
-            "custom_details_submitted_successfully": 0,
-        },
-        ["name"],
-    )
-    for customer in customers:
-        frappe.enqueue(send_branch_customer_details, name=customer.name)
-
-
-@frappe.whitelist()
-def send_branch_customer_details(name: str, is_customer: bool = True) -> None:
+def send_branch_customer_details(name: str, settings_name: str, is_customer: bool = True) -> None:
     doctype = "Customer" if is_customer else "Supplier"
     data = frappe.get_doc(doctype, name)
+    
+    if hasattr(data, 'disabled') and data.disabled:
+        return
 
-    payload = {
-        "document_name": name,
-        "currency": data.get("default_currency") or "KES",
-        "country": "KEN",
-    }
-
-    patner_type_mapping = {
-        "Company": "CORPORATE",
-        "Individual": "INDIVIDUAL",
-        "Partnership": "CORPORATE",
-    }
-
-    if is_customer:
-        customer_type = data.get("customer_type")
-        mapped_customer_type = patner_type_mapping.get(customer_type, customer_type)
-
-        payload.update(
-            {
-                "is_customer": True,
-                "customer_tax_pin": data.get("tax_id"),
-                "partner_name": data.get("customer_name"),
-                "phone_number": data.get("mobile_no"),
-                "customer_type": mapped_customer_type,
-            }
-        )
-    else:
-        supplier_type = data.get("supplier_type")
-        mapped_supplier_type = patner_type_mapping.get(supplier_type, supplier_type)
-
-        payload.update(
-            {
-                "customer_tax_pin": data.get("tax_id"),
-                "partner_name": data.get("supplier_name"),
-                "is_supplier": True,
-                "supplier_type": mapped_supplier_type,
-            }
-        )
-
-    phone_number = (data.get("phone_number") or "").replace(" ", "").strip()
-    payload["phone_number"] = (
-        "+254" + phone_number[-9:] if len(phone_number) >= 9 else None
-    )
-
-    currency_name = payload.get("currency")
-
-    if currency_name:
-        payload["currency"] = frappe.get_value(
-            "Currency", currency_name, "custom_slade_id"
-        )
-
-    process_request(
-        json.dumps(payload),
-        "BhfCustSaveReq",
-        customer_branch_details_submission_on_success,
-        request_method="POST",
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
+        request_data={"partner_name": name, "document_name": name},
+        route_key="BhfCustSaveReq",
+        handler_function=fetch_matching_partner_on_success,
+        request_method="GET",
         doctype=doctype,
+        settings_name=settings_name,
+    )
+    
+
+@frappe.whitelist()
+def search_customers_request(request_data: str, settings_name: str,) -> None:
+    return process_request(
+        request_data, "CustomersSearchReq", customers_search_on_success, settings_name=settings_name
     )
 
 
 @frappe.whitelist()
-def search_customers_request(request_data: str) -> None:
+def get_customer_details(request_data: str, settings_name: str,) -> None:
     return process_request(
-        request_data, "CustomersSearchReq", customers_search_on_success
-    )
-
-
-@frappe.whitelist()
-def get_customer_details(request_data: str) -> None:
-    return process_request(
-        request_data, "CustomerSearchReq", customers_search_on_success
+        request_data, "CustomerSearchReq", customers_search_on_success, settings_name=settings_name
     )
 
 
@@ -387,21 +408,21 @@ def create_branch_user() -> None:
 
 
 @frappe.whitelist()
-def perform_item_search(request_data: str) -> None:
-    data: dict = json.loads(request_data)
+def perform_item_search(request_data: str, settings_name: str) -> None:
 
     process_request(
-        request_data, "ItemsSearchReq", item_search_on_success, doctype="Item"
+        request_data, "ItemsSearchReq", item_search_on_success, doctype="Item", settings_name=settings_name
     )
 
 
 @frappe.whitelist()
-def perform_import_item_search(request_data: str) -> None:
+def perform_import_item_search(request_data: str, settings_name: str) -> None:
     process_request(
         request_data,
         "ImportItemSearchReq",
         imported_items_search_on_success,
         doctype="Item",
+        settings_name=settings_name,
     )
 
 
@@ -417,7 +438,7 @@ def perform_import_item_search_all_branches() -> None:
             {"company_name": credential.company, "branch_code": credential.bhfid}
         )
 
-        perform_import_item_search(request_data)
+        perform_import_item_search(request_data, settings_name=credential.name)
 
 
 @frappe.whitelist()
@@ -439,27 +460,44 @@ def perform_purchase_search(request_data: str) -> None:
         doctype=REGISTERED_PURCHASES_DOCTYPE_NAME,
     )
 
-
 @frappe.whitelist()
-def send_entire_stock_balance() -> None:
-    all_items = frappe.get_all(
-        "Item",
-        filters={"is_stock_item": 1, "custom_sent_to_slade": 1},
-        fields=["name", "item_code", "item_name"],
+def send_entire_stock_balance(settings_name: str) -> None:
+    Item = frappe.qb.DocType("Item")
+    Mapping = frappe.qb.DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
+    
+    query = (
+        frappe.qb.from_(Item)
+        .inner_join(Mapping)
+        .on(
+            (Mapping.parent == Item.name) &
+            (Mapping.parenttype == "Item") &
+            (Mapping.etims_setup == settings_name)
+        )
+        .select(Item.name, Item.item_code, Item.item_name)
+        .where(
+            (Item.is_stock_item == 1) &
+            (Item.custom_sent_to_slade == 1)
+        )
     )
-
-    for item in all_items:
-        frappe.enqueue(submit_inventory, name=item.name)
+    
+    items = query.run(as_dict=True)
+    
+    for item in items:
+        frappe.enqueue(
+            submit_inventory,
+            name=item.name,
+            settings_name=settings_name
+        )
 
 
 @frappe.whitelist()
-def submit_inventory(name: str) -> None:
+def submit_inventory(name: str, settings_name: str) -> None:
     # TODO: Redesign this function to work with the new structure for Stock Submission
     # pass
     if not name:
         frappe.throw("Item name is required.")
 
-    settings = get_settings()
+    settings = get_settings(settings_name=settings_name)
 
     request_data = {
         "document_name": name,
@@ -469,13 +507,13 @@ def submit_inventory(name: str) -> None:
         "source_organisation_unit": get_link_value(
             "Department",
             "name",
-            settings.department,
+            settings.organisation_mapping[0].department,
             "custom_slade_id",
         ),
         "location": get_link_value(
             "Warehouse",
             "name",
-            settings.get("warehouse"),
+            settings.organisation_mapping[0].get("warehouse"),
             "custom_slade_id",
         ),
     }
@@ -485,6 +523,7 @@ def submit_inventory(name: str) -> None:
         handler_function=submit_inventory_on_success,
         request_method="POST",
         doctype="Item",
+        settings_name=settings_name,
     )
 
 
@@ -518,13 +557,6 @@ def update_stock_quantity(name: str, id: str) -> None:
             request_method="PATCH",
             doctype="Item",
         )
-
-
-@frappe.whitelist()
-def search_branch_request(request_data: str) -> None:
-    return process_request(
-        request_data, "BhfSearchReq", search_branch_request_on_success, doctype="Branch"
-    )
 
 
 @frappe.whitelist()
@@ -841,12 +873,13 @@ def initialize_device(request_data: str) -> None:
 
 @frappe.whitelist()
 def get_invoice_details(
-    id: str = None, document_name: str = None, invoice_type: str = "Sales Invoice"
+    id: str = None, document_name: str = None, invoice_type: str = "Sales Invoice", settings_name: str = None, company: str = None
 ) -> None:
     invoice = frappe.get_doc(invoice_type, document_name)
 
     request_data = {
         "document_name": document_name,
+        "company": company or invoice.company,
     }
     route_key = "TrnsSalesSearchReq"
     if invoice.is_return:
@@ -866,6 +899,8 @@ def get_invoice_details(
         route_key,
         update_invoice_info,
         doctype=invoice_type,
+        settings_name=settings_name,
+        company=company,
     )
 
 
@@ -1179,37 +1214,38 @@ def sync_operation_type(request_data: str) -> None:
 
 
 @frappe.whitelist()
-def send_all_mode_of_payments() -> None:
-    mode_of_payments = frappe.get_all(
-        "Mode of Payment",
-        filters={"custom_slade_id": ["is", "not set"]},
-        fields=["name"],
-    )
+def send_all_mode_of_payments(settings_name: str) -> None:
+    mode_of_payments = frappe.get_all("Mode of Payment", fields=["name"])
+    
     for mop in mode_of_payments:
-        frappe.enqueue(send_mode_of_payment_details, name=mop.name)
+        send_mode_of_payment_details(mop.name, settings_name)
+            
 
 
 @frappe.whitelist()
-def send_mode_of_payment_details(name: str) -> dict | None:
+def send_mode_of_payment_details(name: str, settings_name: str) -> dict | None:
     route_key = "AccountsSearchReq"
     on_success = reaceavable_accouct_search_on_success
-    # fetch the reaceavable account to link to the mode of payment
     request_data = {
         "number": "1000-0001",
         "document_name": name,
     }
-
-    process_request(
-        request_data,
+    
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
+        doctype="Mode of Payment",
+        request_data=request_data,
         route_key=route_key,
         handler_function=on_success,
         request_method="GET",
-        doctype="Mode of Payment",
+        settings_name=settings_name,
     )
 
 
 def reaceavable_accouct_search_on_success(
-    response: dict, document_name: str, **kwargs
+    response: dict, document_name: str, settings_name: str, **kwargs
 ) -> None:
     if isinstance(response, str):
         try:
@@ -1236,4 +1272,5 @@ def reaceavable_accouct_search_on_success(
         handler_function=mode_of_payment_on_success,
         request_method="POST",
         doctype="Mode of Payment",
+        settings_name=settings_name,
     )

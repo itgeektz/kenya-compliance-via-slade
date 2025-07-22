@@ -6,13 +6,13 @@ frappe.ui.form.on(doctype, {
     const companyName = frappe.boot.sysdefaults.company;
     const { message: activeSetting } = await frappe.call({
       method:
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_setting",
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_settings",
       args: {
         doctype: settingsDoctypeName,
       },
     });
 
-    if (activeSetting?.message?.name) {
+    if (activeSetting?.length > 0) {
       frm.add_custom_button(
         __("Get Imported Items"),
         function () {

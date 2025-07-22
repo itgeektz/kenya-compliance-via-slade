@@ -8,6 +8,7 @@ from base64 import b64encode
 from datetime import datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 from io import BytesIO
+from typing import Any, Dict, List, Union
 from urllib.parse import urlencode
 
 import aiohttp
@@ -17,16 +18,21 @@ from aiohttp import ClientTimeout
 
 import frappe
 from frappe import _
-from frappe.model.document import Document
 from frappe.integrations.utils import create_request_log
-
+from frappe.model.document import Document
 from frappe.query_builder import DocType
 
 from .doctype.doctype_names_mapping import (
     ENVIRONMENT_SPECIFICATION_DOCTYPE_NAME,
+    ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
+    ORGANISATION_MAPPING_DOCTYPE_NAME,
+    PACKAGING_UNIT_DOCTYPE_NAME,
     ROUTES_TABLE_CHILD_DOCTYPE_NAME,
     ROUTES_TABLE_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
+    SLADE_ID_MAPPING_DOCTYPE_NAME,
+    TAXATION_TYPE_DOCTYPE_NAME,
+    UNIT_OF_QUANTITY_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
 from .logger import etims_logger
@@ -222,8 +228,8 @@ def get_current_environment_state(
     return environment
 
 
-def get_server_url(company_name: str, branch_id: str = "00") -> str | None:
-    settings = get_settings(company_name, branch_id)
+def get_server_url(company_name: str, branch_id: str = "00", settings_name: str = None) -> str | None:
+    settings = get_settings(company_name, branch_id, settings_name)
 
     if settings:
         server_url = settings.get("server_url")
@@ -233,7 +239,7 @@ def get_server_url(company_name: str, branch_id: str = "00") -> str | None:
     return
 
 
-def build_headers(company_name: str, branch_id: str) -> dict[str, str] | None:
+def build_headers(company_name: str, branch_id: str, settings_name: str = None) -> dict[str, str] | None:
     """
     Build headers for Slade360 API requests.
     Checks for token validity and refreshes the token if expired.
@@ -245,7 +251,7 @@ def build_headers(company_name: str, branch_id: str) -> dict[str, str] | None:
     Returns:
         dict[str, str] | None: The headers including the refreshed token or None if failed.
     """
-    settings = get_settings(company_name, branch_id)
+    settings = get_settings(company_name, branch_id, settings_name)
 
     if settings:
         access_token = settings.get("access_token")
@@ -269,14 +275,6 @@ def build_headers(company_name: str, branch_id: str) -> dict[str, str] | None:
 
             access_token = new_settings.access_token
 
-        logged_user = frappe.session.user
-        user_data = frappe.db.get_value(
-            "Navari eTims User",
-            {"system_user": logged_user},
-            ["workstation"],
-            as_dict=True,
-        )
-
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
@@ -284,12 +282,13 @@ def build_headers(company_name: str, branch_id: str) -> dict[str, str] | None:
         }
 
         workstation = None
-        if settings and settings.get("workstation"):
-            workstation = settings.get("workstation")
-        elif user_data and user_data.get("workstation"):
-            workstation = user_data.get("workstation")
+        if company_name:
+            mapping = next((m for m in settings.get("organisation_mapping", []) 
+                  if m.get("company") == company_name), None)
+            if mapping:
+                workstation = frappe.db.get_value(WORKSTATION_DOCTYPE_NAME, {"name": mapping.get("workstation")}, "slade_id")
 
-        if workstation:
+        if workstation: 
             headers["X-Workstation"] = workstation
 
         return headers
@@ -297,7 +296,7 @@ def build_headers(company_name: str, branch_id: str) -> dict[str, str] | None:
     return None
 
 
-def get_settings(company_name: str = None, branch_id: str = None) -> dict | None:
+def get_settings(company_name: str = None, branch_id: str = None, settings_name: str = None) -> dict | None:
     """Fetch settings for a given company and branch.
 
     Args:
@@ -307,28 +306,27 @@ def get_settings(company_name: str = None, branch_id: str = None) -> dict | None
     Returns:
         dict | None: The settings if found, otherwise None.
     """
+    if settings_name:
+        if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"name": settings_name}):
+            return frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name).as_dict()
+        
     company_name = (
         company_name
         or frappe.defaults.get_user_default("Company")
         or frappe.get_value("Company", {}, "name")
     )
-    branch_id = (
-        branch_id
-        or frappe.defaults.get_user_default("Branch")
-        or frappe.get_value("Branch", {}, "name")
-    )
-
     if frappe.db.exists(
-        SETTINGS_DOCTYPE_NAME, 
-        {"company": company_name, "bhfid": branch_id, "is_active": 1}
+        ORGANISATION_MAPPING_DOCTYPE_NAME, 
+        {"company": company_name, "is_active": 1}
     ):
-        settings = frappe.db.get_value(
-            SETTINGS_DOCTYPE_NAME,
-            {"company": company_name, "bhfid": branch_id, "is_active": 1},
-            "*",
+        mapping = frappe.db.get_value(
+            ORGANISATION_MAPPING_DOCTYPE_NAME,
+            {"company": company_name, "is_active": 1},
+            "parent",
             as_dict=True,
         )
-        return settings
+        if mapping and mapping.parent:
+            return frappe.get_doc(SETTINGS_DOCTYPE_NAME, mapping.parent).as_dict()
     
     if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
         settings = frappe.db.get_value(
@@ -393,8 +391,8 @@ def build_invoice_payload(
             "document_name": invoice.name,
             "reference_number": invoice.name,
             "sales_type": "credit",
-            "customer_pin": frappe.get_value("Customer", invoice.customer, "tax_id") or "None",
-            "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name") or "None",
+            "customer_pin": frappe.get_value("Customer", invoice.customer, "tax_id") or None,
+            "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name") or None,
             "itemDetails": []
         }
         
@@ -405,11 +403,12 @@ def build_invoice_payload(
             # converted_tax_amount = round(tax_amount * conversion_rate, 4) if tax_amount else 0
             qty = abs(item.get("qty"))
             base_net_rate = round(item.get("base_net_rate") or 0, 4)
-            tax_code = (item.item_tax_template and frappe.get_value("Item Tax Template", item.item_tax_template, "custom_etims_taxation_type")) or frappe.get_value("Item", item.item_code, "custom_taxation_type")
+            discount = round(item.get("discount_amount") or 0, 4)
+            tax_code = item.get("taxation_type_code", "A") or "A"
             payload["itemDetails"].append({
                 "product_name": item.item_code,
                 "unit_price": round(base_net_rate + (tax_amount / qty if qty else 0), 4),
-                "discount": round(item.discount_amount, 4) or 0,
+                # "discount": discount,
                 "quantity": qty,
                 "uom": item.uom or "Pcs",
                 "tax_code": tax_code
@@ -639,32 +638,101 @@ def split_user_email(email_string: str) -> str:
 
 
 def calculate_tax(doc: "Document") -> None:
-    """Calculate tax for each item in the document based on item-level or document-level tax template."""
+    """
+    Calculate tax for each item in the document using either:
+    - Item-level tax templates (if any item has one), or
+    - Document-level taxes (if no items have tax templates)
+    Then set taxation type codes for all items.
+    """
+    taxes = doc.get("taxes", [])
+    has_item_level_tax = any(item.item_tax_template for item in doc.items)
+    
+    if has_item_level_tax:
+        _calculate_item_level_taxes(doc)
+    elif taxes:
+        _calculate_document_level_taxes(doc, taxes)
+    
+    _set_taxation_type_codes(doc)
+
+
+def _calculate_item_level_taxes(doc: "Document") -> None:
+    """Calculate taxes using each item's individual tax template"""
     for item in doc.items:
-        tax: float = 0
-        tax_rate: float | None = None
-
-        # Check if the item has its own Item Tax Template
-        if item.item_tax_template:
-            tax_rate = get_item_tax_rate(item.item_tax_template)
-        else:
-            continue
-
-        # Calculate tax if we have a valid tax rate
-        if tax_rate is not None:
-            tax = item.base_net_amount * tax_rate / 100
-
-        # Set the custom tax fields in the item
-        item.custom_tax_amount = tax
+        tax_rate = get_item_tax_rate(item.item_tax_template) if item.item_tax_template else None
+        tax_amount = item.base_net_amount * tax_rate / 100 if tax_rate else 0
+        
+        item.custom_tax_amount = tax_amount
         item.custom_tax_rate = tax_rate if tax_rate else 0
 
 
-def get_item_tax_rate(item_tax_template: str) -> float | None:
-    """Fetch the combined tax rate from the Item Tax Template."""
+def _calculate_document_level_taxes(doc: "Document", taxes: list) -> None:
+    """
+    Distribute document-level taxes proportionally across all items.
+    Tax rates are calculated from the distributed tax amount and item net amount.
+    """
+    total_net_amount = sum(item.base_net_amount for item in doc.items)
+    if total_net_amount == 0:
+        return
+    
+    total_tax_amount = sum(tax.tax_amount for tax in taxes)
+    
+    for item in doc.items:
+        item_ratio = item.base_net_amount / total_net_amount
+        item.custom_tax_amount = total_tax_amount * item_ratio
+        
+        if item.base_net_amount > 0:
+            item.custom_tax_rate = (item.custom_tax_amount / item.base_net_amount) * 100
+        else:
+            item.custom_tax_rate = 0
+
+
+def get_item_tax_rate(item_tax_template: str) -> float:
+    """Return the sum of all tax rates in the given Item Tax Template"""
     tax_template = frappe.get_doc("Item Tax Template", item_tax_template)
-    if tax_template.taxes:
-        return sum(tax.tax_rate for tax in tax_template.taxes)
-    return None
+    return sum(tax.tax_rate for tax in tax_template.taxes) if tax_template.taxes else 0
+
+
+def _set_taxation_type_codes(doc: "Document") -> None:
+    """
+    Determine taxation type code for each item using this priority:
+    1. From item's tax template (if exists)
+    2. From item master data
+    3. Based on tax rate (B for ≥16%, E for ≥8%, A for 0%)
+    4. Default to B if none of the above apply
+    """
+    for item in doc.items:
+        item.taxation_type_code = (
+            _get_taxation_type_from_template(item) or
+            _get_taxation_type_from_item(item) or
+            _get_taxation_type_from_rate(item) or
+            "B"
+        )
+
+
+def _get_taxation_type_from_template(item) -> str:
+    """Get taxation type from item's tax template if available"""
+    if item.item_tax_template:
+        return frappe.get_value("Item Tax Template", item.item_tax_template, "custom_etims_taxation_type")
+    return ""
+
+
+def _get_taxation_type_from_item(item) -> str:
+    """Get taxation type from item master data if available"""
+    return frappe.get_value("Item", item.item_code, "custom_taxation_type") or ""
+
+
+def _get_taxation_type_from_rate(item) -> str:
+    """Determine taxation type based on item's tax rate"""
+    if not hasattr(item, 'custom_tax_rate'):
+        return ""
+    
+    if item.custom_tax_rate >= 16:
+        return "B"
+    if item.custom_tax_rate >= 8:
+        return "E"
+    if item.custom_tax_rate == 0:
+        return "A"
+    return ""
 
 
 """Uncomment this function if you need document-level tax rate calculation in the future
@@ -842,73 +910,168 @@ def user_details_fetch(document_name: str, **kwargs) -> None:
 
     request_data = {"document_name": document_name}
 
-    process_request(
+    return process_request(
         request_data,
         "BhfUserSearchReq",
         user_details_fetch_on_success,
         request_method="GET",
+        settings_name=document_name,
         doctype=SETTINGS_DOCTYPE_NAME,
     )
-
-
+    
 @frappe.whitelist()
 def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) -> None:
     settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, document_name)
+    default_company = settings_doc.company  
+    
     result = response.get("results", [])[0] if response.get("results") else response
+    user_workstations = result.get("user_workstations") or []
+    organisation_id = result.get("organisation_id")
 
-    workstation = (
-        result.get("user_workstations")[0]["workstation"]
-        if result.get("user_workstations") and len(result.get("user_workstations")) > 0
-        else None
+    if not user_workstations:
+        frappe.throw("No user workstations found in response.")
+
+    existing_mappings = {
+        mapping.workstation: mapping 
+        for mapping in settings_doc.get("organisation_mapping", [])
+    }
+
+    processed_companies = set()  
+    for workstation_entry in user_workstations:
+        workstation_id = workstation_entry.get("workstation")
+        cluster_id = workstation_entry.get("workstation__org_unit__parent__parent")
+        
+        if not workstation_id or not cluster_id:
+            continue
+
+        workstation_link = get_link_value(WORKSTATION_DOCTYPE_NAME, "slade_id", workstation_id)
+        if not workstation_link:
+            continue
+
+        company_link = get_company_from_setup_mapping(cluster_id, document_name) or default_company
+        
+        if not company_link:
+            continue
+
+        branch_id = workstation_entry.get("workstation__org_unit__parent")
+        branch_link = frappe.db.get_value("Branch", {"slade_id": branch_id, "company": company_link}, "name") if branch_id else None
+        
+        department_id = workstation_entry.get("workstation__org_unit")
+        department_link = get_department(department_id, company_link) if department_id else None
+        
+        warehouse_link = get_default_warehouse(company_link)
+
+        cluster_name = workstation_entry.get("workstation__org_unit__parent__parent__name")
+
+        mapping_data = {
+            "workstation": workstation_link,
+            "organisation": organisation_id,
+            "cluster": cluster_id,
+            "cluster_name": cluster_name,
+            "department": department_link,
+            "company": company_link,
+            "branch": branch_link,
+            "warehouse": warehouse_link,
+            "is_active": 1
+        }
+
+        if workstation_link in existing_mappings:
+            update_existing_mapping(settings_doc.name, workstation_link, mapping_data)
+        else:
+            settings_doc.append("organisation_mapping", mapping_data)
+            processed_companies.add(company_link)  
+            settings_doc.save(ignore_permissions=True)
+        
+    update_company_slade_ids(processed_companies, organisation_id, settings_doc.name)
+        
+    frappe.db.commit()
+
+def get_company_from_setup_mapping(cluster_id: str, setup_name: str) -> str:
+    """Get company from active eTims Setup Mapping that matches cluster and setup"""
+    mappings = frappe.get_all(
+        "eTims Company Setup Mapping",
+        filters={
+            "etims_setup": setup_name,
+            "cluster": cluster_id,
+            "parenttype": "Company",
+            "is_active": 1
+        },
+        fields=["parent"],
+        distinct=True
     )
+    
+    return mappings[0].parent if mappings else None
 
-    branch_id = (
-        result.get("user_workstations")[0]["workstation__org_unit__parent"]
-        if result.get("user_workstations") and len(result.get("user_workstations")) > 0
-        else None
+def get_default_warehouse(company: str) -> str:
+    """Get default warehouse for company"""
+    warehouses = frappe.get_all(
+        "Warehouse",
+        filters={
+            "is_group": 1,
+            "company": company
+        },
+        fields=["name"],
+        limit=1
     )
+    return warehouses[0].name if warehouses else None
 
-    department_id = (
-        result.get("user_workstations")[0]["workstation__org_unit"]
-        if result.get("user_workstations") and len(result.get("user_workstations")) > 0
-        else None
+def update_existing_mapping(parent: str, workstation: str, data: dict) -> None:
+    """Update existing organisation mapping"""
+    mapping_name = frappe.get_value(
+        ORGANISATION_MAPPING_DOCTYPE_NAME,
+        filters={
+            "parent": parent,
+            "workstation": workstation
+        },
+        fieldname="name"
     )
-
-    company = frappe.defaults.get_user_default("Company") or frappe.get_value(
-        "Company", {}, "name"
-    )
-
-    if company:
-        frappe.db.set_value(
-            "Company", company, "custom_slade_id", result.get("organisation_id")
+    
+    if mapping_name:
+        frappe.db.set_value(ORGANISATION_MAPPING_DOCTYPE_NAME, mapping_name, data, update_modified=False)
+        
+def update_company_slade_ids(companies: set, organisation_id: str, setting_name: str) -> None:
+    for company in companies:
+        if not frappe.db.exists("Company", company):
+            continue
+      
+        company_doc = frappe.get_doc("Company", company)
+      
+        existing_mapping = next(
+            (m for m in company_doc.get("etims_setup_mapping", []) 
+            if m.etims_setup == setting_name),
+            None
         )
-        settings_doc.company = company
+        
+        if existing_mapping:
+            frappe.db.set_value(
+                "eTims Company Setup Mapping",
+                existing_mapping.name,
+                {
+                    "organisation": organisation_id,
+                    "is_active": 1
+                }
+            )
+        else:
+            company_doc.append("etims_setup_mapping", {
+                "etims_setup": setting_name,
+                "organisation": organisation_id,
+                "is_active": 1
+            })
+            
+        if not existing_mapping:
+            company_doc.save(ignore_permissions=True)
+            
 
-    workstation_link = get_link_value(WORKSTATION_DOCTYPE_NAME, "slade_id", workstation)
-    if workstation_link:
-        settings_doc.workstation = workstation_link
-
-    branch_link = get_link_value("Branch", "slade_id", branch_id)
-    if branch_link:
-        settings_doc.bhfid = branch_link
-
-    department_link = get_department(department_id)
-
-    if department_link:
-        settings_doc.department = department_link
-
-    settings_doc.save(ignore_permissions=True)
-
-
-def get_department(id: str) -> str:
-    department_name = "eTims Department"
+def get_department(id: str, company: str) -> str:
+    department_name = f"{company} - eTims Department"
     existing_department = frappe.db.get_value(
         "Department", {"department_name": department_name}, "name"
     )
     if existing_department:
         frappe.db.set_value("Department", existing_department, {
             "custom_slade_id": id,
-            "custom_is_etims_department": 1
+            "custom_is_etims_department": 1,
+            "company": company
         })
         return existing_department
     else:
@@ -916,7 +1079,8 @@ def get_department(id: str) -> str:
             "doctype": "Department",
             "department_name": department_name,
             "custom_slade_id": id,
-            "custom_is_etims_department": 1
+            "custom_is_etims_department": 1,
+            "company": company,
         }).insert(ignore_permissions=True, ignore_mandatory=True)
         return new_department.name
 
@@ -1152,22 +1316,272 @@ def reset_auth_password(docname: str) -> None:
             "error": str(e)
         }, update_modified=False)
         frappe.throw(f"Password update request failed: <b>{e}</b>")
+        
+
+@frappe.whitelist()
+def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME) -> list[dict]:
+    try:
+        results = frappe.get_all(
+            doctype,
+            filters={"is_active": 1},
+            fields=["name", "company"],
+            ignore_permissions=True  
+        )
+        return results
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), _("Failed to get active settings"))
+        frappe.throw(_("An error occurred while fetching settings"))
+
+
+def get_slade360_id(doctype: str, name: str, setting: str) -> str:        
+    if not frappe.db.exists(doctype, name):
+        frappe.throw(_("Document {0} with name {1} does not exist.").format(doctype, name))
+    
+    slade_id = frappe.db.get_value(
+        SLADE_ID_MAPPING_DOCTYPE_NAME,
+        filters={
+            "etims_setup": setting,
+            "parenttype": doctype,
+            "parent": name
+        },
+        fieldname="slade360_id"
+    )
+    
+    return slade_id
+
+
+def get_parent_by_slade360_id(doctype: str, slade360_id: str, setting: str) -> str:
+    """Returns the parent document name for a given Slade360 ID.
+    
+    Args:
+        doctype (str): The parent doctype
+        slade360_id (str): The Slade360 ID to search for
+        setting (str): The eTims setting name
+        
+    Returns:
+        str: The parent document name if found, None otherwise
+    """
+    parent_name = frappe.db.get_value(
+        SLADE_ID_MAPPING_DOCTYPE_NAME,
+        filters={
+            "etims_setup": setting,
+            "parenttype": doctype,
+            "slade360_id": slade360_id
+        },
+        fieldname="parent"
+    )
+    
+    return parent_name
+
 
 
 @frappe.whitelist()
-def get_active_setting(doctype):
+def get_etims_action_data(doctype: str, docname: str = None) -> dict[str, Any]:
+    active_settings = get_active_settings()
+    if not docname:
+        return {
+            "settings": active_settings,
+            "has_mappings": False,
+            "registered_mappings": [],
+            "unregistered_settings": []
+        }
     try:
-        result = frappe.get_all(
-            doctype,
-            filters={"is_active": 1},
-            fields=["name"],
-            limit=1,
-            ignore_permissions=True  
-        )
-        if result:
-            return {"message": result[0]}
-        else:
-            return {"message": None}
-    except Exception as e:
-        frappe.log_error(frappe.get_traceback(), _("Failed to get active setting"))
-        frappe.throw(_("An error occurred while fetching settings"))
+        doc = frappe.get_doc(doctype, docname)
+    except frappe.DoesNotExistError:
+        frappe.throw(f"{doctype} '{docname}' does not exist.")
+
+
+    if not active_settings:
+        return {
+            "settings": [],
+            "has_mappings": False,
+            "registered_mappings": [],
+            "unregistered_settings": []
+        }
+
+    active_setting_names = [s["name"] for s in active_settings]
+
+    registered_mappings = []
+    registered_setup_names = set()
+
+    for row in getattr(doc, "etims_setup_mapping", []):
+        if row.etims_setup in active_setting_names:
+            registered_mappings.append({
+                "etims_setup": row.etims_setup,
+                "slade360_id": row.slade360_id,
+                "name": row.name
+            })
+            registered_setup_names.add(row.etims_setup)
+
+    unregistered_settings = [
+        s for s in active_settings if s["name"] not in registered_setup_names
+    ]
+
+    return {
+        "settings": active_settings,
+        "has_mappings": bool(registered_mappings),
+        "registered_mappings": registered_mappings,
+        "unregistered_settings": unregistered_settings
+    }
+
+
+def parse_response_data(
+    response: Union[str, bytes, dict, list], 
+    expected_type: type = list
+) -> Union[List[Any], Dict[str, Any], Any]:
+    """Parse and convert response data to expected type using standard json.
+    
+    Args:
+        response: Input data (JSON string, bytes, or Python object)
+        expected_type: Desired output type (list, dict, or other)
+        
+    Returns:
+        Data converted to expected type
+        
+    Raises:
+        ValueError: If JSON parsing fails
+        TypeError: If type conversion fails
+    """
+    if isinstance(response, (str, bytes)):
+        try:
+            response = json.loads(response)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {str(e)}") from e
+    
+    if response is None:
+        return expected_type()
+    
+    try:
+        if expected_type is list:
+            if isinstance(response, dict):
+                return response.get('results', [response])
+            return response if isinstance(response, list) else [response]
+            
+        elif expected_type is dict:
+            if isinstance(response, list):
+                return response[0] if response else {}
+            return response if isinstance(response, dict) else {'data': response}
+            
+        return expected_type(response) if response else expected_type()
+        
+    except (TypeError, AttributeError) as e:
+        raise TypeError(f"Cannot convert to {expected_type}: {str(e)}") from e 
+        
+
+def build_item_payload(item, settings_name: str, slade_id: str = None) -> dict:
+    """Construct the payload for item registration"""
+    selling_price = round(item.get("valuation_rate", 1), 2) or 1
+    purchasing_price = round(item.get("last_purchase_rate", 1), 2)
+    tax = get_slade360_id(
+        TAXATION_TYPE_DOCTYPE_NAME, 
+        item.get("custom_taxation_type"), 
+        settings_name
+    )
+    id = slade_id or next((row.slade360_id for row in item.etims_setup_mapping if row.etims_setup == settings_name), None)
+
+    payload = {
+        "name": item.name,
+        "document_name": item.name,
+        "description": item.description,
+        "can_be_sold": bool(item.is_sales_item),
+        "can_be_purchased": bool(item.is_purchase_item),
+        "company_name": frappe.defaults.get_user_default("Company"),
+        "code": item.item_code,
+        "scu_item_code": item.custom_item_code_etims,
+        "scu_item_classification": get_slade360_id(
+            ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
+            item.custom_item_classification,
+            settings_name,
+        ),
+        "product_type": item.custom_product_type,
+        "item_type": item.custom_item_type,
+        "preferred_name": item.item_name,
+        "country_of_origin": item.custom_etims_country_of_origin_code,
+        "selling_price": selling_price,
+        "packaging_unit": get_slade360_id(
+            PACKAGING_UNIT_DOCTYPE_NAME,
+            item.custom_packaging_unit,
+            settings_name,
+        ),
+        "quantity_unit": get_slade360_id(
+            UNIT_OF_QUANTITY_DOCTYPE_NAME,
+            item.custom_unit_of_quantity,
+            settings_name,
+        ),
+        "purchasing_price": purchasing_price,
+        "categories": [],
+        "purchase_taxes": [],
+        "sale_taxes": [tax] if tax else [],
+    }
+
+    if id:
+        payload["id"] = id
+
+    return payload
+    
+
+def build_partner_payload(data, settings_name: str, is_customer: bool = True, existing_id: str = None) -> dict:
+    """Build payload for customer/supplier data submission to Slade
+    
+    Args:
+        data: The document containing partner data
+        settings_name (str): The name of the eTims settings
+        is_customer (bool): Whether the partner is a customer
+        existing_id (str): Existing Slade360 ID if available
+        
+    Returns:
+        dict: The payload for the API request
+    """
+    payload = {
+        "document_name": data.name,
+        "currency": data.get("default_currency") or "KES",
+        "country": "KEN",
+    }
+
+    partner_type_mapping = {
+        "Company": "CORPORATE",
+        "Individual": "INDIVIDUAL",
+        "Partnership": "CORPORATE",
+    }
+
+    if is_customer:
+        customer_type = data.get("customer_type")
+        mapped_customer_type = partner_type_mapping.get(customer_type, customer_type)
+
+        payload.update({
+            "is_customer": True,
+            "customer_tax_pin": data.get("tax_id"),
+            "partner_name": data.get("customer_name"),
+            "phone_number": data.get("mobile_no"),
+            "customer_type": mapped_customer_type,
+        })
+    else:
+        supplier_type = data.get("supplier_type")
+        mapped_supplier_type = partner_type_mapping.get(supplier_type, supplier_type)
+
+        payload.update({
+            "customer_tax_pin": data.get("tax_id"),
+            "partner_name": data.get("supplier_name"),
+            "is_supplier": True,
+            "supplier_type": mapped_supplier_type,
+        })
+
+    phone_number = (data.get("phone_number") or "").replace(" ", "").strip()
+    payload["phone_number"] = (
+        "+254" + phone_number[-9:] if len(phone_number) >= 9 else None
+    )
+
+    currency_name = get_slade360_id(
+        "Currency",
+        payload.get("currency"),
+        settings_name,
+    )
+    
+    if currency_name:
+        payload["currency"] = currency_name[0] if isinstance(currency_name, (list, tuple)) else currency_name
+    
+    id = existing_id or next((row.slade360_id for row in data.etims_setup_mapping if row.etims_setup == settings_name), None)
+    if id:
+        payload["id"] = id
+        
+    return payload

@@ -16,7 +16,7 @@ from ..doctype.doctype_names_mapping import (
     UOM_CATEGORY_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_link_value
+from ..utils import get_link_value, get_company_from_setup_mapping
 
 
 def send_pos_invoices_information() -> None:
@@ -45,7 +45,12 @@ def update_documents(
     data: dict | list,
     doctype_name: str,
     field_mapping: dict,
+    settings_name: str = None,
+    is_table: bool = False,
     filter_field: str = "code",
+    table_name: str = None,
+    separator: str = " - ",
+    fixed_values: dict = None  
 ) -> None:
     if isinstance(data, str):
         try:
@@ -59,20 +64,18 @@ def update_documents(
         if isinstance(record, str):
             continue
 
-        filter_key = field_mapping.get(filter_field)
-        filter_value = record.get(filter_key)
-        doc_name = frappe.db.get_value(
-            doctype_name, {filter_field: filter_value}, "name"
-        )
-        if doc_name:
-            doc = frappe.get_doc(doctype_name, doc_name)
-        else:
-            doc = frappe.new_doc(doctype_name)
+        temp_doc = frappe.new_doc(doctype_name)
+        
+        if fixed_values:
+            for field, value in fixed_values.items():
+                setattr(temp_doc, field, value)
 
         for field, value in field_mapping.items():
-            if callable(value):
-                setattr(doc, field, value(record))
-            elif isinstance(value, dict):
+            if isinstance(value, str):  
+                setattr(temp_doc, field, record.get(value, ""))
+
+        for field, value in field_mapping.items():
+            if isinstance(value, dict) and "doctype" in value:
                 linked_doctype = value.get("doctype")
                 link_field = value.get("link_field")
                 link_filter_field = value.get("filter_field", "custom_slade_id")
@@ -84,19 +87,75 @@ def update_documents(
                         {link_filter_field: link_filter_value},
                         link_extract_field,
                     )
-                    setattr(doc, field, linked_value or "")
-            else:
-                setattr(doc, field, record.get(value, ""))
+                    setattr(temp_doc, field, linked_value or "")
+
+        for field, value in field_mapping.items():
+            if callable(value):  
+                setattr(temp_doc, field, value(record))
+            elif isinstance(value, dict) and "fields" in value:  
+                parts = []
+                for source_field in value["fields"]:
+                    part = getattr(temp_doc, source_field, None)
+                    if part is None:
+                        part = record.get(source_field, "")
+                    if part:
+                        parts.append(str(part))
+                setattr(temp_doc, field, separator.join(parts))
+
+        filter_value = getattr(temp_doc, filter_field, None)
+        if not filter_value:
+            continue  
+
+        filters = {filter_field: filter_value}
+        if settings_name:
+            if frappe.db.exists("DocField", {"parent": doctype_name, "fieldname": "settings"}):
+                filters["settings"] = settings_name
+            elif frappe.db.exists("DocField", {"parent": doctype_name, "fieldname": "custom_settings"}):
+                filters["custom_settings"] = settings_name
+
+        doc_name = frappe.db.get_value(doctype_name, filters, "name")
+        
+        if doc_name:
+            doc = frappe.get_doc(doctype_name, doc_name)
+            for field in field_mapping.keys():
+                setattr(doc, field, getattr(temp_doc, field, ""))
+            if fixed_values:
+                for field, value in fixed_values.items():
+                    setattr(doc, field, value)
+        else:
+            doc = temp_doc  
+
+        if is_table and table_name and hasattr(doc, table_name):
+            found = False
+            for child_row in getattr(doc, table_name):
+                if child_row.etims_setup == settings_name:
+                    child_row.slade360_id = record.get("id")
+                    child_row.is_active = 1
+                    found = True
+                    break
+            
+            if not found and settings_name:
+                new_row = doc.append(table_name)
+                new_row.etims_setup = settings_name
+                new_row.slade360_id = record.get("id")
+                new_row.is_active = 1 
+                
+        if settings_name and not is_table:
+            if hasattr(doc, "settings"):
+                doc.settings = settings_name
+            elif hasattr(doc, "custom_settings"):
+                doc.custom_settings = settings_name
 
         try:
             doc.save(ignore_permissions=True)
-        except Exception:
+        except Exception as e:
+            frappe.log_error(f"Error updating {doctype_name}: {str(e)}")
             continue
 
     frappe.db.commit()
-
-
-def update_unit_of_quantity(response: dict, **kwargs) -> None:
+    
+    
+def update_unit_of_quantity(response: dict, settings_name: str, **kwargs) -> None:
     field_mapping = {
         "slade_id": "id",
         "code": "code",
@@ -104,10 +163,10 @@ def update_unit_of_quantity(response: dict, **kwargs) -> None:
         "code_name": "name",
         "code_description": "description",
     }
-    update_documents(response, UNIT_OF_QUANTITY_DOCTYPE_NAME, field_mapping)
+    update_documents(response, UNIT_OF_QUANTITY_DOCTYPE_NAME, field_mapping, settings_name=settings_name, is_table=True, table_name="etims_setup_mapping")
 
 
-def update_packaging_units(response: dict, **kwargs) -> None:
+def update_packaging_units(response: dict, settings_name: str, **kwargs) -> None:
     field_mapping = {
         "slade_id": "id",
         "code": "code",
@@ -115,7 +174,8 @@ def update_packaging_units(response: dict, **kwargs) -> None:
         "sort_order": "sort_order",
         "code_description": "description",
     }
-    update_documents(response, PACKAGING_UNIT_DOCTYPE_NAME, field_mapping)
+    update_documents(response, PACKAGING_UNIT_DOCTYPE_NAME, field_mapping, settings_name=settings_name, is_table=True, table_name="etims_setup_mapping")
+
 
 
 def update_payment_methods(response: dict, **kwargs) -> None:
@@ -137,14 +197,14 @@ def update_payment_methods(response: dict, **kwargs) -> None:
     )
 
 
-def update_currencies(response: dict, **kwargs) -> None:
+def update_currencies(response: dict, settings_name: str, **kwargs) -> None:
     field_mapping = {
         "custom_slade_id": "id",
         "currency_name": "iso_code",
         "enabled": lambda x: 1 if x.get("active") else 0,
         "custom_conversion_rate": "conversion_rate",
     }
-    update_documents(response, "Currency", field_mapping, filter_field="currency_name")
+    update_documents(response, "Currency", field_mapping, filter_field="currency_name", settings_name=settings_name, is_table=True, table_name="etims_setup_mapping")
 
 
 def update_item_classification_codes(response: dict | list, **kwargs) -> None:
@@ -165,36 +225,15 @@ def update_item_classification_codes(response: dict | list, **kwargs) -> None:
     )
 
 
-def update_taxation_type(response: dict, **kwargs) -> None:
-    doc: Document | None = None
-    tax_list = response.get("results", [])
-
-    for taxation_type in tax_list:
-        code = (
-            taxation_type["tax_code"]
-            if taxation_type["tax_code"]
-            else taxation_type["name"]
-        )
-        try:
-            doc_name = frappe.db.get_value(
-                TAXATION_TYPE_DOCTYPE_NAME, {"cd": code}, "name"
-            )
-            doc = frappe.get_doc(TAXATION_TYPE_DOCTYPE_NAME, doc_name)
-
-        except Exception:
-            doc = frappe.new_doc(TAXATION_TYPE_DOCTYPE_NAME)
-
-        finally:
-            doc.cd = code
-            doc.cdnm = taxation_type["name"]
-            doc.slade_id = taxation_type["id"]
-            doc.cddesc = taxation_type["description"]
-            doc.useyn = 1 if taxation_type["active"] else 0
-            doc.srtord = taxation_type["percentage"]
-
-            doc.save(ignore_permissions=True)
-
-    frappe.db.commit()
+def update_taxation_type(response: dict, settings_name: str, **kwargs) -> None:
+    field_mapping = {
+        "slade_id": "id",
+        "cd": "tax_code",
+        "srtord": "sort_order",
+        "cdnm": "name",
+        "cddesc": "description",
+    }
+    update_documents(response, TAXATION_TYPE_DOCTYPE_NAME, field_mapping, filter_field="cd", settings_name=settings_name, is_table=True, table_name="etims_setup_mapping")
 
 
 def update_countries(response: list, **kwargs) -> None:
@@ -262,80 +301,59 @@ def update_organisations(response: dict, **kwargs) -> None:
     doc.save(ignore_permissions=True)
 
     frappe.db.commit()
-
-
-def update_branches(response: dict, **kwargs) -> None:
+    
+    
+def update_branches(response: dict, settings_name: str, **kwargs) -> None:
     if isinstance(response, str):
         try:
-            response = json.loads(response)
-        except json.JSONDecodeError:
-            raise ValueError(f"Invalid JSON string: {response}")
+            response = frappe.parse_json(response)
+        except ValueError:
+            frappe.throw("Invalid JSON string in response")
 
-    doc_list = (
-        response if isinstance(response, list) else response.get("results", response)
-    )
-    if len(doc_list) == 1:
-        branches = frappe.get_all("Branch")
-        if branches:
-            for branch in branches:
-                frappe.set_value(
-                    "Branch",
-                    branch.get("name"),
-                    {"slade_id": doc_list[0].get("id"), "is_etims_branch": 1},
-                )
-        else:
-            branch_name = "eTims Branch"
-            existing_branch = frappe.db.get_value(
-                "Branch", {"branch": branch_name}, "name"
-            )
+    results = response.get("results", [response])
 
-            if existing_branch:
-                doc = frappe.get_doc("Branch", existing_branch)
-            else:
-                doc = frappe.new_doc("Branch")
-                doc.branch = branch_name
+    for branch_data in results:
+        if not isinstance(branch_data, dict):
+            continue
 
-            doc.slade_id = doc_list[0].get("id")
-            doc.is_etims_verified = 1 if doc_list[0].get("is_etims_verified") else 0
-            doc.is_head_office = 1 if doc_list[0].get("is_headquater") else 0
-            doc.custom_company = get_link_value(
-                "Company", "custom_slade_id", doc_list[0].get("organisation")
-            )
-            doc.custom_etims_device_serial_no = doc_list[0].get(
-                "etims_device_serial_no"
-            )
-            doc.custom_branch_code = doc_list[0].get("etims_branch_id")
-            doc.custom_pin = doc_list[0].get("organisation_tax_pin")
-            doc.is_etims_branch = 1
-            doc.flags.ignore_permissions = True
-            doc.save(ignore_permissions=True)
-    else:
-        field_mapping = {
-            "slade_id": "id",
-            "tax_id": "organisation_tax_pin",
-            "branch": "name",
-            "custom_etims_device_serial_no": "etims_device_serial_no",
-            "custom_branch_code": "etims_branch_id",
-            "custom_pin": "organisation_tax_pin",
-            "custom_branch_name": "name",
-            "custom_county_name": "county_name",
-            "custom_tax_locality_name": "tax_locality_name",
-            "custom_sub_county_name": "sub_county_name",
-            "custom_manager_name": "manager_name",
-            "custom_location_description": "location_description",
-            "custom_is_head_office": lambda x: 1 if x.get("is_headquater") else 0,
-            "custom_company": {
-                "doctype": "Company",
-                "link_field": "organisation",
-                "filter_field": "custom_slade_id",
-                "extract_field": "name",
-            },
-            "custom_is_etims_branch": lambda x: 1 if x.get("branch_status") else 0,
-            "custom_is_etims_verified": lambda x: (
-                1 if x.get("is_etims_verified") else 0
-            ),
+        cluster_id = branch_data.get("parent")
+        company = get_company_from_setup_mapping(cluster_id, settings_name)
+        
+        if not company:
+            frappe.log_error(f"No company found for cluster {cluster_id}", "Branch Update Skipped")
+            continue
+
+        original_branch_name = branch_data.get('name', '').strip()
+        if not original_branch_name:
+            continue
+            
+        branch_name = f"eTims - {original_branch_name}"
+
+        branch_filters = {
+            "branch": branch_name,
         }
-        update_documents(response, "Branch", field_mapping, filter_field="branch")
+        branch_exists = frappe.db.exists("Branch", branch_filters)
+        
+        if branch_exists:
+            branch = frappe.get_doc("Branch", branch_filters)
+        else:
+            branch = frappe.new_doc("Branch")
+
+        branch.update({
+            "company": company,
+            "branch": branch_name,
+            "slade_id": branch_data.get("id"),
+            "tax_id": branch_data.get("organisation_tax_pin"),
+            "etims_device_serial_no": branch_data.get("etims_device_serial_no"),
+            "branch_code": branch_data.get("etims_branch_id"),
+            "pin": branch_data.get("organisation_tax_pin"),
+            "is_head_office": 1 if branch_data.get("is_headquater") else 0,
+            "is_etims_branch": 1 if branch_data.get("branch_status") else 0,
+            "is_etims_verified": 1 if branch_data.get("is_etims_verified") else 0,
+        })
+
+        branch.save(ignore_permissions=True)
+        frappe.db.commit()
 
 
 def update_departments(response: dict, **kwargs) -> None:
@@ -386,7 +404,7 @@ def update_departments(response: dict, **kwargs) -> None:
     frappe.db.commit()
 
 
-def update_workstations(response: dict, **kwargs) -> None:
+def update_workstations(response: dict, settings_name: str, **kwargs) -> None:
     field_mapping = {
         "slade_id": "id",
         "active": lambda x: 1 if x.get("active") else 0,
@@ -394,12 +412,6 @@ def update_workstations(response: dict, **kwargs) -> None:
         "workstation_type_display": "workstation_type_display",
         "workstation_type": "workstation_type",
         "is_billing_point": lambda x: 1 if x.get("is_billing_point") else 0,
-        "company": {
-            "doctype": "Company",
-            "link_field": "organisation",
-            "filter_field": "custom_slade_id",
-            "extract_field": "name",
-        },
         "department": {
             "doctype": "Department",
             "link_field": "org_unit",
@@ -408,7 +420,7 @@ def update_workstations(response: dict, **kwargs) -> None:
         },
     }
     update_documents(
-        response, WORKSTATION_DOCTYPE_NAME, field_mapping, filter_field="slade_id"
+        response, WORKSTATION_DOCTYPE_NAME, field_mapping, filter_field="slade_id", settings_name=settings_name
     )
 
 
@@ -441,7 +453,7 @@ def uom_search_on_success(response: dict, **kwargs) -> None:
     update_documents(response, "UOM", field_mapping, filter_field="uom_name")
 
 
-def warehouse_search_on_success(response: dict, **kwargs) -> None:
+def warehouse_search_on_success(response: dict, settings_name: str, **kwargs) -> None:
     from ..apis.process_request import process_request
     from ..utils import get_settings
 
@@ -455,7 +467,7 @@ def warehouse_search_on_success(response: dict, **kwargs) -> None:
         response if isinstance(response, list) else response.get("results", [response])
     )
 
-    settings = get_settings()
+    settings = get_settings(settings_name=settings_name)
 
     bhfid_slade_id = frappe.db.get_value("Branch", settings.bhfid, "slade_id")
     selected_record = (
@@ -500,6 +512,7 @@ def warehouse_search_on_success(response: dict, **kwargs) -> None:
                 request_data=request_data,
                 route_key="LocationSearchReq",
                 request_method="PATCH",
+                settings_name=settings_name,
             )
 
 
@@ -660,3 +673,29 @@ def operation_types_search_on_success(
             "operation_type": response.get("operation_type"),
         },
     )
+
+def update_clusters(response: dict, settings_name: str, **kwargs) -> None:
+    pass
+    # if isinstance(response, str):
+    #     try:
+    #         response = json.loads(response)
+    #     except json.JSONDecodeError:
+    #         raise ValueError(f"Invalid JSON string: {response}")
+
+    # doc_list = response if isinstance(response, list) else response.get("results", [response])
+    
+    # modal_data = []
+    # for record in doc_list:
+    #     if isinstance(record, str):
+    #         continue
+            
+    #     modal_data.append({
+    #         "id": record.get("id"),
+    #         "name": record.get("name"),
+    #         "organisation": record.get("organisation")
+    #     })
+    
+    # frappe.publish_realtime('show_cluster_matching_modal', {
+    #     "data": modal_data,
+    #     "settings_name": settings_name
+    # })
