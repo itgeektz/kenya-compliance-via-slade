@@ -382,20 +382,26 @@ def update_integration_request(
     
     if error:
         current_error = frappe.db.get_value("Integration Request", integration_request, "error")
-        if not current_error or error not in current_error:
-            new_error = error if not current_error else (current_error + "\n" + error)
+        if current_error == "null" or not current_error:
+            update_fields["error"] = error[:5000] if len(error) > 5000 else error
+        elif error not in current_error:
+            new_error = current_error + "\n" + error
             update_fields["error"] = new_error[:5000] if len(new_error) > 5000 else new_error
     
     if output:
         current_output = frappe.db.get_value("Integration Request", integration_request, "output")
-        if not current_output or output not in current_output:
-            new_output = output if not current_output else (current_output + "\n" + output)
+        if current_output == "null" or not current_output:
+            update_fields["output"] = output[:5000] if len(output) > 5000 else output
+        elif output not in current_output:
+            new_output = current_output + "\n" + output
             update_fields["output"] = new_output[:5000] if len(new_output) > 5000 else new_output
     
     if request_description:
         current_desc = frappe.db.get_value("Integration Request", integration_request, "request_description")
-        if not current_desc or request_description not in current_desc:
-            new_desc = request_description if not current_desc else (current_desc + " - " + request_description)
+        if current_desc == "null" or not current_desc:
+            update_fields["request_description"] = request_description[:5000] if len(request_description) > 5000 else request_description
+        elif request_description not in current_desc:
+            new_desc = current_desc + " - " + request_description
             update_fields["request_description"] = new_desc[:5000] if len(new_desc) > 5000 else new_desc
     
     frappe.db.set_value(
