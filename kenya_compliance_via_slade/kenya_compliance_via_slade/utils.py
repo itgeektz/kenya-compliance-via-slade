@@ -8,9 +8,8 @@ from base64 import b64encode
 from datetime import datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 from io import BytesIO
+from typing import Any, Dict, List, Union
 from urllib.parse import urlencode
-from typing import Union, List, Dict, Any
-
 
 import aiohttp
 import qrcode
@@ -19,18 +18,21 @@ from aiohttp import ClientTimeout
 
 import frappe
 from frappe import _
-from frappe.model.document import Document
 from frappe.integrations.utils import create_request_log
-
+from frappe.model.document import Document
 from frappe.query_builder import DocType
 
 from .doctype.doctype_names_mapping import (
     ENVIRONMENT_SPECIFICATION_DOCTYPE_NAME,
+    ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
     ORGANISATION_MAPPING_DOCTYPE_NAME,
+    PACKAGING_UNIT_DOCTYPE_NAME,
     ROUTES_TABLE_CHILD_DOCTYPE_NAME,
     ROUTES_TABLE_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
     SLADE_ID_MAPPING_DOCTYPE_NAME,
+    TAXATION_TYPE_DOCTYPE_NAME,
+    UNIT_OF_QUANTITY_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
 from .logger import etims_logger
@@ -1463,4 +1465,56 @@ def parse_response_data(
         return expected_type(response) if response else expected_type()
         
     except (TypeError, AttributeError) as e:
-        raise TypeError(f"Cannot convert to {expected_type}: {str(e)}") from e
+        raise TypeError(f"Cannot convert to {expected_type}: {str(e)}") from e 
+        
+
+def build_item_payload(item, settings_name: str, slade_id: str = None) -> dict:
+    """Construct the payload for item registration"""
+    selling_price = round(item.get("valuation_rate", 1), 2) or 1
+    purchasing_price = round(item.get("last_purchase_rate", 1), 2)
+    tax = get_slade360_id(
+        TAXATION_TYPE_DOCTYPE_NAME, 
+        item.get("custom_taxation_type"), 
+        settings_name
+    )
+    id = slade_id or next((row.slade360_id for row in item.etims_setup_mapping if row.etims_setup == settings_name), None)
+
+    payload = {
+        "name": item.name,
+        "document_name": item.name,
+        "description": item.description,
+        "can_be_sold": bool(item.is_sales_item),
+        "can_be_purchased": bool(item.is_purchase_item),
+        "company_name": frappe.defaults.get_user_default("Company"),
+        "code": item.item_code,
+        "scu_item_code": item.custom_item_code_etims,
+        "scu_item_classification": get_slade360_id(
+            ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
+            item.custom_item_classification,
+            settings_name,
+        ),
+        "product_type": item.custom_product_type,
+        "item_type": item.custom_item_type,
+        "preferred_name": item.item_name,
+        "country_of_origin": item.custom_etims_country_of_origin_code,
+        "selling_price": selling_price,
+        "packaging_unit": get_slade360_id(
+            PACKAGING_UNIT_DOCTYPE_NAME,
+            item.custom_packaging_unit,
+            settings_name,
+        ),
+        "quantity_unit": get_slade360_id(
+            UNIT_OF_QUANTITY_DOCTYPE_NAME,
+            item.custom_unit_of_quantity,
+            settings_name,
+        ),
+        "purchasing_price": purchasing_price,
+        "categories": [],
+        "purchase_taxes": [],
+        "sale_taxes": [tax] if tax else [],
+    }
+
+    if id:
+        payload["id"] = id
+
+    return payload

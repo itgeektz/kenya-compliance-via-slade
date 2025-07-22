@@ -2,9 +2,8 @@ from datetime import datetime
 from io import BytesIO
 
 import deprecation
-import qrcode
-
 import frappe
+import qrcode
 
 from ... import __version__
 from ..doctype.doctype_names_mapping import (
@@ -23,7 +22,14 @@ from ..doctype.doctype_names_mapping import (
     USER_DOCTYPE_NAME,
 )
 from ..handlers import handle_slade_errors
-from ..utils import get_link_value, get_or_create_link, get_parent_by_slade360_id, get_slade360_id, parse_response_data
+from ..utils import (
+    build_item_payload,
+    get_link_value,
+    get_or_create_link,
+    get_parent_by_slade360_id,
+    get_slade360_id,
+    parse_response_data,
+)
 
 
 def on_slade_error(
@@ -1211,23 +1217,49 @@ def fetch_matching_items_on_success(response: dict, document_name: str, settings
     from .process_request import process_request
     items = parse_response_data(response, list)
     item_doc = frappe.get_doc("Item", document_name)
-    for item in items:
-        existing_id = next((row.slade360_id for row in item_doc.etims_setup_mapping if row.etims_setup == settings_name), None)
-        
-        if existing_id != item.get("id"):
-            process_request(
-                {
-                    "document_name": item_doc.name,
-                    "name": f"{item_doc.name} - Archived",
-                    "id": item.get("id"),
-                    "active": False, 
-                },
-                "ItemsSearchReq",
-                item_archive_on_success,
-                request_method="PATCH",
-                doctype="Item",
-                settings_name=settings_name,
-            )
+    existing_id = next((row.slade360_id for row in item_doc.etims_setup_mapping if row.etims_setup == settings_name), None)
+    if len(items) > 0:
+        if not item_doc.etims_setup_mapping:
+            frappe.get_doc({
+                "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
+                "parent": item_doc.name,
+                "parenttype": "Item",
+                "parentfield": "etims_setup_mapping",
+                "slade360_id": items[0].get("id"),
+                "etims_setup": settings_name
+            }).insert(ignore_permissions=True)
+            
+            existing_id = items[0].get("id")
+
+        for item in items:
+            if existing_id != item.get("id"):
+                frappe.enqueue(
+                    process_request,
+                    queue="default",
+                    doctype="Item",
+                    request_data={
+                        "document_name": item_doc.name,
+                        "name": f"{item_doc.name} - Archived",
+                        "id": item.get("id"),
+                        "active": False, 
+                    },
+                    route_key="ItemsSearchReq",
+                    handler_function=item_archive_on_success,
+                    request_method="PATCH",
+                    settings_name=settings_name,
+                )
+    request_data = build_item_payload(item_doc, settings_name, existing_id)
+    request_method = "PATCH" if "id" in request_data else "POST"        
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        doctype="Item",
+        request_data=request_data,
+        route_key="ItemsSearchReq",
+        handler_function=item_registration_on_success,
+        request_method=request_method,
+        settings_name=settings_name,
+    )
 
 def item_archive_on_success(response: dict, document_name: str, **kwargs) -> None:
     pass

@@ -2,29 +2,29 @@ import asyncio
 import json
 
 import aiohttp
-
 import frappe
 import frappe.defaults
 from frappe.model.document import Document
 from frappe.query_builder import DocType
 
+from ..background_tasks.task_response_handlers import (
+    operation_types_search_on_success,
+    uom_category_search_on_success,
+    uom_search_on_success,
+)
 from ..doctype.doctype_names_mapping import (
     COUNTRIES_DOCTYPE_NAME,
-    ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
     OPERATION_TYPE_DOCTYPE_NAME,
-    PACKAGING_UNIT_DOCTYPE_NAME,
     REGISTERED_PURCHASES_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
     SLADE_ID_MAPPING_DOCTYPE_NAME,
-    TAXATION_TYPE_DOCTYPE_NAME,
-    UNIT_OF_QUANTITY_DOCTYPE_NAME,
     UOM_CATEGORY_DOCTYPE_NAME,
     USER_DOCTYPE_NAME,
 )
 from ..utils import (
     generate_custom_item_code_etims,
-    get_link_value,
     get_active_settings,
+    get_link_value,
     get_settings,
     get_slade360_id,
     make_get_request,
@@ -41,12 +41,10 @@ from .remote_response_status_handlers import (
     initialize_device_submission_on_success,
     item_composition_submission_on_success,
     item_price_update_on_success,
-    item_registration_on_success,
     item_search_on_success,
     mode_of_payment_on_success,
     pricelist_update_on_success,
     purchase_search_on_success,
-    search_branch_request_on_success,
     submit_inventory_on_success,
     update_invoice_info,
     user_details_fetch_on_success,
@@ -54,12 +52,6 @@ from .remote_response_status_handlers import (
 )
 
 endpoints_builder = EndpointsBuilder()
-from ..background_tasks.task_response_handlers import (
-    operation_types_search_on_success,
-    uom_category_search_on_success,
-    uom_search_on_success,
-)
-
 
 @frappe.whitelist()
 def bulk_submit_sales_invoices(docs_list: str) -> None:
@@ -180,28 +172,20 @@ def perform_item_registration(item_name: str, settings_name: str) -> dict | None
 
     if not item.custom_item_code_etims:
         generate_and_set_etims_code(item)
-
-    request_data = build_item_payload(item, settings_name)
-    request_method = "PATCH" if "id" in request_data else "POST"
-    if request_method == "PATCH":
-        request_data["id"] = request_data.pop("name")
-        process_request(
-            {"name": item.name, "document_name": item.name},
-            "ItemsSearchReq",
-            fetch_matching_items_on_success,
-            request_method="GET",
-            doctype="Item",
-            settings_name=settings_name,
-        )
     
-    process_request(
-        request_data,
-        "ItemsSearchReq",
-        item_registration_on_success,
-        request_method=request_method,
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
+        request_data={"name": item.name, "document_name": item.name},
+        route_key="ItemsSearchReq",
+        handler_function=fetch_matching_items_on_success,
+        request_method="GET",
         doctype="Item",
         settings_name=settings_name,
     )
+    
+    
 
 def is_item_eligible_for_registration(item) -> bool:
     """Check if item meets basic registration criteria"""
@@ -227,57 +211,6 @@ def generate_and_set_etims_code(item) -> None:
         "Item", item.name, "custom_item_code_etims", item.custom_item_code_etims
     )
     frappe.db.commit()
-
-def build_item_payload(item, settings_name: str) -> dict:
-    """Construct the payload for item registration"""
-    selling_price = round(item.get("valuation_rate", 1), 2) or 1
-    purchasing_price = round(item.get("last_purchase_rate", 1), 2)
-    tax = get_slade360_id(
-        TAXATION_TYPE_DOCTYPE_NAME, 
-        item.get("custom_taxation_type"), 
-        settings_name
-    )
-    id = next((row.slade360_id for row in item.etims_setup_mapping if row.etims_setup == settings_name), None)
-
-    payload = {
-        "name": item.name,
-        "document_name": item.name,
-        "description": item.description,
-        "can_be_sold": bool(item.is_sales_item),
-        "can_be_purchased": bool(item.is_purchase_item),
-        "company_name": frappe.defaults.get_user_default("Company"),
-        "code": item.item_code,
-        "scu_item_code": item.custom_item_code_etims,
-        "scu_item_classification": get_slade360_id(
-            ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
-            item.custom_item_classification,
-            settings_name,
-        ),
-        "product_type": item.custom_product_type,
-        "item_type": item.custom_item_type,
-        "preferred_name": item.item_name,
-        "country_of_origin": item.custom_etims_country_of_origin_code,
-        "selling_price": selling_price,
-        "packaging_unit": get_slade360_id(
-            PACKAGING_UNIT_DOCTYPE_NAME,
-            item.custom_packaging_unit,
-            settings_name,
-        ),
-        "quantity_unit": get_slade360_id(
-            UNIT_OF_QUANTITY_DOCTYPE_NAME,
-            item.custom_unit_of_quantity,
-            settings_name,
-        ),
-        "purchasing_price": purchasing_price,
-        "categories": [],
-        "purchase_taxes": [],
-        "sale_taxes": [tax] if tax else [],
-    }
-
-    if id:
-        payload["id"] = id
-
-    return payload
 
 
 @frappe.whitelist()

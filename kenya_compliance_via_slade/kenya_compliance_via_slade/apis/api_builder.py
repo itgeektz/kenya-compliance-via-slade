@@ -382,18 +382,21 @@ def update_integration_request(
     
     if error:
         current_error = frappe.db.get_value("Integration Request", integration_request, "error")
-        new_error = error if not current_error else (current_error + "\n" + error)
-        update_fields["error"] = new_error[:5000] if len(new_error) > 5000 else new_error
+        if not current_error or error not in current_error:
+            new_error = error if not current_error else (current_error + "\n" + error)
+            update_fields["error"] = new_error[:5000] if len(new_error) > 5000 else new_error
     
     if output:
         current_output = frappe.db.get_value("Integration Request", integration_request, "output")
-        new_output = output if not current_output else (current_output + "\n" + output)
-        update_fields["output"] = new_output[:5000] if len(new_output) > 5000 else new_output
+        if not current_output or output not in current_output:
+            new_output = output if not current_output else (current_output + "\n" + output)
+            update_fields["output"] = new_output[:5000] if len(new_output) > 5000 else new_output
     
     if request_description:
         current_desc = frappe.db.get_value("Integration Request", integration_request, "request_description")
-        new_desc = request_description if not current_desc else (current_desc + " - " + request_description)
-        update_fields["request_description"] = new_desc[:5000] if len(new_desc) > 5000 else new_desc
+        if not current_desc or request_description not in current_desc:
+            new_desc = request_description if not current_desc else (current_desc + " - " + request_description)
+            update_fields["request_description"] = new_desc[:5000] if len(new_desc) > 5000 else new_desc
     
     frappe.db.set_value(
         "Integration Request",
