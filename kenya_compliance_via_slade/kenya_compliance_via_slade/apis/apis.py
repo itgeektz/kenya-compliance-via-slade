@@ -36,6 +36,7 @@ from .remote_response_status_handlers import (
     customer_search_on_success,
     customers_search_on_success,
     fetch_matching_items_on_success,
+    fetch_matching_partner_on_success,
     imported_item_submission_on_success,
     imported_items_search_on_success,
     initialize_device_submission_on_success,
@@ -323,74 +324,18 @@ def send_branch_customer_details(name: str, settings_name: str, is_customer: boo
     if hasattr(data, 'disabled') and data.disabled:
         return
 
-    payload = {
-        "document_name": name,
-        "currency": data.get("default_currency") or "KES",
-        "country": "KEN",
-    }
-
-    patner_type_mapping = {
-        "Company": "CORPORATE",
-        "Individual": "INDIVIDUAL",
-        "Partnership": "CORPORATE",
-    }
-
-    if is_customer:
-        customer_type = data.get("customer_type")
-        mapped_customer_type = patner_type_mapping.get(customer_type, customer_type)
-
-        payload.update(
-            {
-                "is_customer": True,
-                "customer_tax_pin": data.get("tax_id"),
-                "partner_name": data.get("customer_name"),
-                "phone_number": data.get("mobile_no"),
-                "customer_type": mapped_customer_type,
-            }
-        )
-    else:
-        supplier_type = data.get("supplier_type")
-        mapped_supplier_type = patner_type_mapping.get(supplier_type, supplier_type)
-
-        payload.update(
-            {
-                "customer_tax_pin": data.get("tax_id"),
-                "partner_name": data.get("supplier_name"),
-                "is_supplier": True,
-                "supplier_type": mapped_supplier_type,
-            }
-        )
-
-    phone_number = (data.get("phone_number") or "").replace(" ", "").strip()
-    payload["phone_number"] = (
-        "+254" + phone_number[-9:] if len(phone_number) >= 9 else None
-    )
-
-    currency_name = get_slade360_id(
-        "Currency",
-        payload.get("currency"),
-        settings_name,
-    )
-    
-    if currency_name:
-        payload["currency"] = currency_name[0] if isinstance(currency_name, (list, tuple)) else currency_name
-    
-    id = next((row.slade360_id for row in data.etims_setup_mapping if row.etims_setup == settings_name), None)
-    
-    request_method =  "POST"
-    
-    if id:
-        payload["id"] = id
-        request_method = "PATCH"
-        
-    process_request(
-        json.dumps(payload),
-        "BhfCustSaveReq",
-        customer_branch_details_submission_on_success,
-        request_method=request_method,
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
+        request_data={"partner_name": name, "document_name": name},
+        route_key="BhfCustSaveReq",
+        handler_function=fetch_matching_partner_on_success,
+        request_method="GET",
         doctype=doctype,
         settings_name=settings_name,
     )
+    
 
 @frappe.whitelist()
 def search_customers_request(request_data: str, settings_name: str,) -> None:

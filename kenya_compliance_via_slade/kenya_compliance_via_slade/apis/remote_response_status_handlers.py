@@ -24,6 +24,7 @@ from ..doctype.doctype_names_mapping import (
 from ..handlers import handle_slade_errors
 from ..utils import (
     build_item_payload,
+    build_partner_payload,
     get_link_value,
     get_or_create_link,
     get_parent_by_slade360_id,
@@ -1262,4 +1263,56 @@ def fetch_matching_items_on_success(response: dict, document_name: str, settings
     )
 
 def item_archive_on_success(response: dict, document_name: str, **kwargs) -> None:
+    pass
+
+
+def fetch_matching_partner_on_success(response: dict, doctype: str, document_name: str, settings_name: str, **kwargs) -> None:
+    from .process_request import process_request
+    partners = parse_response_data(response, list)
+    partner_doc = frappe.get_doc(doctype, document_name)
+    existing_id = next((row.slade360_id for row in partner_doc.etims_setup_mapping if row.etims_setup == settings_name), None)
+    if len(partners) > 0:
+        if not partner_doc.etims_setup_mapping:
+            frappe.get_doc({
+                "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
+                "parent": partner_doc.name,
+                "parenttype": doctype,
+                "parentfield": "etims_setup_mapping",
+                "slade360_id": partners[0].get("id"),
+                "etims_setup": settings_name
+            }).insert(ignore_permissions=True)
+            
+            existing_id = partners[0].get("id")
+
+        for partner in partners:
+            if existing_id != partner.get("id"):
+                frappe.enqueue(
+                    process_request,
+                    queue="default",
+                    doctype=doctype,
+                    request_data={
+                        "document_name": partner_doc.name,
+                        "name": f"{partner_doc.name} - Archived",
+                        "id": partner.get("id"),
+                        "active": False, 
+                    },
+                    route_key="BhfCustSaveReq",
+                    handler_function=partner_archive_on_success,
+                    request_method="PATCH",
+                    settings_name=settings_name,
+                )
+    request_data = build_partner_payload(partner_doc, settings_name, is_customer=(doctype == "Customer"), existing_id=existing_id)
+    request_method = "PATCH" if "id" in request_data else "POST"        
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        doctype=doctype,
+        request_data=request_data,
+        route_key="BhfCustSaveReq",
+        handler_function=customer_branch_details_submission_on_success,
+        request_method=request_method,
+        settings_name=settings_name,
+    )
+
+def partner_archive_on_success(response: dict, document_name: str, **kwargs) -> None:
     pass

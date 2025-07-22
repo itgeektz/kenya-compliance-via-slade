@@ -1518,3 +1518,70 @@ def build_item_payload(item, settings_name: str, slade_id: str = None) -> dict:
         payload["id"] = id
 
     return payload
+    
+
+def build_partner_payload(data, settings_name: str, is_customer: bool = True, existing_id: str = None) -> dict:
+    """Build payload for customer/supplier data submission to Slade
+    
+    Args:
+        data: The document containing partner data
+        settings_name (str): The name of the eTims settings
+        is_customer (bool): Whether the partner is a customer
+        existing_id (str): Existing Slade360 ID if available
+        
+    Returns:
+        dict: The payload for the API request
+    """
+    payload = {
+        "document_name": data.name,
+        "currency": data.get("default_currency") or "KES",
+        "country": "KEN",
+    }
+
+    partner_type_mapping = {
+        "Company": "CORPORATE",
+        "Individual": "INDIVIDUAL",
+        "Partnership": "CORPORATE",
+    }
+
+    if is_customer:
+        customer_type = data.get("customer_type")
+        mapped_customer_type = partner_type_mapping.get(customer_type, customer_type)
+
+        payload.update({
+            "is_customer": True,
+            "customer_tax_pin": data.get("tax_id"),
+            "partner_name": data.get("customer_name"),
+            "phone_number": data.get("mobile_no"),
+            "customer_type": mapped_customer_type,
+        })
+    else:
+        supplier_type = data.get("supplier_type")
+        mapped_supplier_type = partner_type_mapping.get(supplier_type, supplier_type)
+
+        payload.update({
+            "customer_tax_pin": data.get("tax_id"),
+            "partner_name": data.get("supplier_name"),
+            "is_supplier": True,
+            "supplier_type": mapped_supplier_type,
+        })
+
+    phone_number = (data.get("phone_number") or "").replace(" ", "").strip()
+    payload["phone_number"] = (
+        "+254" + phone_number[-9:] if len(phone_number) >= 9 else None
+    )
+
+    currency_name = get_slade360_id(
+        "Currency",
+        payload.get("currency"),
+        settings_name,
+    )
+    
+    if currency_name:
+        payload["currency"] = currency_name[0] if isinstance(currency_name, (list, tuple)) else currency_name
+    
+    id = existing_id or next((row.slade360_id for row in data.etims_setup_mapping if row.etims_setup == settings_name), None)
+    if id:
+        payload["id"] = id
+        
+    return payload
