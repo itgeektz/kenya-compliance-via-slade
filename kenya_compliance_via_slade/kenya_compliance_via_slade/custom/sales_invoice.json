@@ -992,7 +992,7 @@
       "in_list_view": 0,
       "in_preview": 0,
       "in_standard_filter": 0,
-      "insert_after": "prevent_etims_submission",
+      "insert_after": "custom_etims_details",
       "is_system_generated": 1,
       "is_virtual": 0,
       "label": "Slade Details",
