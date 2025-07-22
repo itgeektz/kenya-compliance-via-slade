@@ -1,5 +1,5 @@
 import frappe
-from ..doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
+from ..doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME, SLADE_ID_MAPPING_DOCTYPE_NAME
 from ..background_tasks.tasks import (
     get_item_classification_codes,
     refresh_code_lists,
@@ -45,30 +45,42 @@ def execute() -> None:
         
 
 def update_entities(setup, doctype, filter_field, id_field):
-    """Generic function to update eTims mapping for different doctypes"""
     registered_entities = frappe.get_all(
         doctype,
         filters={filter_field: 1},
-        fields=["name"]
+        fields=["name", id_field]
     )
 
     for entity in registered_entities:
-        doc = frappe.get_doc(doctype, entity.name)
-        
-        existing_mapping = next((mapping for mapping in doc.get("etims_setup_mapping", []) 
-                                if mapping.etims_setup == setup.name), None)
-        
-        if existing_mapping:
-            existing_mapping.slade360_id = getattr(doc, id_field)
-            existing_mapping.is_active = 1
+        mapping_exists = frappe.db.exists(
+            SLADE_ID_MAPPING_DOCTYPE_NAME,
+            {
+                "parent": entity.name,
+                "parenttype": doctype,
+                "etims_setup": setup.name
+            }
+        )
+
+        if mapping_exists:
+            frappe.db.set_value(
+                SLADE_ID_MAPPING_DOCTYPE_NAME,
+                mapping_exists,
+                {
+                    "slade360_id": entity.get(id_field),
+                    "is_active": 1
+                }
+            )
         else:
-            doc.append("etims_setup_mapping", {
-                "slade360_id": getattr(doc, id_field),
+            new_mapping = {
+                "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
+                "parent": entity.name,
+                "parenttype": doctype,
+                "parentfield": "etims_setup_mapping",
+                "slade360_id": entity.get(id_field),
                 "etims_setup": setup.name,
-                "is_active": 1,
-            })
-        
-        doc.save()
+                "is_active": 1
+            }
+            frappe.get_doc(new_mapping).insert(ignore_permissions=True, ignore_mandatory=True)
 
 def update_setting(setup):
     setup.append("organisation_mapping", {
