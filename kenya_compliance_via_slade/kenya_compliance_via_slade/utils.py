@@ -710,7 +710,7 @@ def _set_taxation_type_codes(doc: "Document") -> None:
 def _get_taxation_type_from_template(item) -> str:
     """Get taxation type from item's tax template if available"""
     if item.item_tax_template:
-        return frappe.get_value("Item Tax Template", item.item_tax_template, "etims_taxation_type")
+        return frappe.get_value("Item Tax Template", item.item_tax_template, "custom_etims_taxation_type")
     return ""
 
 
