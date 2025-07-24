@@ -9,13 +9,13 @@ frappe.ui.form.on(doctypeName, {
   refresh: async function (frm) {
     const { message: activeSetting } = await frappe.call({
       method:
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_setting",
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_settings",
       args: {
         doctype: settingsDoctypeName,
       },
     });
 
-    if (activeSetting?.message?.name) {
+    if (activeSetting?.length > 0) {
       frappe.db.get_value(
         settingsDoctypeName,
         {

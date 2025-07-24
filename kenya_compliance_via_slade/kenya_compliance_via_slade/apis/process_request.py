@@ -25,21 +25,24 @@ def process_request(
     request_method: str = "GET",
     doctype: str = SETTINGS_DOCTYPE_NAME,
     error_callback: Callable = None,
+    settings_name: str = None,
+    company: str = None,
 ) -> str:
     """Reusable function to process requests with common logic."""
-    if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
+    if not settings_name and not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
         return
 
     data = parse_request_data(request_data)
-    company_name, branch_id, document_name = extract_metadata(data)
+    extracted_company, branch_id, document_name = extract_metadata(data)
+    company_name = company or extracted_company or frappe.defaults.get_user_default("Company") or frappe.get_value("Company", {}, "name")
 
-    headers = build_headers(company_name, branch_id)
+    headers = build_headers(company_name, branch_id, settings_name)
 
-    server_url = get_server_url(company_name, branch_id)
+    server_url = get_server_url(company_name, branch_id, settings_name)
     route_path, _ = get_route_path(route_key, "VSCU Slade 360")
     dynamic_route_path = process_dynamic_url(route_path, request_data)
     url = f"{server_url}{dynamic_route_path}"
-    settings = get_settings(company_name, branch_id)
+    settings = get_settings(company_name, branch_id, settings_name) 
     # if request_method != "GET":
     #     updates = add_organisation_branch_department(settings)
     #     # data.update(updates)
@@ -133,11 +136,11 @@ def execute_request(
     document_name: str,
     error_callback: Callable = None,
     settings: dict = None,
-) -> str:
-
-    # Clean data for GET request
+) -> str | dict | None: 
     if request_method == "GET":
         clean_data_for_get_request(data)
+
+    last_response_data = None 
 
     while url:
         endpoints_builder.headers = headers
@@ -155,9 +158,11 @@ def execute_request(
             document_name=document_name,
         )
 
-        if isinstance(response, dict) and "next" in response:
+        if isinstance(response, dict) and "next" in response and response.get("next") != url:
             url = response["next"]
+            last_response_data = response 
         else:
-            url = None
+            last_response_data = response
+            url = None 
 
-    return f"{route_key} completed successfully."
+    return last_response_data 

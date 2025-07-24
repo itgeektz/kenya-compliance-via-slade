@@ -14,7 +14,9 @@
   "itemclsnm",
   "taxtycd",
   "useyn",
-  "mjrtgyn"
+  "mjrtgyn",
+  "section_break_vtko",
+  "etims_setup_mapping"
  ],
  "fields": [
   {
@@ -71,17 +73,27 @@
   {
    "fieldname": "slade_id",
    "fieldtype": "Data",
+   "hidden": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Slade ID",
-   "non_negative": 1,
-   "unique": 1
+   "non_negative": 1
+  },
+  {
+   "fieldname": "section_break_vtko",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "etims_setup_mapping",
+   "fieldtype": "Table",
+   "label": "eTims Setup Mapping",
+   "options": "eTims Slade360 ID Mapping"
   }
  ],
  "in_create": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2024-12-13 08:39:16.824874",
+ "modified": "2025-07-01 18:59:06.115744",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari KRA eTims Item Classification",
@@ -101,6 +113,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "itemclsnm, itemclscd",
  "show_title_field_in_link": 1,
  "sort_field": "modified",

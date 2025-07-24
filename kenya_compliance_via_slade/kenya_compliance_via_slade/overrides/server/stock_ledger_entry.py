@@ -18,9 +18,14 @@ endpoints_builder = EndpointsBuilder()
 
 
 def on_update(doc: Document, method: str | None = None) -> None:
-    if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
+    company_name = (
+        doc.company
+        or frappe.defaults.get_user_default("Company")
+        or frappe.get_value("Company", {}, "name")
+    )
+    settings = get_settings(company_name=company_name)
+    if not settings:
         return
-    settings = get_settings(company_name=doc.company)
     if not settings.get("stock_auto_submission_enabled"):
         return
     max_tries = get_max_submission_attempts("Stock Ledger Entry")
@@ -68,9 +73,9 @@ def prepare_payload(doc: dict, record: dict) -> dict:
     payload = {
         "name": doc.name,
         "document_name": doc.name,
-        "organisation": frappe.get_value("Company", company_name, "custom_slade_id"),
+        "organisation": settings.organisation_mapping[0].organisation,
         "source_organisation_unit": frappe.get_value(
-            "Department", settings.department, "custom_slade_id"
+            "Department", settings.organisation_mapping[0].department, "custom_slade_id"
         ),
         "document_number": doc.name,
         "document_count": series_no,

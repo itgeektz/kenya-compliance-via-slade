@@ -38,6 +38,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             method:
               "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.perform_notice_search",
             args: {
+              settings_name: frm.doc.name,
               request_data: {
                 document_name: frm.doc.name,
                 company_name: companyName,
@@ -60,6 +61,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             method:
               "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.refresh_code_lists",
             args: {
+              settings_name: frm.doc.name,
               request_data: {
                 document_name: frm.doc.name,
                 company_name: companyName,
@@ -71,6 +73,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
                 method:
                   "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.get_item_classification_codes",
                 args: {
+                  settings_name: frm.doc.name,
                   request_data: {
                     document_name: frm.doc.name,
                     company_name: companyName,
@@ -95,39 +98,47 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
         function () {
           frappe.call({
             method:
-              "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.search_organisations_request",
+              "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.search_clusters",
             args: {
+              settings_name: frm.doc.name,
               request_data: {
                 document_name: frm.doc.name,
                 company_name: companyName,
                 branch_id: frm.doc.bhfid,
               },
             },
-            callback: (response) => {},
+            freeze: true,
+            freeze_message: __("Fetching clusters..."),
+            callback: (response) => {
+              if (response.message) {
+                showClusterMatchingModal(response.message, frm);
+              }
+            },
             error: (error) => {
-              // Error Handling is Defered to the Server
+              frappe.msgprint(__("Error fetching clusters"));
+              console.error(error);
             },
           });
         },
         __("eTims Actions")
       );
 
-      frm.add_custom_button(
-        __("Submit Mode of Payments"),
-        function () {
-          frappe.call({
-            method:
-              "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.send_all_mode_of_payments",
-            args: {},
+      // frm.add_custom_button(
+      //   __("Submit Mode of Payments"),
+      //   function () {
+      //     frappe.call({
+      //       method:
+      //         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.send_all_mode_of_payments",
+      //       args: { settings_name: frm.doc.name },
 
-            callback: (response) => {},
-            error: (error) => {
-              // Error Handling is Defered to the Server
-            },
-          });
-        },
-        __("eTims Actions")
-      );
+      //       callback: (response) => {},
+      //       error: (error) => {
+      //         // Error Handling is Defered to the Server
+      //       },
+      //     });
+      //   },
+      //   __("eTims Actions")
+      // );
     }
 
     frm.add_custom_button(
@@ -138,6 +149,28 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.user_details_fetch",
           args: {
             document_name: frm.doc.name,
+          },
+          freeze: true,
+          freeze_message: __("Syncing user details..."),
+          callback: function (response) {
+            if (response) {
+              // Show toast notification
+              frappe.show_alert(
+                {
+                  message: __("User details synced successfully"),
+                  indicator: "green",
+                },
+                5
+              );
+
+              frm.refresh();
+            } else {
+              frappe.msgprint({
+                title: __("Error"),
+                indicator: "red",
+                message: __("Failed to sync user details."),
+              });
+            }
           },
         });
       },
@@ -200,3 +233,126 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
     }
   },
 });
+
+function showClusterMatchingModal(clusterData, form) {
+  let tableData = clusterData.map((cluster) => {
+    return {
+      cluster_id: cluster.cluster_id,
+      cluster_name: cluster.cluster_name,
+      organisation: cluster.organisation,
+      company: cluster.company,
+    };
+  });
+
+  let fields = [
+    {
+      fieldname: "cluster_table",
+      fieldtype: "Table",
+      label: __("Match Clusters to Companies"),
+      data: tableData,
+      cannot_add_rows: 1,
+      in_place_edit: true,
+      fields: [
+        {
+          fieldname: "cluster_id",
+          label: __("Cluster ID"),
+          fieldtype: "Data",
+          in_list_view: 1,
+          read_only: 1,
+          columns: 2,
+        },
+        {
+          fieldname: "organisation",
+          label: __("Organisation ID"),
+          fieldtype: "Data",
+          in_list_view: 1,
+          read_only: 1,
+          columns: 2,
+        },
+        {
+          fieldname: "cluster_name",
+          label: __("Cluster Name"),
+          fieldtype: "Data",
+          in_list_view: 1,
+          read_only: 1,
+          columns: 3,
+        },
+        {
+          fieldname: "company",
+          label: __("Company"),
+          fieldtype: "Link",
+          in_list_view: 1,
+          options: "Company",
+          reqd: 1,
+          columns: 3,
+        },
+      ],
+    },
+  ];
+
+  let dialog = new frappe.ui.Dialog({
+    title: __("Match Clusters to Companies"),
+    fields: fields,
+    primary_action_label: __("Submit"),
+    primary_action: function () {
+      let matched_data = dialog.get_value("cluster_table");
+
+      frappe.call({
+        method:
+          "kenya_compliance_via_slade.kenya_compliance_via_slade.doctype.navari_kra_etims_settings.navari_kra_etims_settings.update_companies_with_cluster_info",
+        args: {
+          matched_data: matched_data,
+          settings_name: form.doc.name,
+        },
+        freeze: true,
+        freeze_message: __("Updating companies..."),
+        callback: function (update_response) {
+          if (update_response.message.success) {
+            frappe.call({
+              method:
+                "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.search_organisations_request",
+              args: {
+                settings_name: form.doc.name,
+                request_data: {
+                  document_name: form.doc.name,
+                },
+              },
+              freeze: true,
+              freeze_message: __("Matching clusters..."),
+              callback: function (r) {
+                frappe.msgprint({
+                  title: __("Success"),
+                  indicator: "green",
+                  message: __(
+                    "Clusters matched successfully. System will now fetch branches, departments and workstations in the background."
+                  ),
+                });
+                dialog.hide();
+              },
+              error: function (error) {
+                frappe.msgprint(__("Error fetching organizations"));
+                console.error(error);
+              },
+            });
+          } else {
+            frappe.msgprint({
+              title: __("Update Failed"),
+              indicator: "red",
+              message:
+                __("Failed to update companies: ") +
+                update_response.message.message,
+            });
+          }
+        },
+        error: function (error) {
+          frappe.msgprint(__("Error updating companies"));
+          console.error(error);
+        },
+      });
+    },
+  });
+
+  dialog.$wrapper.find(".modal-dialog").css("max-width", "max-content");
+  dialog.$wrapper.find(".modal-content").css("width", "800px");
+  dialog.show();
+}

@@ -12,7 +12,9 @@
   "sort_order",
   "column_break_xdkn",
   "code_name",
-  "code_description"
+  "code_description",
+  "section_break_urmv",
+  "etims_setup_mapping"
  ],
  "fields": [
   {
@@ -51,15 +53,26 @@
   {
    "fieldname": "slade_id",
    "fieldtype": "Data",
+   "hidden": 1,
    "in_list_view": 1,
    "label": "Slade ID",
    "unique": 1
+  },
+  {
+   "fieldname": "section_break_urmv",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "etims_setup_mapping",
+   "fieldtype": "Table",
+   "label": "eTims Setup Mapping",
+   "options": "eTims Slade360 ID Mapping"
   }
  ],
  "in_create": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-22 18:59:46.928728",
+ "modified": "2025-07-01 18:53:53.393848",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari eTims Packaging Unit",
@@ -79,6 +92,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "code, code_name",
  "show_title_field_in_link": 1,
  "sort_field": "modified",

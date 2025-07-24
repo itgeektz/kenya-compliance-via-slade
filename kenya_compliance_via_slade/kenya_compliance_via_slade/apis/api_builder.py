@@ -261,12 +261,20 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             update_last_request_date(datetime.now(), self._route_path)
 
             if response.status_code in {200, 201}:
+                frappe.db.set_value(
+                    "Integration Request",
+                    self.integration_request.name,
+                    "status",
+                    "Completed",
+                )
+                
                 self._success_callback_handler(
-                    response=response_data, document_name=document_name, doctype=doctype
+                    response=response_data, document_name=document_name, doctype=doctype, payload=self._payload, settings_name=self._settings.name
                 )
 
                 current_page = response_data.get("current_page", None)
                 total_pages = response_data.get("total_pages", 0)
+                
 
                 update_integration_request(
                     self.integration_request.name,
@@ -304,10 +312,12 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                 )
                 if self._error_callback_handler:
                     self._error_callback_handler(
-                        response_data,
+                        response=response_data,
                         url=route_path,
                         doctype=doctype,
                         document_name=document_name,
+                        payload=self._payload,
+                        settings_name=self._settings.name
                     )
                     
                 if response.status_code == 401 and not retrying:
@@ -357,31 +367,46 @@ def update_integration_request(
     error: str | None = None,
     request_description: str | None = None,
 ) -> None:
-    """Updates the given integration request record.
+    """Updates the given integration request record silently without creating a version.
 
     Args:
         integration_request (str): The provided integration request.
         status (Literal["Completed", "Failed"]): The new status of the request.
         output (str | None, optional): The response message, if any. Defaults to None.
         error (str | None, optional): The error message, if any. Defaults to None.
+        request_description (str | None, optional): Additional description for the request.
     """
-    doc = frappe.get_doc("Integration Request", integration_request, for_update=True)
-
+    update_fields = {
+        "status": status
+    }
+    
     if error:
-        doc.error = error if doc.error is None or "null" else (doc.error + "\n" + error)
-
+        current_error = frappe.db.get_value("Integration Request", integration_request, "error")
+        if current_error == "null" or not current_error:
+            update_fields["error"] = error[:5000] if len(error) > 5000 else error
+        elif error not in current_error:
+            new_error = current_error + "\n" + error
+            update_fields["error"] = new_error[:5000] if len(new_error) > 5000 else new_error
+    
     if output:
-        doc.output = (
-            output if doc.output is None or "null" else (doc.output + "\n" + output)
-        )
-
+        current_output = frappe.db.get_value("Integration Request", integration_request, "output")
+        if current_output == "null" or not current_output:
+            update_fields["output"] = output[:5000] if len(output) > 5000 else output
+        elif output not in current_output:
+            new_output = current_output + "\n" + output
+            update_fields["output"] = new_output[:5000] if len(new_output) > 5000 else new_output
+    
     if request_description:
-        doc.request_description = (
-            request_description
-            if doc.request_description is None
-            else (doc.request_description + " - " + request_description)
-        )
-
-    doc.status = status
-
-    doc.save(ignore_permissions=True)
+        current_desc = frappe.db.get_value("Integration Request", integration_request, "request_description")
+        if current_desc == "null" or not current_desc:
+            update_fields["request_description"] = request_description[:5000] if len(request_description) > 5000 else request_description
+        elif request_description not in current_desc:
+            new_desc = current_desc + " - " + request_description
+            update_fields["request_description"] = new_desc[:5000] if len(new_desc) > 5000 else new_desc
+    
+    frappe.db.set_value(
+        "Integration Request",
+        integration_request,
+        update_fields,
+        update_modified=False
+    )

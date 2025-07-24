@@ -7,9 +7,10 @@ from ...apis.api_builder import EndpointsBuilder
 from ...apis.process_request import process_request
 from ...apis.remote_response_status_handlers import (
     sales_information_submission_on_success,
+    sales_information_submission_on_error,
 )
-from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
-from ...utils import build_invoice_payload
+# from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
+from ...utils import build_invoice_payload, get_settings, get_slade360_id
 
 endpoints_builder = EndpointsBuilder()
 
@@ -30,17 +31,18 @@ def generic_invoices_on_submit_override(
         or frappe.get_value("Company", {}, "name")
     )
 
-    # settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, {"is_active": 1, "company": company_name})
+    settings_doc = get_settings(company_name=company_name)
     if doc.prevent_etims_submission or (hasattr(doc, "etr_invoice_number") and doc.etr_invoice_number):
         return
 
 
     for item in doc.items:
         item_doc = frappe.get_doc("Item", item.item_code)
-        if not item_doc.custom_slade_id:
+        slade_id =  get_slade360_id("Item", item_doc.get("name"), settings_doc.name)
+        if not slade_id:
             from ...apis.apis import perform_item_registration
 
-            perform_item_registration(item_doc.name)
+            perform_item_registration(item_doc.name, settings_doc.name)
             frappe.msgprint(
                 f"Item {item.item_code} is not registered. Cannot send invoice to eTims."
             )
@@ -96,6 +98,9 @@ def generic_invoices_on_submit_override(
         ),
         request_method="POST",
         doctype=invoice_type,
+        settings_name=settings_doc.name,
+        company=company_name,
+        error_callback=sales_information_submission_on_error,
     )
 
 
