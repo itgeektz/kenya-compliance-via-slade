@@ -1309,7 +1309,8 @@ def fetch_matching_partner_on_success(response: dict, doctype: str, document_nam
                     doctype=doctype,
                     request_data={
                         "document_name": partner_doc.name,
-                        "name": f"{partner_doc.name} - Archived",
+                        "partner_name": f"{partner_doc.name} - Archived",
+                        "customer_tax_pin": None,
                         "id": partner.get("id"),
                         "active": False, 
                     },
