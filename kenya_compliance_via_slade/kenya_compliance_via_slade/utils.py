@@ -579,9 +579,9 @@ def _set_taxation_type_codes(doc: "Document") -> None:
     for item in doc.items:
         item.taxation_type_code = (
             _get_taxation_type_from_template(item) or
-            _get_taxation_type_from_item(item) or
             _get_taxation_type_from_rate(item) or
-            "B"
+            # _get_taxation_type_from_item(item) or
+            "A"
         )
 
 
@@ -601,12 +601,11 @@ def _get_taxation_type_from_rate(item) -> str:
     """Determine taxation type based on item's tax rate"""
     if not hasattr(item, 'custom_tax_rate'):
         return ""
-    
-    if item.custom_tax_rate >= 16:
+    if round(item.custom_tax_rate) >= 16:
         return "B"
-    if item.custom_tax_rate >= 8:
+    elif round(item.custom_tax_rate) >= 8:
         return "E"
-    if item.custom_tax_rate == 0:
+    elif item.custom_tax_rate == 0:
         return "A"
     return ""
 

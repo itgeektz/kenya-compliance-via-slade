@@ -36,6 +36,7 @@
   "sales_auto_submission_enabled",
   "sales_information_submission",
   "sales_info_cron_format",
+  "max_allowed_revisions",
   "column_break_ifui",
   "purchase_auto_submission_enabled",
   "purchase_information_submission",
@@ -481,6 +482,12 @@
    "fieldtype": "Table",
    "label": "Organisation Mapping",
    "options": "eTims Settings Organisation Mapping"
+  },
+  {
+   "default": "1",
+   "fieldname": "max_allowed_revisions",
+   "fieldtype": "Int",
+   "label": "Max Allowed Revisions"
   }
  ],
  "grid_page_length": 50,
@@ -492,7 +499,7 @@
    "link_fieldname": "reference_docname"
   }
  ],
- "modified": "2025-07-17 16:35:13.144214",
+ "modified": "2025-07-28 07:17:03.064936",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari KRA eTims Settings",

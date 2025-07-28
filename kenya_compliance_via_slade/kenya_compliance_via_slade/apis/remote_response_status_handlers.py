@@ -501,6 +501,12 @@ def update_invoice_info(response: dict, document_name: str, doctype: str, settin
         from ..overrides.server.shared_overrides import generic_invoices_on_submit_override
         from .process_request import process_request
         revision_count = int(doc.get("revision_count") or 0) + 1
+        allowed_revisions = frappe.get_value(
+            "Navari eTims Settings", settings_name, "max_allowed_revisions"
+        ) or 0
+        if allowed_revisions and revision_count > allowed_revisions:
+            return
+        
         frappe.db.set_value(doctype, document_name, {"revision_count": revision_count})
         new_doc = frappe.get_doc(doctype, document_name)
         generic_invoices_on_submit_override(new_doc, doctype)
@@ -531,7 +537,7 @@ def is_invoice_data_matching(payload: dict, response_data: dict) -> bool:
 
     payload_total = payload.get('amount') or sum((i.get('unit_price', 0) * i.get('quantity', 0)) for i in payload_items)
     response_total = response_data.get('crn_total_amount') if is_credit_note else response_data.get('total_gross_amount')
-    if round(payload_total, 2) != round(response_total or 0, 2):
+    if round(float(payload_total)) != round(float(response_total or 0)):
         return False
 
     if len(payload_items) != len(response_items):
