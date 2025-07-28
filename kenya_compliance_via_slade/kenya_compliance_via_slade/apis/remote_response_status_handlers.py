@@ -26,11 +26,14 @@ from ..handlers import handle_slade_errors
 from ..utils import (
     build_item_payload,
     build_partner_payload,
+    build_return_invoice_payload,
+    build_invoice_payload,
     get_link_value,
     get_or_create_link,
     get_parent_by_slade360_id,
     get_slade360_id,
     parse_response_data,
+    prepare_return_invoice_payload,
 )
 
 
@@ -473,24 +476,76 @@ def process_sales_sign(document_name: str, doctype: str, invoice_slade_id: str) 
     )
 
 
-def update_invoice_info(response: dict, document_name: str, **kwargs) -> None:
-    doctype = kwargs.get("doctype")
+def update_invoice_info(response: dict, document_name: str, doctype: str, settings_name: str | None = None, **kwargs) -> None:
+    doc = frappe.get_doc(doctype, document_name)
     data = response.get("results", [])[0] if response.get("results") else response
     scu_data = data.get("scu_data")
     if not scu_data:
         return
 
     custom_slade_id = data.get("id")
-    sales_invoice_tax_table = data.get("sales_invoice_tax_table", {})
 
-    updates = {
-        "custom_slade_id": custom_slade_id,
-        **map_scu_fields(scu_data, custom_slade_id, doctype, qr_key="qr_code_url"),
-    }
+    invoice_data = build_return_invoice_payload(doc, data) if doc.is_return else build_invoice_payload(doc)
+    
+    if is_invoice_data_matching(invoice_data, data):
+        updates = {
+            "custom_slade_id": custom_slade_id,
+            **map_scu_fields(scu_data, custom_slade_id, doctype, qr_key="qr_code_url"),
+        }
 
-    if document_name:
-        frappe.db.set_value(doctype, document_name, updates)
-        frappe.publish_realtime("refresh_form", document_name)
+        if document_name:
+            frappe.db.set_value(doctype, document_name, updates)
+            frappe.publish_realtime("refresh_form", document_name)
+            
+    elif doc.status != "Credit Note Issued":
+        from ..overrides.server.shared_overrides import generic_invoices_on_submit_override
+        from .process_request import process_request
+        revision_count = int(doc.get("revision_count") or 0) + 1
+        frappe.db.set_value(doctype, document_name, {"revision_count": revision_count})
+        new_doc = frappe.get_doc(doctype, document_name)
+        generic_invoices_on_submit_override(new_doc, doctype)
+        if not new_doc.is_return:
+            return_payload = prepare_return_invoice_payload(document_name, data.get("reference_number"), float(data.get("total_gross_amount", 0)), new_doc, data, True)
+            frappe.enqueue(
+                process_request,
+                queue="default",
+                is_async=True,
+                request_data=return_payload,
+                route_key="CreditNoteSaveReq",
+                handler_function=sales_information_submission_on_success,
+                request_method="POST",
+                doctype=doctype,
+                settings_name=settings_name,
+                company=doc.company,
+            )
+    
+
+def is_invoice_data_matching(payload: dict, response_data: dict) -> bool:
+    """
+    Check if the payload invoice data matches the response invoice data.
+    Returns True if totals and all line items match, otherwise False.
+    """
+    is_credit_note = 'sales_credit_note_lines' in response_data
+    payload_items = payload.get('itemDetails', [])
+    response_items = response_data.get('sales_credit_note_lines' if is_credit_note else 'sales_invoice_lines', [])
+
+    payload_total = payload.get('amount') or sum((i.get('unit_price', 0) * i.get('quantity', 0)) for i in payload_items)
+    response_total = response_data.get('crn_total_amount') if is_credit_note else response_data.get('total_gross_amount')
+    if round(payload_total, 2) != round(response_total or 0, 2):
+        return False
+
+    if len(payload_items) != len(response_items):
+        return False
+
+    for p_item, r_item in zip(payload_items, response_items):
+        if (
+            p_item.get('quantity') != r_item.get('quantity') or
+            round(p_item.get('unit_price', 0), 2) != round(r_item.get('price_inclusive_tax', 0), 2) or
+            round((p_item.get('quantity', 0) * p_item.get('unit_price', 0)), 2) != round(r_item.get('total_net_amount', 0), 2)
+        ):
+            return False
+
+    return True
 
 
 def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:

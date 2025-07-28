@@ -10,7 +10,7 @@ from ...apis.remote_response_status_handlers import (
     sales_information_submission_on_error,
 )
 # from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
-from ...utils import build_invoice_payload, get_settings, get_slade360_id
+from ...utils import build_invoice_payload, get_invoice_reference_number, get_settings, get_slade360_id
 
 endpoints_builder = EndpointsBuilder()
 
@@ -32,7 +32,7 @@ def generic_invoices_on_submit_override(
     )
 
     settings_doc = get_settings(company_name=company_name)
-    if doc.prevent_etims_submission or (hasattr(doc, "etr_invoice_number") and doc.etr_invoice_number):
+    if doc.prevent_etims_submission or (hasattr(doc, "etr_invoice_number") and doc.etr_invoice_number) or doc.status == "Credit Note Issued":
         return
 
 
@@ -48,60 +48,52 @@ def generic_invoices_on_submit_override(
             )
             return
 
-    route_key = "SalesInvoiceSaveReq"
 
     if doc.is_return:
-        return_invoice = frappe.get_doc("Sales Invoice", doc.return_against)
-        route_key = "CreditNoteSaveReq"
+        return_invoice = frappe.get_doc(invoice_type, doc.return_against)
         if not return_invoice.custom_successfully_submitted:
             frappe.msgprint(
                 f"Return against invoice {doc.return_against} was not successfully submitted. Cannot process return."
             )
             return
-
-    # # Check if custom_slade_id exists
-    # if doc.custom_slade_id:
-    #     # If custom_slade_id exists, start from process_invoice_items
-    #     frappe.enqueue(
-    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.process_invoice_items",
-    #         document_name=doc.name,
-    #         doctype=invoice_type,
-    #         invoice_slade_id=doc.custom_slade_id,
-    #         queue="long",
-    #     )
-    #     return
-
-    # # Check if custom_transition_successful exists
-    # if doc.custom_transition_successful:
-    #     # If custom_transition_successful exists, start from process_sales_sign
-    #     frappe.enqueue(
-    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.process_sales_sign",
-    #         document_name=doc.name,
-    #         doctype=invoice_type,
-    #         invoice_slade_id=doc.custom_slade_id,
-    #         queue="long",
-    #     )
-    #     return
-
-    # If neither custom_slade_id nor custom_transition_successful exists, proceed with the normal flow
-    payload = build_invoice_payload(doc, company_name, doc.is_return)
-    additional_context = {
-        "invoice_type": invoice_type,
-    }
-    process_request(
-        payload,
-        route_key,
-        lambda response, **kwargs: sales_information_submission_on_success(
-            response=response,
-            **additional_context,
-            **kwargs,
-        ),
-        request_method="POST",
-        doctype=invoice_type,
-        settings_name=settings_doc.name,
-        company=company_name,
-        error_callback=sales_information_submission_on_error,
-    )
+        
+        from ...apis.apis import submit_credit_note
+        reference_number = get_invoice_reference_number(return_invoice)
+        request_data = {
+            "document_name": doc.name,
+            "company": company_name,
+            "reference_number": reference_number,
+        }
+        frappe.enqueue(
+            process_request,
+            queue="default",
+            is_async=True,
+            request_data=request_data,
+            route_key="TrnsSalesSaveWrReq",
+            handler_function=submit_credit_note,
+            doctype=invoice_type,
+            settings_name=settings_doc.name,
+        )
+        
+    else:
+        payload = build_invoice_payload(doc)
+        additional_context = {
+            "invoice_type": invoice_type,
+        }
+        process_request(
+            payload,
+            "SalesInvoiceSaveReq",
+            lambda response, **kwargs: sales_information_submission_on_success(
+                response=response,
+                **additional_context,
+                **kwargs,
+            ),
+            request_method="POST",
+            doctype=invoice_type,
+            settings_name=settings_doc.name,
+            company=company_name,
+            error_callback=sales_information_submission_on_error,
+        )
 
 
 def validate(doc: Document, method: str) -> None:
