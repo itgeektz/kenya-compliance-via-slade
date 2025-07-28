@@ -1496,29 +1496,38 @@ def build_return_invoice_payload(invoice: Document, kra_invoice_data: Dict[str, 
     Returns:
         dict: The payload to submit to eTims for a return invoice.
     """
-    original_invoice_name = invoice.return_against
-    original_invoice = frappe.get_doc("Sales Invoice", original_invoice_name)
+    original_invoice = frappe.get_doc("Sales Invoice", invoice.return_against)
     original_invoice_total = abs(float(original_invoice.base_grand_total))
-        
     return_total = abs(float(invoice.base_grand_total))
-    
     is_full_return = abs(original_invoice_total - return_total) < 0.01
-    
     reference_number = get_invoice_reference_number(original_invoice)
+    amount = (
+        float(kra_invoice_data.get("total_gross_amount", 0))
+        if is_full_return and "total_gross_amount" in kra_invoice_data
+        else return_total
+    )
+    return prepare_return_invoice_payload(
+        document_name=invoice.name,
+        reference_number=reference_number,
+        amount=amount,
+        invoice=invoice,
+        kra_invoice_data=kra_invoice_data,
+        is_full_return=is_full_return
+    )
 
-    amount = float(kra_invoice_data.get("total_gross_amount", 0)) if is_full_return and "total_gross_amount" in kra_invoice_data else return_total
-    
-    payload = {
-        "document_name": invoice.name,
-        "invoice_reference": reference_number,
-        "refund_reason": "13",
-        "amount": amount,
-        "items": []
-    }
 
+def prepare_return_invoice_payload(
+    document_name: str,
+    reference_number: str,
+    amount: float,
+    invoice: Document,
+    kra_invoice_data: Dict[str, Any],
+    is_full_return: bool
+) -> Dict[str, Any]:
+    items = []
     if is_full_return:
         for line in kra_invoice_data.get("sales_invoice_lines", []):
-            payload["items"].append({
+            items.append({
                 "item_name": line.get("product_name"),
                 "quantity": abs(line.get("quantity", 0)),
                 "amount": round(abs(line.get("price_inclusive_tax", 0)), 4),
@@ -1528,10 +1537,16 @@ def build_return_invoice_payload(invoice: Document, kra_invoice_data: Dict[str, 
             tax_amount = item.get("custom_tax_amount", 0) or 0
             qty = abs(item.get("qty"))
             base_amount = round(abs(item.get("base_amount")) or 0, 4)
-            payload["items"].append({
+            items.append({
                 "item_name": item.item_code,
                 "quantity": qty,
                 "amount": round(base_amount + tax_amount, 4),
             })
 
-    return payload
+    return {
+        "document_name": document_name,
+        "invoice_reference": reference_number,
+        "refund_reason": "13",
+        "amount": amount,
+        "items": items,
+    }
