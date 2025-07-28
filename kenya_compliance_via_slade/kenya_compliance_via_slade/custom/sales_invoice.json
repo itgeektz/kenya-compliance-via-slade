@@ -1100,7 +1100,7 @@
       "collapsible_depends_on": null,
       "columns": 0,
       "creation": "2025-06-27 14:17:27.139665",
-      "default": null,
+      "default": 0,
       "depends_on": null,
       "description": "Tracks the number of times this invoice has been corrected and resubmitted to eTims. Increases automatically each time a revised submission is made.",
       "docstatus": 0,

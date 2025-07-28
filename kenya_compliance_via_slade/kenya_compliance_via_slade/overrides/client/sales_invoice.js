@@ -98,6 +98,20 @@ frappe.ui.form.on(parentDoctype, {
 });
 
 function showSettingsModalAndExecute(title, settings, getCallArgs) {
+  if (settings.length === 1) {
+    const { method, args, success_msg } = getCallArgs(settings[0].name);
+    frappe.call({
+      method: method,
+      args: args,
+      callback: () => frappe.msgprint(__(success_msg)),
+      error: (err) => {
+        console.error(err);
+        frappe.msgprint(__("An error occurred during the request."));
+      },
+    });
+    return;
+  }
+
   const dialog = new frappe.ui.Dialog({
     title: __(title),
     fields: [
@@ -117,7 +131,6 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
     primary_action: ({ settings_name }) => {
       dialog.hide();
       const { method, args, success_msg } = getCallArgs(settings_name);
-
       frappe.call({
         method: method,
         args: args,
@@ -131,6 +144,7 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
   });
   dialog.show();
 }
+
 frappe.ui.form.on(childDoctype, {
   item_code: function (frm, cdt, cdn) {
     const item = locals[cdt][cdn].item_code;

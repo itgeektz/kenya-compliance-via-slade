@@ -501,11 +501,13 @@ def update_invoice_info(response: dict, document_name: str, doctype: str, settin
         from ..overrides.server.shared_overrides import generic_invoices_on_submit_override
         from .process_request import process_request
         revision_count = int(doc.get("revision_count") or 0) + 1
-        allowed_revisions = frappe.get_value(
+        allowed_revisions = int(frappe.get_value(
             "Navari eTims Settings", settings_name, "max_allowed_revisions"
-        ) or 0
+        ) if frappe.get_value(
+            "Navari eTims Settings", settings_name, "max_allowed_revisions"
+        ) else 0)
         
-        if int(allowed_revisions) and int(revision_count) > int(allowed_revisions):
+        if allowed_revisions and revision_count > allowed_revisions:
             return
         
         frappe.db.set_value(doctype, document_name, {"revision_count": revision_count})

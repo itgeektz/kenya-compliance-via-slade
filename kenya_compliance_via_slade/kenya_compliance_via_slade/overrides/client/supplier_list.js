@@ -51,6 +51,19 @@ frappe.listview_settings[supplierDoctypeName] = {
 };
 
 function showSettingsModalAndExecute(title, settings, getCallArgs) {
+  if (settings.length === 1) {
+    const { method, args, success_msg } = getCallArgs(settings[0].name);
+    frappe.call({
+      method: `kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.${method}`,
+      args: args,
+      callback: () => frappe.msgprint(__(success_msg)),
+      error: (err) => {
+        console.error(err);
+        frappe.msgprint(__("An error occurred during the request."));
+      },
+    });
+    return;
+  }
   const dialog = new frappe.ui.Dialog({
     title: __(title),
     fields: [
