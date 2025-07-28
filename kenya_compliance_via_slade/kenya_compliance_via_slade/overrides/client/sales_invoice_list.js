@@ -12,15 +12,17 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
     listview.page.add_action_item(
       __("Bulk Submit to eTims"),
       function () {
-        showSettingsSelectionDialog(
+        showSettingsModalAndExecute(
           "Bulk Submit to eTims",
           activeSetting,
-          (settings_name) => {
-            const selected = listview
-              .get_checked_items()
-              .map((item) => item.name);
-            bulkSubmitInvoices(selected, settings_name);
-          }
+          (settings_name) => ({
+            method: "bulk_submit_sales_invoices",
+            args: {
+              docs_list: listview.get_checked_items().map((item) => item.name),
+              settings_name: settings_name,
+            },
+            success_msg: "Bulk submission to eTims queued.",
+          })
         );
       },
       __("eTims Actions")
@@ -29,12 +31,14 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
     listview.page.add_inner_button(
       __("Submit All Invoices"),
       function () {
-        showSettingsSelectionDialog(
+        showSettingsModalAndExecute(
           "Submit All Invoices",
           activeSetting,
-          (settings_name) => {
-            bulkSubmitInvoices(null, settings_name);
-          }
+          (settings_name) => ({
+            method: "bulk_submit_sales_invoices",
+            args: { docs_list: null, settings_name: settings_name },
+            success_msg: "Bulk submission to eTims queued.",
+          })
         );
       },
       __("eTims Actions")
@@ -43,15 +47,18 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
     listview.page.add_action_item(
       __("Verify & Resend to eTims"),
       function () {
-        showSettingsSelectionDialog(
+        showSettingsModalAndExecute(
           "Verify & Resend to eTims",
           activeSetting,
-          (settings_name) => {
-            const selected = listview
-              .get_checked_items()
-              .map((item) => item.name);
-            bulkVerifyAndResendInvoices(selected, settings_name);
-          }
+          (settings_name) => ({
+            method: "bulk_verify_and_resend_invoices",
+            args: {
+              docs_list: listview.get_checked_items().map((item) => item.name),
+              settings_name: settings_name,
+            },
+            success_msg:
+              "Bulk verification queued. Incorrect invoices will be resent to eTims.",
+          })
         );
       },
       __("eTims Actions")
@@ -60,12 +67,15 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
     listview.page.add_inner_button(
       __("Verify & Resend All Invoices"),
       function () {
-        showSettingsSelectionDialog(
+        showSettingsModalAndExecute(
           "Verify & Resend All Invoices",
           activeSetting,
-          (settings_name) => {
-            bulkVerifyAndResendInvoices(null, settings_name);
-          }
+          (settings_name) => ({
+            method: "bulk_verify_and_resend_invoices",
+            args: { docs_list: null, settings_name: settings_name },
+            success_msg:
+              "Bulk verification queued. Incorrect invoices will be resent to eTims.",
+          })
         );
       },
       __("eTims Actions")
@@ -73,56 +83,59 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
   }
 };
 
-function bulkSubmitInvoices(docs_list = null, settings_name) {
-  frappe.call({
-    method:
-      "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.bulk_submit_sales_invoices",
-    args: {
-      docs_list: docs_list,
-      settings_name: settings_name,
+function showSettingsModalAndExecute(title, settings, getCallArgs) {
+  executeWithSingleOrDialog(
+    settings,
+    (settingsName) => {
+      const { method, args, success_msg } = getCallArgs(settingsName);
+      executeEtimsAction(method, args, success_msg);
     },
-    callback: () => frappe.msgprint("Bulk submission to eTims queued."),
-  });
+    () => {
+      const options = settings.map((s) => ({
+        label: `${s.company} (${s.name})`,
+        value: s.name,
+      }));
+
+      const dialog = new frappe.ui.Dialog({
+        title: __(title),
+        fields: [
+          {
+            label: __("Select eTims Settings"),
+            fieldname: "settings_name",
+            fieldtype: "Select",
+            options: options,
+            reqd: 1,
+            default: options[0]?.value,
+          },
+        ],
+        primary_action_label: __("Proceed"),
+        primary_action: ({ settings_name }) => {
+          dialog.hide();
+          const { method, args, success_msg } = getCallArgs(settings_name);
+          executeEtimsAction(method, args, success_msg);
+        },
+      });
+      dialog.show();
+    }
+  );
 }
 
-function bulkVerifyAndResendInvoices(docs_list = null, settings_name) {
-  frappe.call({
-    method:
-      "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.bulk_verify_and_resend_invoices",
-    args: {
-      docs_list: docs_list,
-      settings_name: settings_name,
-    },
-    callback: () =>
-      frappe.msgprint(
-        "Bulk verification queued. Incorrect invoices will be resent to eTims."
-      ),
-  });
+function executeWithSingleOrDialog(settings, actionFn, buildDialog) {
+  if (settings.length === 1) {
+    actionFn(settings[0].name);
+    return;
+  }
+  buildDialog();
 }
 
-function showSettingsSelectionDialog(title, settings, callback) {
-  const options = settings.map((s) => ({
-    label: `${s.company} (${s.name})`,
-    value: s.name,
-  }));
-
-  const dialog = new frappe.ui.Dialog({
-    title: __(title),
-    fields: [
-      {
-        label: __("Select eTims Settings"),
-        fieldname: "settings_name",
-        fieldtype: "Select",
-        options: options,
-        reqd: 1,
-        default: options[0]?.value,
-      },
-    ],
-    primary_action_label: __("Proceed"),
-    primary_action: ({ settings_name }) => {
-      dialog.hide();
-      callback(settings_name);
+function executeEtimsAction(method, args, successMsg) {
+  frappe.call({
+    method: `kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.${method}`,
+    args: args,
+    callback: () => frappe.msgprint(__(successMsg)),
+    error: (err) => {
+      console.error(err);
+      frappe.msgprint(__("An error occurred during the request."));
     },
   });
-  dialog.show();
 }

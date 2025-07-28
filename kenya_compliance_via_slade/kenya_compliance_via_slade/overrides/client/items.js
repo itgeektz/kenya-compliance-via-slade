@@ -116,6 +116,11 @@ async function showCompanySelectionModal(frm, actionType, availableSettings) {
     return;
   }
 
+  if (availableSettings.length === 1) {
+    executeItemAction(frm, actionType, availableSettings[0].name);
+    return;
+  }
+
   const options = availableSettings.map((setting) => ({
     label: `${setting.company} (${setting.name})`,
     value: setting.name,

@@ -27,16 +27,14 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
     showSettingsModalAndExecute(
       "Bulk Register Items",
       allSettings,
-      (settings_name) => {
-        return {
-          method: "bulk_register_items",
-          args: {
-            docs_list: itemsToRegister,
-            settings_name: settings_name,
-          },
-          success_msg: "Bulk registration queued",
-        };
-      }
+      (settings_name) => ({
+        method: "bulk_register_items",
+        args: {
+          docs_list: itemsToRegister,
+          settings_name: settings_name,
+        },
+        success_msg: "Bulk registration queued",
+      })
     );
   });
 };
@@ -101,36 +99,56 @@ function addItemListActions(listview, allSettings) {
 }
 
 function showSettingsModalAndExecute(title, settings, getCallArgs) {
-  const dialog = new frappe.ui.Dialog({
-    title: __(title),
-    fields: [
-      {
-        label: __("Select eTims Settings"),
-        fieldname: "settings_name",
-        fieldtype: "Select",
-        options: settings.map((s) => ({
-          label: `${s.company} (${s.name})`,
-          value: s.name,
-        })),
-        reqd: 1,
-        default: settings[0]?.name,
-      },
-    ],
-    primary_action_label: __("Proceed"),
-    primary_action: ({ settings_name }) => {
-      dialog.hide();
-      const { method, args, success_msg } = getCallArgs(settings_name);
-
-      frappe.call({
-        method: `kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.${method}`,
-        args: args,
-        callback: () => frappe.msgprint(__(success_msg)),
-        error: (err) => {
-          console.error(err);
-          frappe.msgprint(__("An error occurred during the request."));
+  executeWithSingleOrDialog(
+    settings,
+    (settingsName) => {
+      const { method, args, success_msg } = getCallArgs(settingsName);
+      executeEtimsAction(method, args, success_msg);
+    },
+    () => {
+      const dialog = new frappe.ui.Dialog({
+        title: __(title),
+        fields: [
+          {
+            label: __("Select eTims Settings"),
+            fieldname: "settings_name",
+            fieldtype: "Select",
+            options: settings.map((s) => ({
+              label: `${s.company} (${s.name})`,
+              value: s.name,
+            })),
+            reqd: 1,
+            default: settings[0]?.name,
+          },
+        ],
+        primary_action_label: __("Proceed"),
+        primary_action: ({ settings_name }) => {
+          dialog.hide();
+          const { method, args, success_msg } = getCallArgs(settings_name);
+          executeEtimsAction(method, args, success_msg);
         },
       });
+      dialog.show();
+    }
+  );
+}
+
+function executeWithSingleOrDialog(settings, actionFn, buildDialog) {
+  if (settings.length === 1) {
+    actionFn(settings[0].name);
+    return;
+  }
+  buildDialog();
+}
+
+function executeEtimsAction(method, args, successMsg) {
+  frappe.call({
+    method: `kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.${method}`,
+    args: args,
+    callback: () => frappe.msgprint(__(successMsg)),
+    error: (err) => {
+      console.error(err);
+      frappe.msgprint(__("An error occurred during the request."));
     },
   });
-  dialog.show();
 }

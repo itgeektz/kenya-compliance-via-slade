@@ -19,7 +19,7 @@ frappe.listview_settings[customerDoctypeName] = {
           allSettings,
           (settings_name) => ({
             method: "search_customers_request",
-            args: { settings_name: settings_name },
+            args: { request_data: {}, settings_name: settings_name },
             success_msg: "Customer search queued",
           })
         );
@@ -67,6 +67,20 @@ frappe.listview_settings[customerDoctypeName] = {
 };
 
 function showSettingsModalAndExecute(title, settings, getCallArgs) {
+  if (settings.length === 1) {
+    const { method, args, success_msg } = getCallArgs(settings[0].name);
+    frappe.call({
+      method: `kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.${method}`,
+      args: args,
+      callback: () => frappe.msgprint(__(success_msg)),
+      error: (err) => {
+        console.error(err);
+        frappe.msgprint(__("An error occurred during the request."));
+      },
+    });
+    return;
+  }
+
   const dialog = new frappe.ui.Dialog({
     title: __(title),
     fields: [
