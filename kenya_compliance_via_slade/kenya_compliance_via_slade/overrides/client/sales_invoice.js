@@ -59,7 +59,6 @@ frappe.ui.form.on(parentDoctype, {
                 method:
                   "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
                 args: {
-                  id: frm.doc.custom_slade_id,
                   document_name: frm.doc.name,
                   invoice_type: "Sales Invoice",
                   settings_name: settings_name,
@@ -83,7 +82,6 @@ frappe.ui.form.on(parentDoctype, {
               method:
                 "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
               args: {
-                id: frm.doc.custom_slade_id,
                 document_name: frm.doc.name,
                 invoice_type: "Sales Invoice",
                 settings_name: settings_name,
