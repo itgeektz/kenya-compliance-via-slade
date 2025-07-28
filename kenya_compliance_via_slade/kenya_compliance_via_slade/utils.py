@@ -372,6 +372,7 @@ def build_invoice_payload(
         "itemDetails": []
     }
     
+    calculate_tax(invoice)
     
     for item in invoice.items:
         tax_amount = item.get("custom_tax_amount", 0) or 0
