@@ -496,7 +496,8 @@ def update_invoice_info(response: dict, document_name: str, doctype: str, settin
         if document_name:
             frappe.db.set_value(doctype, document_name, updates)
             frappe.publish_realtime("refresh_form", document_name)
-    else:
+            
+    elif doc.status != "Credit Note Issued":
         from ..overrides.server.shared_overrides import generic_invoices_on_submit_override
         from .process_request import process_request
         revision_count = int(doc.get("revision_count") or 0) + 1

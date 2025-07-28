@@ -58,19 +58,61 @@ from .remote_response_status_handlers import (
 endpoints_builder = EndpointsBuilder()
 
 @frappe.whitelist()
-def bulk_submit_sales_invoices(docs_list: str) -> None:
+def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None) -> None:
     from ..overrides.server.sales_invoice import on_submit
 
-    data = json.loads(docs_list)
-    all_sales_invoices = frappe.db.get_all(
-        "Sales Invoice", {"docstatus": 1, "custom_successfully_submitted": 0}, ["name"]
-    )
-
-    for record in data:
-        for invoice in all_sales_invoices:
-            if record == invoice.name:
-                doc = frappe.get_doc("Sales Invoice", record, for_update=False)
-                frappe.enqueue(on_submit, doc=doc)
+    invoices_to_process = []
+    
+    if docs_list:
+        data = json.loads(docs_list)
+        all_sales_invoices = frappe.db.get_all(
+            "Sales Invoice", {"docstatus": 1, "custom_successfully_submitted": 0}, ["name"]
+        )
+        
+        for record in data:
+            for invoice in all_sales_invoices:
+                if record == invoice.name:
+                    invoices_to_process.append(record)
+    else:
+        all_invoices = frappe.db.get_all(
+            "Sales Invoice", {"docstatus": 1, "custom_successfully_submitted": 0}, ["name"]
+        )
+        invoices_to_process = [invoice.name for invoice in all_invoices]
+    
+    for invoice_name in invoices_to_process:
+        doc = frappe.get_doc("Sales Invoice", invoice_name, for_update=False)
+        frappe.enqueue(on_submit, doc=doc)
+                
+@frappe.whitelist()
+def bulk_verify_and_resend_invoices(docs_list: str, settings_name: str = None) -> None:
+    invoices_to_process = []
+    
+    if docs_list:
+        data = json.loads(docs_list)
+        all_sales_invoices = frappe.db.get_all(
+            "Sales Invoice", {"docstatus": 1}, ["name"]
+        )
+        
+        for record in data:
+            for invoice in all_sales_invoices:
+                if record == invoice.name:
+                    invoices_to_process.append(record)
+    else:
+        all_invoices = frappe.db.get_all(
+            "Sales Invoice", {"docstatus": 1}, ["name"]
+        )
+        invoices_to_process = [invoice.name for invoice in all_invoices]
+    
+    for invoice_name in invoices_to_process:
+        doc = frappe.get_doc("Sales Invoice", invoice_name, for_update=False)
+        frappe.enqueue(
+            get_invoice_details, 
+            id=doc.custom_slade_id,
+            document_name=doc.name, 
+            invoice_type="Sales Invoice",
+            settings_name=settings_name,
+            company=doc.company
+        )
 
 @frappe.whitelist()
 def bulk_register_items(docs_list: str, settings_name: str = None) -> None:

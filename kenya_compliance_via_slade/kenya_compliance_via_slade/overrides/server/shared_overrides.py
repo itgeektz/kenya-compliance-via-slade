@@ -32,7 +32,7 @@ def generic_invoices_on_submit_override(
     )
 
     settings_doc = get_settings(company_name=company_name)
-    if doc.prevent_etims_submission or (hasattr(doc, "etr_invoice_number") and doc.etr_invoice_number):
+    if doc.prevent_etims_submission or (hasattr(doc, "etr_invoice_number") and doc.etr_invoice_number) or doc.status == "Credit Note Issued":
         return
 
 
