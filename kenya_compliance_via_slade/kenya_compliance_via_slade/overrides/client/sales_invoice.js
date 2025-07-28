@@ -46,28 +46,6 @@ frappe.ui.form.on(parentDoctype, {
           },
           __("eTims Actions")
         );
-        frm.add_custom_button(
-          __("Check Submission Status"),
-          function () {
-            showSettingsModalAndExecute(
-              "Check Invoice Status",
-              activeSetting,
-              (settings_name) => ({
-                method:
-                  "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
-                args: {
-                  id: frm.doc.custom_slade_id,
-                  document_name: frm.doc.name,
-                  invoice_type: "Sales Invoice",
-                  settings_name: settings_name,
-                  company: frm.doc.company,
-                },
-                success_msg: "Status check queued",
-              })
-            );
-          },
-          __("eTims Actions")
-        );
       }
 
       if (frm.doc.custom_successfully_submitted && !frm.doc.custom_qr_code) {
@@ -94,6 +72,29 @@ frappe.ui.form.on(parentDoctype, {
           __("eTims Actions")
         );
       }
+
+      frm.add_custom_button(
+        __("Verify Submission and Resend if Incorrect"),
+        function () {
+          showSettingsModalAndExecute(
+            "Verify Submission and Resend if Incorrect",
+            activeSetting,
+            (settings_name) => ({
+              method:
+                "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
+              args: {
+                id: frm.doc.custom_slade_id,
+                document_name: frm.doc.name,
+                invoice_type: "Sales Invoice",
+                settings_name: settings_name,
+                company: frm.doc.company,
+              },
+              success_msg: "Verification and correction queued",
+            })
+          );
+        },
+        __("eTims Actions")
+      );
     }
   },
 });

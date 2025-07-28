@@ -22,8 +22,10 @@ from ..doctype.doctype_names_mapping import (
     USER_DOCTYPE_NAME,
 )
 from ..utils import (
+    build_return_invoice_payload,
     generate_custom_item_code_etims,
     get_active_settings,
+    get_invoice_reference_number,
     get_link_value,
     get_settings,
     get_slade360_id,
@@ -46,6 +48,7 @@ from .remote_response_status_handlers import (
     mode_of_payment_on_success,
     pricelist_update_on_success,
     purchase_search_on_success,
+    sales_information_submission_on_success,
     submit_inventory_on_success,
     update_invoice_info,
     user_details_fetch_on_success,
@@ -882,6 +885,7 @@ def get_invoice_details(
         "company": company or invoice.company,
     }
     route_key = "TrnsSalesSearchReq"
+    reference_number = get_invoice_reference_number(invoice)
     if invoice.is_return:
         route_key = "SalesCreditNoteSaveReq"
     if id:
@@ -893,7 +897,7 @@ def get_invoice_details(
             request_data["invoice"] = original_invoice.custom_slade_id
         else:
             route_key = "TrnsSalesSaveWrReq"
-            request_data["reference_number"] = document_name
+            request_data["reference_number"] = reference_number
     process_request(
         request_data,
         route_key,
@@ -1274,3 +1278,27 @@ def reaceavable_accouct_search_on_success(
         doctype="Mode of Payment",
         settings_name=settings_name,
     )
+    
+
+@frappe.whitelist()
+def submit_credit_note(response: dict, document_name: str, doctype: str, settings_name: str, **kwargs) -> None:
+    doc = frappe.get_doc(doctype, document_name)
+    data = response.get("results", [])[0] if response.get("results") else response
+    scu_data = data.get("scu_data")
+    if not scu_data:
+        return
+    payload = build_return_invoice_payload(doc, data)
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
+        request_data=payload,
+        route_key="CreditNoteSaveReq",
+        handler_function=sales_information_submission_on_success,
+        request_method="POST",
+        doctype=doctype,
+        settings_name=settings_name,
+        company=doc.company,
+    )
+
+    

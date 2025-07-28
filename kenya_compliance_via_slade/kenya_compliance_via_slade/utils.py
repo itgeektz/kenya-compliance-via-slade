@@ -360,158 +360,33 @@ def extract_document_series_number(document: Document) -> int | None:
 
 
 def build_invoice_payload(
-    invoice: Document, company_name: str, is_return: bool = False
+    invoice: Document
 ) -> dict:
-    if is_return:
-        # RETURN INVOICE STRUCTURE
-        payload = {
-            "document_name": invoice.name,
-            "invoice_reference": invoice.return_against,
-            "refund_reason": "13",  # Assuming standard reason code
-            "amount": abs(invoice.base_grand_total),
-            "items": []
-        }
-        
-        # conversion_rate = invoice.conversion_rate or 1
-        
-        for item in invoice.items:
-            tax_amount = item.get("custom_tax_amount", 0) or 0
-            # converted_tax_amount = round(tax_amount * conversion_rate, 4) if tax_amount else 0
-            qty = abs(item.get("qty"))
-            base_amount = round(abs(item.get("base_amount")) or 0, 4)
-            payload["items"].append({
-                "item_name": item.item_code,
-                "quantity": qty,
-                "amount": round(base_amount + tax_amount, 4),
-            })
+    reference_number = get_invoice_reference_number(invoice)
+    payload = {
+        "document_name": invoice.name,
+        "reference_number": reference_number,
+        "sales_type": "credit",
+        "customer_pin": frappe.get_value("Customer", invoice.customer, "tax_id") or None,
+        "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name") or None,
+        "itemDetails": []
+    }
     
-    else:
-        # REGULAR INVOICE STRUCTURE
-        payload = {
-            "document_name": invoice.name,
-            "reference_number": invoice.name,
-            "sales_type": "credit",
-            "customer_pin": frappe.get_value("Customer", invoice.customer, "tax_id") or None,
-            "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name") or None,
-            "itemDetails": []
-        }
-        
-        # conversion_rate = invoice.conversion_rate or 1
-        
-        for item in invoice.items:
-            tax_amount = item.get("custom_tax_amount", 0) or 0
-            # converted_tax_amount = round(tax_amount * conversion_rate, 4) if tax_amount else 0
-            qty = abs(item.get("qty"))
-            base_net_rate = round(item.get("base_net_rate") or 0, 4)
-            discount = round(item.get("discount_amount") or 0, 4)
-            tax_code = item.get("taxation_type_code", "A") or "A"
-            payload["itemDetails"].append({
-                "product_name": item.item_code,
-                "unit_price": round(base_net_rate + (tax_amount / qty if qty else 0), 4),
-                # "discount": discount,
-                "quantity": qty,
-                "uom": item.uom or "Pcs",
-                "tax_code": tax_code
-            })
     
+    for item in invoice.items:
+        tax_amount = item.get("custom_tax_amount", 0) or 0
+        qty = abs(item.get("qty"))
+        base_net_rate = round(item.get("base_net_rate") or 0, 4)
+        tax_code = item.get("taxation_type_code", "A") or "A"
+        payload["itemDetails"].append({
+            "product_name": item.item_code,
+            "unit_price": round(base_net_rate + (tax_amount / qty if qty else 0), 4),
+            "quantity": qty,
+            "uom": item.uom or "Pcs",
+            "tax_code": tax_code
+        })
+
     return payload
-
-# def build_invoice_payload(
-#     invoice: Document, company_name: str, is_return: bool = False
-# ) -> dict[str, str | int | float]:
-#     # Retrieve taxation data for the invoice
-#     get_taxation_types(invoice)
-#     # frappe.throw(str(taxation_type))
-#     """Converts relevant invoice data to a JSON payload
-
-#     Args:
-#         invoice (Document): The Invoice record to generate data from
-#         invoice_type_identifier (Literal["S", "C"]): The
-#         Invoice type identifier. S for Sales Invoice, C for Credit Notes
-#         company_name (str): The company name used to fetch the valid settings doctype record
-
-#     Returns:
-#         dict[str, str | int | float]: The payload
-#     """
-#     invoice_name = invoice.name
-#     if invoice.amended_from:
-#         invoice_name = clean_invc_no(invoice_name)
-#     settings = get_settings(company_name, invoice.branch)
-#     if settings:
-#         payment_type = None
-#         if invoice.payments:
-#             payment_type = invoice.payments[0].mode_of_payment
-
-#         custom_payment_type = (
-#             invoice.custom_payment_type
-#             or payment_type
-#             or settings.get("purchases_payment_type")
-#         )
-#         department = (
-#             invoice.department
-#             if hasattr(invoice, "department")
-#             and frappe.get_value("Department", invoice.department, "custom_slade_id")
-#             else settings.get("department")
-#         )
-
-#         branch = invoice.branch if hasattr(invoice, "branch") else settings.get("bhfid")
-
-#         customer = frappe.get_value("Customer", invoice.customer, "slade_id")
-#         currency = frappe.get_value("Currency", "KES", "custom_slade_id")
-
-#         if is_return:
-#             payload = {
-#                 "document_name": invoice.name,
-#                 "company_name": company_name,
-#                 "reason": "Return",
-#                 "amount": abs(invoice.base_grand_total),
-#                 "invoice": frappe.get_value(
-#                     "Sales Invoice", invoice.return_against, "custom_slade_id"
-#                 ),
-#                 "organisation": frappe.get_value(
-#                     "Company", invoice.company, "custom_slade_id"
-#                 ),
-#                 "source_organisation_unit": frappe.get_value(
-#                     "Department", department, "custom_slade_id"
-#                 ),
-#                 "customer": customer,
-#             }
-#         else:
-
-#             if not currency:
-#                 frappe.throw("Currency not found.")
-#             if not customer:
-#                 frappe.throw("Customer not found.")
-#             if not department:
-#                 frappe.throw("Department not found.")
-
-#             payload = {
-#                 "document_name": invoice.name,
-#                 "document_number": invoice.name,
-#                 "branch_id": invoice.branch,
-#                 "company_name": company_name,
-#                 "description": invoice.remarks or "New",
-#                 "payment_method": frappe.get_value(
-#                     "Mode of Payment", custom_payment_type, "custom_slade_id"
-#                 ),
-#                 "customer": customer,
-#                 "invoice_date": str(invoice.posting_date),
-#                 "currency": currency,
-#                 "source_organisation_unit": frappe.get_value(
-#                     "Department", department, "custom_slade_id"
-#                 ),
-#                 "branch": frappe.get_value("Branch", branch, "slade_id"),
-#                 "organisation": frappe.get_value(
-#                     "Company", invoice.company, "custom_slade_id"
-#                 ),
-#                 "sales_type": "credit",
-#             }
-
-#         return payload
-#     else:
-#         frappe.throw(
-#             f"Failed to fetch settings for company {company_name} and branch {invoice.branch}"
-#         )
 
 
 def get_invoice_items_list(invoice: Document) -> list[dict[str, str | int | None]]:
@@ -1584,4 +1459,79 @@ def build_partner_payload(data, settings_name: str, is_customer: bool = True, ex
     if id:
         payload["id"] = id
         
+    return payload
+
+
+def get_invoice_reference_number(invoice: Document) -> str:
+    """
+    Generate a unique reference number for the invoice submission.
+
+    - If the invoice has no revisions, the reference is simply the document name.
+    - If the invoice has revisions (revision_count > 0), append `-REV{revision_count}` 
+      to make it unique and traceable (e.g., SINV-0001-REV1).
+
+    Args:
+        invoice (Document): The Invoice document instance.
+
+    Returns:
+        str: The generated reference number for submission.
+    """
+    reference_number = invoice.name
+    if hasattr(invoice, "revision_count") and invoice.revision_count is not None and int(invoice.revision_count) > 0:
+        reference_number = f"{invoice.name}-REV{int(invoice.revision_count)}"
+    return reference_number
+
+
+def build_return_invoice_payload(invoice: Document, kra_invoice_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build a return invoice payload for eTims.
+    
+    - For full returns: Use original KRA invoice lines with actual prices/quantities from KRA.
+    - For partial returns: Use ERPNext return invoice data only.
+    
+    Args:
+        invoice (Document): The ERPNext Sales Invoice document (return type).
+        kra_invoice_data (dict): The original KRA invoice response.
+    
+    Returns:
+        dict: The payload to submit to eTims for a return invoice.
+    """
+    original_invoice_name = invoice.return_against
+    original_invoice = frappe.get_doc("Sales Invoice", original_invoice_name)
+    original_invoice_total = abs(float(original_invoice.base_grand_total))
+        
+    return_total = abs(float(invoice.base_grand_total))
+    
+    is_full_return = abs(original_invoice_total - return_total) < 0.01
+    
+    reference_number = get_invoice_reference_number(original_invoice)
+
+    amount = float(kra_invoice_data.get("total_gross_amount", 0)) if is_full_return and "total_gross_amount" in kra_invoice_data else return_total
+    
+    payload = {
+        "document_name": invoice.name,
+        "invoice_reference": reference_number,
+        "refund_reason": "13",
+        "amount": amount,
+        "items": []
+    }
+
+    if is_full_return:
+        for line in kra_invoice_data.get("sales_invoice_lines", []):
+            payload["items"].append({
+                "item_name": line.get("product_name"),
+                "quantity": abs(line.get("quantity", 0)),
+                "amount": round(abs(line.get("price_inclusive_tax", 0)), 4),
+            })
+    else:
+        for item in invoice.items:
+            tax_amount = item.get("custom_tax_amount", 0) or 0
+            qty = abs(item.get("qty"))
+            base_amount = round(abs(item.get("base_amount")) or 0, 4)
+            payload["items"].append({
+                "item_name": item.item_code,
+                "quantity": qty,
+                "amount": round(base_amount + tax_amount, 4),
+            })
+
     return payload
