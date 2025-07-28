@@ -192,6 +192,9 @@ doc_events = {
         "before_cancel": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.before_cancel"
         ],
+        "before_update_after_submit": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.before_save_"
+        ],
     },
     "Purchase Invoice": {
         "before_save": [

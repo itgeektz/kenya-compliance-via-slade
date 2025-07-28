@@ -501,6 +501,15 @@ def update_invoice_info(response: dict, document_name: str, doctype: str, settin
         from ..overrides.server.shared_overrides import generic_invoices_on_submit_override
         from .process_request import process_request
         revision_count = int(doc.get("revision_count") or 0) + 1
+        allowed_revisions = int(frappe.get_value(
+            "Navari eTims Settings", settings_name, "max_allowed_revisions"
+        ) if frappe.get_value(
+            "Navari eTims Settings", settings_name, "max_allowed_revisions"
+        ) else 0)
+        
+        if allowed_revisions and revision_count > allowed_revisions:
+            return
+        
         frappe.db.set_value(doctype, document_name, {"revision_count": revision_count})
         new_doc = frappe.get_doc(doctype, document_name)
         generic_invoices_on_submit_override(new_doc, doctype)
@@ -523,29 +532,41 @@ def update_invoice_info(response: dict, document_name: str, doctype: str, settin
 def is_invoice_data_matching(payload: dict, response_data: dict) -> bool:
     """
     Check if the payload invoice data matches the response invoice data.
-    Returns True if totals and all line items match, otherwise False.
+    Ignores order and allows tolerance for value differences (nearest whole number).
     """
     is_credit_note = 'sales_credit_note_lines' in response_data
     payload_items = payload.get('itemDetails', [])
     response_items = response_data.get('sales_credit_note_lines' if is_credit_note else 'sales_invoice_lines', [])
 
-    payload_total = payload.get('amount') or sum((i.get('unit_price', 0) * i.get('quantity', 0)) for i in payload_items)
-    response_total = response_data.get('crn_total_amount') if is_credit_note else response_data.get('total_gross_amount')
-    if round(payload_total, 2) != round(response_total or 0, 2):
-        return False
-
     if len(payload_items) != len(response_items):
         return False
 
-    for p_item, r_item in zip(payload_items, response_items):
-        if (
-            p_item.get('quantity') != r_item.get('quantity') or
-            round(p_item.get('unit_price', 0), 2) != round(r_item.get('price_inclusive_tax', 0), 2) or
-            round((p_item.get('quantity', 0) * p_item.get('unit_price', 0)), 2) != round(r_item.get('total_net_amount', 0), 2)
-        ):
-            return False
+    payload_total = payload.get('amount') or sum((i.get('unit_price', 0) * i.get('quantity', 0)) for i in payload_items)
+    response_total = response_data.get('crn_total_amount') if is_credit_note else response_data.get('total_gross_amount')
+
+    if round(float(payload_total), 0) != round(float(response_total or 0), 0):
+        return False
+
+    def normalize(item):
+        qty = round(float(item.get('quantity', 0)), 0)  
+        price = round(float(item.get('unit_price', 0)), 2)
+        total = round(qty * price, 2)
+        return (qty, price, total)
+
+    normalized_response = [normalize({
+        'quantity': i.get('quantity', 0),
+        'unit_price': i.get('price_inclusive_tax', 0)
+    }) for i in response_items]
+
+    for p_item in payload_items:
+        p_norm = normalize(p_item)
+        if p_norm in normalized_response:
+            normalized_response.remove(p_norm)  
+        else:
+            return False  
 
     return True
+
 
 
 def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:
