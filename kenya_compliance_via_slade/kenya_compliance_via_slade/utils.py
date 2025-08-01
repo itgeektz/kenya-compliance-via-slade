@@ -312,9 +312,10 @@ def get_settings(company_name: str = None, branch_id: str = None, settings_name:
         
     company_name = (
         company_name
-        or frappe.defaults.get_user_default("Company")
-        or frappe.get_value("Company", {}, "name")
+        # or frappe.defaults.get_user_default("Company")
+        # or frappe.get_value("Company", {}, "name")
     )
+   
     if frappe.db.exists(
         ORGANISATION_MAPPING_DOCTYPE_NAME, 
         {"company": company_name, "is_active": 1}
@@ -325,17 +326,19 @@ def get_settings(company_name: str = None, branch_id: str = None, settings_name:
             "parent",
             as_dict=True,
         )
+        
+        
         if mapping and mapping.parent:
             return frappe.get_doc(SETTINGS_DOCTYPE_NAME, mapping.parent).as_dict()
     
-    if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
-        settings = frappe.db.get_value(
-            SETTINGS_DOCTYPE_NAME,
-            {"is_active": 1},
-            "*",
-            as_dict=True,
-        )
-        return settings
+    # if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
+    #     settings = frappe.db.get_value(
+    #         SETTINGS_DOCTYPE_NAME,
+    #         {"is_active": 1},
+    #         "*",
+    #         as_dict=True,
+    #     )
+    #     return settings
     
     return None
 

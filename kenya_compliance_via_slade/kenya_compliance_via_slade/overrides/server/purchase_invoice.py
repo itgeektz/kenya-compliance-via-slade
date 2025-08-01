@@ -41,29 +41,30 @@ def on_submit(doc: Document, method: str = None) -> None:
 def submit_purchase_invoice(doc: Document) -> None:
     if doc.is_return == 0:
         # TODO: Handle cases when item tax templates have not been picked
-
         company_name = (
             doc.company
-            or frappe.defaults.get_user_default("Company")
-            or frappe.get_value("Company", {}, "name")
+            # or frappe.defaults.get_user_default("Company")
+            # or frappe.get_value("Company", {}, "name")
         )
-
         settings_doc = get_settings(company_name=company_name)
 
-        company_name = (
-            doc.company
-            or frappe.defaults.get_user_default("Company")
-            or frappe.get_value("Company", {}, "name")
-        )
-        payload = build_purchase_invoice_payload(doc, company_name)
-        process_request(
-            payload,
-            "TrnsPurchaseSaveReq",
-            purchase_invoice_submission_on_success,
-            request_method="POST",
-            doctype="Purchase Invoice",
-            settings_name=settings_doc.name,
-        )
+        # company_name = (
+        #     doc.company
+        #     # or frappe.defaults.get_user_default("Company")
+        #     # or frappe.get_value("Company", {}, "name")
+        # )
+        
+        if settings_doc:
+            payload = build_purchase_invoice_payload(doc, company_name)
+            process_request(
+                payload,
+                "TrnsPurchaseSaveReq",
+                purchase_invoice_submission_on_success,
+                request_method="POST",
+                doctype="Purchase Invoice",
+                settings_name=settings_doc.name,
+            )
+  
 
 
 @frappe.whitelist()
