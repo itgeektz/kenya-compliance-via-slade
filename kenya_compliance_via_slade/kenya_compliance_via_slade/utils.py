@@ -312,10 +312,9 @@ def get_settings(company_name: str = None, branch_id: str = None, settings_name:
         
     company_name = (
         company_name
-        # or frappe.defaults.get_user_default("Company")
-        # or frappe.get_value("Company", {}, "name")
+        or frappe.defaults.get_user_default("Company")
+        or frappe.get_value("Company", {}, "name")
     )
-   
     if frappe.db.exists(
         ORGANISATION_MAPPING_DOCTYPE_NAME, 
         {"company": company_name, "is_active": 1}
@@ -326,19 +325,17 @@ def get_settings(company_name: str = None, branch_id: str = None, settings_name:
             "parent",
             as_dict=True,
         )
-        
-        
         if mapping and mapping.parent:
             return frappe.get_doc(SETTINGS_DOCTYPE_NAME, mapping.parent).as_dict()
     
-    # if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
-    #     settings = frappe.db.get_value(
-    #         SETTINGS_DOCTYPE_NAME,
-    #         {"is_active": 1},
-    #         "*",
-    #         as_dict=True,
-    #     )
-    #     return settings
+    if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
+        settings = frappe.db.get_value(
+            SETTINGS_DOCTYPE_NAME,
+            {"is_active": 1},
+            "*",
+            as_dict=True,
+        )
+        return settings
     
     return None
 
@@ -1197,18 +1194,43 @@ def reset_auth_password(docname: str) -> None:
         
 
 @frappe.whitelist()
-def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME) -> list[dict]:
+def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME, company: str = None) -> list[dict]:
     try:
-        results = frappe.get_all(
-            doctype,
-            filters={"is_active": 1},
-            fields=["name", "company"],
-            ignore_permissions=True  
+    
+        is_mapped = frappe.db.exists(
+            ORGANISATION_MAPPING_DOCTYPE_NAME,
+            {"company": company, "is_active": 1}
         )
-        return results
+
+        if is_mapped:
+            results = frappe.get_all(
+                doctype,
+                filters={
+                    "is_active": 1,
+                    "company": company
+                },
+                fields=["name", "company"],
+                ignore_permissions=True
+            )
+            return results
+        return None
+
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), _("Failed to get active settings"))
         frappe.throw(_("An error occurred while fetching settings"))
+
+# def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME) -> list[dict]:
+#     try:
+#         results = frappe.get_all(
+#             doctype,
+#             filters={"is_active": 1},
+#             fields=["name", "company"],
+#             ignore_permissions=True  
+#         )
+#         return results
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), _("Failed to get active settings"))
+#         frappe.throw(_("An error occurred while fetching settings"))
 
 
 def get_slade360_id(doctype: str, name: str, setting: str) -> str:        
