@@ -62,7 +62,6 @@ class NavariKRAeTimsSettings(Document):
                         )
 
 
-
     def on_update(self) -> None:
         def get_or_create_scheduled_job(
             method_name: str, frequency: str, cron_format: Optional[str] = None
