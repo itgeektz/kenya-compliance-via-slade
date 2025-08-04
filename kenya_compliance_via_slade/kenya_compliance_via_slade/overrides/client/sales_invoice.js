@@ -18,7 +18,9 @@ frappe.ui.form.on(parentDoctype, {
     const { message: activeSetting } = await frappe.call({
       method:
         "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_settings",
-      args: { doctype: settingsDoctypeName },
+      args: { doctype: settingsDoctypeName,
+        company: frm.doc.company
+       },
     });
 
     if (
