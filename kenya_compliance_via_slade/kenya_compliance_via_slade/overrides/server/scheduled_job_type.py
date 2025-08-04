@@ -6,7 +6,7 @@ class CustomScheduledJobType(CoreScheduledJobType):
     def autoname(self):
         if hasattr(self, 'job_name') and self.job_name:
             self.name = self.job_name
-        elif not self.name:
+        else:
             self.name = ".".join(self.method.split(".")[-2:])
 
     def execute(self):

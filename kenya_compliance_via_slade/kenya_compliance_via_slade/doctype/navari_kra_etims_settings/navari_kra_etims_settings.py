@@ -53,11 +53,13 @@ class NavariKRAeTimsSettings(Document):
 
     def on_update(self) -> None:
         def get_or_create_scheduled_job(name: str, method: str, freq: Optional[str], cron: Optional[str], job_args: dict) -> None:
-            task_name = frappe.db.exists("Scheduled Job Type", name)
+            task_name = frappe.db.exists("Scheduled Job Type", {"job_name": name})
             if task_name:
                 task = frappe.get_doc("Scheduled Job Type", task_name)
             else:
                 task = frappe.new_doc("Scheduled Job Type")
+                task.job_name = name
+                task.name = name
 
             task.method = method
             task.frequency = freq or task.frequency
@@ -66,6 +68,7 @@ class NavariKRAeTimsSettings(Document):
             task.stopped = 0 
             task.job_args = frappe.as_json(job_args)
             task.save(ignore_permissions=True)
+            task.enqueue()
 
         def disable_scheduled_job(name: str) -> None:
             task_name = frappe.db.exists("Scheduled Job Type", name)
