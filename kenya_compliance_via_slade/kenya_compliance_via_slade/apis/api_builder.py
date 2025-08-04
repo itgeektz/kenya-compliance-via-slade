@@ -203,6 +203,15 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                 is_minimizable=True,
             )
 
+        if not self._settings.is_active == 1:
+            frappe.log_error(
+                title="Inactive eTims Settings",
+                message=f"eTims settings {self._settings.name} is inactive. Cannot make remote call.",
+                reference_doctype=doctype,
+                reference_name=document_name,
+            )
+            return
+
         self.doctype, self.document_name = doctype, document_name
         parsed_url = parse.urlparse(self._url)
         route_path = f"/{parsed_url.path.split('/')[-1]}"

@@ -774,7 +774,7 @@ def update_navari_settings_with_token(docname: str, skip_checks: bool = False) -
         )
         settings_doc.save(ignore_permissions=True)
 
-        user_details_fetch(docname)
+        # user_details_fetch(docname)
 
     return settings_doc
 
@@ -1206,8 +1206,7 @@ def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME, company: str = Non
             results = frappe.get_all(
                 doctype,
                 filters={
-                    "is_active": 1,
-                    "company": company
+                    "is_active": 1
                 },
                 fields=["name", "company"],
                 ignore_permissions=True

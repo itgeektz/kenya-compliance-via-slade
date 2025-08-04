@@ -47,6 +47,9 @@ def submit_purchase_invoice(doc: Document) -> None:
             # or frappe.get_value("Company", {}, "name")
         )
         settings_doc = get_settings(company_name=company_name)
+        if doc.prevent_etims_submission or (hasattr(doc, "etr_invoice_number") and doc.etr_invoice_number):
+            # If the submission is prevented or if the invoice number is already set, skip submission
+            return
 
         # company_name = (
         #     doc.company

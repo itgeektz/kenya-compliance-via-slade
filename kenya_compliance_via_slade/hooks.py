@@ -165,10 +165,9 @@ doctype_list_js = {
 # ---------------
 # Override standard doctype classes
 
-# override_doctype_class = {
-# 	"ToDo": "custom_app.overrides.CustomToDo"
-# }
-
+override_doctype_class = {
+	"Scheduled Job Type": "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.scheduled_job_type.CustomScheduledJobType",
+}
 # Document Events
 # ---------------
 # Hook on document methods and events

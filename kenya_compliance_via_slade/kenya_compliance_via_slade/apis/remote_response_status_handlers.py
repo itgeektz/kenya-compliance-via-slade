@@ -308,23 +308,23 @@ def sales_information_submission_on_error(response: dict, document_name: str, do
             perform_item_registration(item.item_code, settings_name)
             
         time.sleep(15)  
-        frappe.enqueue(
-            send_invoice_details,
-            name=doc.name,
-            queue='long', timeout=600, now=False, enqueue_after_commit=True,
-            at_front=False, job_name=f"retry_invoice_{doc.name}_{int(time.time())}",
-        )
+        # frappe.enqueue(
+        #     send_invoice_details,
+        #     name=doc.name,
+        #     queue='long', timeout=600, now=False, enqueue_after_commit=True,
+        #     at_front=False, job_name=f"retry_invoice_{doc.name}_{int(time.time())}",
+        # )
         
     elif "get() returned more than one BusinessPartner -- it returned 2!" in error_message:
         from .apis import send_branch_customer_details
         send_branch_customer_details(doc.customer, settings_name)
         time.sleep(15) 
-        frappe.enqueue(
-            send_invoice_details,
-            name=doc.name,
-            queue='long', timeout=600, now=False, enqueue_after_commit=True,
-            at_front=False, job_name=f"retry_invoice_{doc.name}_{int(time.time())}",
-        )
+        # frappe.enqueue(
+        #     send_invoice_details,
+        #     name=doc.name,
+        #     queue='long', timeout=600, now=False, enqueue_after_commit=True,
+        #     at_front=False, job_name=f"retry_invoice_{doc.name}_{int(time.time())}",
+        # )
         
 # def sales_information_submission_on_success(
 #     response: dict, document_name: str, doctype: str, **kwargs
