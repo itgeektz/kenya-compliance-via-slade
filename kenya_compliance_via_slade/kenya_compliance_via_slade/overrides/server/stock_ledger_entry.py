@@ -20,8 +20,8 @@ endpoints_builder = EndpointsBuilder()
 def on_update(doc: Document, method: str | None = None) -> None:
     company_name = (
         doc.company
-        or frappe.defaults.get_user_default("Company")
-        or frappe.get_value("Company", {}, "name")
+        # or frappe.defaults.get_user_default("Company")
+        # or frappe.get_value("Company", {}, "name")
     )
     settings = get_settings(company_name=company_name)
     if not settings:

@@ -27,8 +27,8 @@ def generic_invoices_on_submit_override(
     """
     company_name = (
         doc.company
-        or frappe.defaults.get_user_default("Company")
-        or frappe.get_value("Company", {}, "name")
+        # or frappe.defaults.get_user_default("Company")
+        # or frappe.get_value("Company", {}, "name")
     )
 
     settings_doc = get_settings(company_name=company_name)

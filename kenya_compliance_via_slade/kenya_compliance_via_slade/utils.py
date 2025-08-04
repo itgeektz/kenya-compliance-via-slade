@@ -774,7 +774,7 @@ def update_navari_settings_with_token(docname: str, skip_checks: bool = False) -
         )
         settings_doc.save(ignore_permissions=True)
 
-        user_details_fetch(docname)
+        # user_details_fetch(docname)
 
     return settings_doc
 
@@ -1194,18 +1194,42 @@ def reset_auth_password(docname: str) -> None:
         
 
 @frappe.whitelist()
-def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME) -> list[dict]:
+def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME, company: str = None) -> list[dict]:
     try:
-        results = frappe.get_all(
-            doctype,
-            filters={"is_active": 1},
-            fields=["name", "company"],
-            ignore_permissions=True  
+    
+        is_mapped = frappe.db.exists(
+            ORGANISATION_MAPPING_DOCTYPE_NAME,
+            {"company": company, "is_active": 1}
         )
-        return results
+
+        if is_mapped:
+            results = frappe.get_all(
+                doctype,
+                filters={
+                    "is_active": 1
+                },
+                fields=["name", "company"],
+                ignore_permissions=True
+            )
+            return results
+        return None
+
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), _("Failed to get active settings"))
         frappe.throw(_("An error occurred while fetching settings"))
+
+# def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME) -> list[dict]:
+#     try:
+#         results = frappe.get_all(
+#             doctype,
+#             filters={"is_active": 1},
+#             fields=["name", "company"],
+#             ignore_permissions=True  
+#         )
+#         return results
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), _("Failed to get active settings"))
+#         frappe.throw(_("An error occurred while fetching settings"))
 
 
 def get_slade360_id(doctype: str, name: str, setting: str) -> str:        

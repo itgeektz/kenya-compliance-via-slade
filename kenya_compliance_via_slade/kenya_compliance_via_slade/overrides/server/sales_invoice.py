@@ -8,8 +8,8 @@ from ...utils import calculate_tax, get_settings
 def on_submit(doc: Document, method: str = None) -> None:
     company_name = (
         doc.company
-        or frappe.defaults.get_user_default("Company")
-        or frappe.get_value("Company", {}, "name")
+        # or frappe.defaults.get_user_default("Company")
+        # or frappe.get_value("Company", {}, "name")
     )
     settings_doc = get_settings(company_name=company_name)
     if not settings_doc:

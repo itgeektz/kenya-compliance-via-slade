@@ -365,15 +365,21 @@ def submit_all_customers(settings_name: str = None) -> None:
 def send_branch_customer_details(name: str, settings_name: str, is_customer: bool = True) -> None:
     doctype = "Customer" if is_customer else "Supplier"
     data = frappe.get_doc(doctype, name)
-    
-    if hasattr(data, 'disabled') and data.disabled:
+
+    if (hasattr(data, 'disabled') and data.disabled) or (hasattr(data, 'custom_prevent_etims_registration') and data.custom_prevent_etims_registration):
         return
+    
+    request_data = (
+        {"customer_tax_pin": data.tax_id, "document_name": name} 
+        if hasattr(data, 'tax_id') and data.tax_id is not None 
+        else {"partner_name": name, "document_name": name}
+    )
 
     frappe.enqueue(
         process_request,
         queue="default",
         is_async=True,
-        request_data={"partner_name": name, "document_name": name},
+        request_data=request_data,
         route_key="BhfCustSaveReq",
         handler_function=fetch_matching_partner_on_success,
         request_method="GET",
