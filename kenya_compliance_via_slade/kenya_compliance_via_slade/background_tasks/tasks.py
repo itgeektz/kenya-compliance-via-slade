@@ -38,23 +38,36 @@ from .task_response_handlers import (
 endpoints_builder = EndpointsBuilder()
 
 
-def refresh_notices() -> None:
-    setups = frappe.get_all(
-        SETTINGS_DOCTYPE_NAME,
-        filters={"is_active": 1, "sandbox": 0},
-        fields=["name"],
-    )
-    for setup in setups:
-        settings_name = setup.name
-        if not settings_name:
-            continue
+@frappe.whitelist()
+def run_background_task(method_path, settings_name=None, request_data=None):
+    frappe.flags.ignore_permissions = True
+    func = frappe.get_attr(method_path)
+    return func(settings_name=settings_name, request_data=request_data)
+
+@frappe.whitelist()
+def refresh_notices(settings_name: str = None) -> None:
+    if settings_name:
         try:
             perform_notice_search({}, settings_name)
         except Exception as e:
             frappe.log_error(
                 f"Error performing notice search for {settings_name}: {str(e)}"
             )
-            continue
+    else:
+        setups = frappe.get_all(
+            SETTINGS_DOCTYPE_NAME,
+            filters={"is_active": 1, "sandbox": 0},
+            fields=["name"],
+        )
+        for setup in setups:
+            current_settings = setup.name
+            try:
+                perform_notice_search({}, current_settings)
+            except Exception as e:
+                frappe.log_error(
+                    f"Error performing notice search for {current_settings}: {str(e)}"
+                )
+                continue
 
 
 def get_timeframe() -> timedelta:
@@ -67,8 +80,10 @@ def fetch_sales_invoices(filters: dict) -> list:
     return frappe.get_all("Sales Invoice", filters, ["name"])
 
 
-def send_sales_invoices_information() -> None:
-    settings = get_settings()
+def send_sales_invoices_information(settings_name: str = None) -> None:
+    if not settings_name:
+        return
+    settings = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
     if not settings.get("sales_auto_submission_enabled"):
         return
     timeframe_ago = datetime.now() - get_timeframe()
@@ -205,7 +220,7 @@ def fetch_scu_data(invoices: list) -> None:
 
 
 @frappe.whitelist()
-def perform_notice_search(request_data: str, settings_name: str)  -> str:
+def perform_notice_search(request_data: str | dict, settings_name: str)  -> str:
     """Function to perform notice search."""
     message = process_request(
         request_data, "NoticeSearchReq", notices_search_on_success, settings_name=settings_name
@@ -214,7 +229,7 @@ def perform_notice_search(request_data: str, settings_name: str)  -> str:
 
 
 @frappe.whitelist()
-def refresh_code_lists(request_data: str, settings_name: str) -> str:
+def refresh_code_lists(request_data: str | dict, settings_name: str) -> str:
     """Refresh code lists based on request data."""
     tasks = [
         ("CurrencyCountrySearchReq", update_countries),
@@ -335,7 +350,7 @@ def get_significant_words(text):
     ]
 
 @frappe.whitelist()
-def get_item_classification_codes(request_data: str, settings_name: str) -> str:
+def get_item_classification_codes(request_data: str | dict, settings_name: str) -> str:
     """Function to get item classification codes."""
     message = process_request(
         request_data, "ItemClsSearchReq", update_item_classification_codes, settings_name=settings_name
@@ -398,9 +413,11 @@ def fetch_etims_operation_types(request_data: str) -> None:
     return operation_types
 
 
-def send_stock_information() -> None:
+def send_stock_information(settings_name: str) -> None:
     from ..overrides.server.stock_ledger_entry import fetch_current_stock_balance
-    settings = get_settings()
+    if not settings_name:
+        return
+    settings = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
     if not settings.get("stock_auto_submission_enabled"):
         return
 
@@ -439,10 +456,14 @@ def fetch_stock_ledgers(timeframe_ago: datetime) -> List[Document]:
     return [frappe.get_doc("Stock Ledger Entry", entry["name"]) for entry in oldest_entries]
 
 
-def send_purchase_information() -> None:
+def send_purchase_information(settings_name: str = None) -> None:
     from ..overrides.server.purchase_invoice import on_submit
 
-    settings = get_settings()
+    if not settings_name:
+        return
+    
+    settings = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
+
     if not settings.get("purchase_auto_submission_enabled"):
         return
     timeframe = (
