@@ -11,7 +11,7 @@ from ...background_tasks.tasks import (
     send_stock_information,
 )
 from ...utils import user_details_fetch, reset_auth_password, update_navari_settings_with_token
-from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
+from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME, ORGANISATION_MAPPING_DOCTYPE_NAME
 
 class NavariKRAeTimsSettings(Document):
     """ETims Integration Settings doctype"""
@@ -28,20 +28,40 @@ class NavariKRAeTimsSettings(Document):
 
     def validate(self) -> None:
         if self.is_active == 1:
-            existing_doc: Optional[str] = frappe.db.exists(
-                SETTINGS_DOCTYPE_NAME,
-                {
-                    "bhfid": self.bhfid,
-                    "company": self.company,
-                    "is_active": 1,
-                    "name": ("!=", self.name),
-                },
-            )
-
-            if existing_doc:
-                frappe.throw(
-                    f"Only one active setting is allowed for bhfid '{self.bhfid}' and company '{self.company}'."
+            seen_pairs = set()
+            for row in self.get("organisation_mapping") or []:
+                if row.is_active != 1:
+                    continue
+                pair = (row.company, row.branch)
+                if pair in seen_pairs:
+                    frappe.throw(
+                        f"Duplicate active mapping for company '{row.company}' and branch '{row.branch}' "
+                        f"in the same eTims Settings document. Only one active mapping is allowed per company + branch."
+                    )
+                seen_pairs.add(pair)
+                existing = frappe.get_all(
+                    ORGANISATION_MAPPING_DOCTYPE_NAME,
+                    filters={
+                        "company": row.company,
+                        "branch": row.branch,
+                        "is_active": 1,
+                        "parenttype": SETTINGS_DOCTYPE_NAME,
+                        "parent": ["!=", self.name],
+                    },
+                    fields=["parent"],
+                    limit=1,
+                    order_by=None,
                 )
+                if existing:
+                    parent_doc = frappe.get_value(SETTINGS_DOCTYPE_NAME, existing[0].parent, "is_active")
+                    if parent_doc:
+                        frappe.throw(
+                            f"Active mapping for company '{row.company}' and branch '{row.branch}' "
+                            f"already exists in another active eTims Settings ({existing[0].parent}). "
+                            "Only one active mapping is allowed per company + branch across all active settings."
+                        )
+
+
 
     def on_update(self) -> None:
         def get_or_create_scheduled_job(
