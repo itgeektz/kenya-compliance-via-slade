@@ -72,6 +72,8 @@ def refresh_notices(settings_name: str = None) -> None:
 
 def get_timeframe() -> timedelta:
     settings = get_settings()
+    if not settings:
+        return timedelta(seconds=86400)
     timeframe = settings.get("sales_information_submission_timeframe", 86400) or 86400
     return timedelta(seconds=timeframe)
 

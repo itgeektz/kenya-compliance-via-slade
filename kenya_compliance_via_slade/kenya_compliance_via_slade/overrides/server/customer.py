@@ -9,6 +9,8 @@ from ...utils import get_active_settings
 
 def on_update(doc: Document, method: str = None) -> None:
     active_settings = get_active_settings()
+    if not active_settings:
+        return
     for setting in active_settings:
         setup_mapping = frappe.db.get_value(
             SLADE_ID_MAPPING_DOCTYPE_NAME,

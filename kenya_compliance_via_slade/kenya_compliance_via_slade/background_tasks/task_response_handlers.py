@@ -468,6 +468,9 @@ def warehouse_search_on_success(response: dict, settings_name: str, **kwargs) ->
     )
 
     settings = get_settings(settings_name=settings_name)
+    
+    if not settings:
+        return
 
     bhfid_slade_id = frappe.db.get_value("Branch", settings.bhfid, "slade_id")
     selected_record = (
