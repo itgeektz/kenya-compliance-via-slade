@@ -43,6 +43,9 @@ def process_request(
     dynamic_route_path = process_dynamic_url(route_path, request_data)
     url = f"{server_url}{dynamic_route_path}"
     settings = get_settings(company_name, branch_id, settings_name) 
+    
+    if not settings:
+        return
     # if request_method != "GET":
     #     updates = add_organisation_branch_department(settings)
     #     # data.update(updates)

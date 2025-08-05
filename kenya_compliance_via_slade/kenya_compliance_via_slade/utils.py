@@ -1195,28 +1195,37 @@ def reset_auth_password(docname: str) -> None:
 
 @frappe.whitelist()
 def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME, company: str = None) -> list[dict]:
+    """
+    Get active settings for a company:
+    1. If company is provided and has organization mappings, return only settings for that company
+    2. Otherwise return all active settings
+    """
     try:
-    
-        is_mapped = frappe.db.exists(
-            ORGANISATION_MAPPING_DOCTYPE_NAME,
-            {"company": company, "is_active": 1}
-        )
-
-        if is_mapped:
-            results = frappe.get_all(
-                doctype,
+        if company:
+            mapped_settings = frappe.get_all(
+                ORGANISATION_MAPPING_DOCTYPE_NAME,
                 filters={
+                    "company": company,
                     "is_active": 1
                 },
-                fields=["name", "company"],
+                fields=["parent as name", "company"],
+                distinct=True,
                 ignore_permissions=True
             )
-            return results
-        return None
+            if mapped_settings:
+                return mapped_settings
+        
+        return frappe.get_all(
+            doctype,
+            filters={"is_active": 1},
+            fields=["name", "company"],
+            ignore_permissions=True
+        ) or []
 
-    except Exception as e:
+    except Exception:
         frappe.log_error(frappe.get_traceback(), _("Failed to get active settings"))
-        frappe.throw(_("An error occurred while fetching settings"))
+        return []  
+
 
 # def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME) -> list[dict]:
 #     try:
@@ -1277,6 +1286,7 @@ def get_parent_by_slade360_id(doctype: str, slade360_id: str, setting: str) -> s
 @frappe.whitelist()
 def get_etims_action_data(doctype: str, docname: str = None) -> dict[str, Any]:
     active_settings = get_active_settings()
+    
     if not docname:
         return {
             "settings": active_settings,

@@ -119,6 +119,9 @@ def bulk_register_items(docs_list: str, settings_name: str = None) -> None:
     item_names = json.loads(docs_list)
     settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
     
+    if not item_names or not settings:
+        return
+    
     for setting in settings:
         for item_name in item_names:
             frappe.enqueue(
@@ -131,6 +134,9 @@ def bulk_register_items(docs_list: str, settings_name: str = None) -> None:
 @frappe.whitelist()
 def update_all_items(settings_name: str = None) -> None:
     settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    
+    if not settings:
+        return
     
     for setting in settings:
         Item = DocType("Item")
@@ -159,7 +165,10 @@ def update_all_items(settings_name: str = None) -> None:
 @frappe.whitelist()
 def register_all_items(settings_name: str = None) -> None:
     settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
-    
+
+    if not settings:
+        return
+
     for setting in settings:
         Item = DocType("Item")
         Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
@@ -269,6 +278,8 @@ def fetch_item_details(request_data: str, settings_name: str) -> None:
 @frappe.whitelist()
 def submit_all_suppliers(settings_name: str = None) -> None:
     active_settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    if not active_settings:
+        return
     for setting in active_settings:
         
         Supplier = DocType("Supplier")
@@ -304,6 +315,8 @@ def submit_all_suppliers(settings_name: str = None) -> None:
 def bulk_submit_suppliers(docs_list: str, settings_name: str = None) -> None:
     suppliers = json.loads(docs_list)
     settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    if not suppliers or not settings:
+        return
     
     for setting in settings:
         for supplier in suppliers:
@@ -319,6 +332,8 @@ def bulk_submit_suppliers(docs_list: str, settings_name: str = None) -> None:
 def bulk_submit_customers(docs_list: str, settings_name: str = None) -> None:
     customers = json.loads(docs_list)
     settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    if not customers or not settings:
+        return
     
     for setting in settings:
         for customer in customers:
@@ -332,6 +347,8 @@ def bulk_submit_customers(docs_list: str, settings_name: str = None) -> None:
 @frappe.whitelist()
 def submit_all_customers(settings_name: str = None) -> None:
     active_settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    if not active_settings:
+        return
     for setting in active_settings:
         
         Customer = DocType("Customer")
@@ -549,6 +566,9 @@ def submit_inventory(name: str, settings_name: str) -> None:
         frappe.throw("Item name is required.")
 
     settings = get_settings(settings_name=settings_name)
+    
+    if not settings:
+        return
 
     request_data = {
         "document_name": name,
