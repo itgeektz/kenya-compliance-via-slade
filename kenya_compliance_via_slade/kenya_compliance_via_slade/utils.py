@@ -1287,7 +1287,6 @@ def get_parent_by_slade360_id(doctype: str, slade360_id: str, setting: str) -> s
 def get_etims_action_data(doctype: str, docname: str = None) -> dict[str, Any]:
     active_settings = get_active_settings()
     
-    print(f"Active Settings: {active_settings}")
     if not docname:
         return {
             "settings": active_settings,
