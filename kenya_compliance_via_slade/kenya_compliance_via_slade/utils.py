@@ -1286,8 +1286,13 @@ def get_etims_action_data(doctype: str, docname: str = None) -> dict[str, Any]:
         }
     try:
         doc = frappe.get_doc(doctype, docname)
-    except frappe.DoesNotExistError:
-        frappe.throw(f"{doctype} '{docname}' does not exist.")
+    except :
+        return {
+            "settings": active_settings,
+            "has_mappings": False,
+            "registered_mappings": [],
+            "unregistered_settings": []
+        }
 
 
     if not active_settings:
