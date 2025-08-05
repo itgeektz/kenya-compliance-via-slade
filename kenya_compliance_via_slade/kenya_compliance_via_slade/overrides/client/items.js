@@ -2,6 +2,7 @@ const itemDoctypName = "Item";
 
 frappe.ui.form.on(itemDoctypName, {
   refresh: async function (frm) {
+    if (frm.is_new()) return;
     const { message: data } = await frappe.call({
       method:
         "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_etims_action_data",
