@@ -534,11 +534,12 @@ def calculate_tax(doc: "Document") -> None:
 def _calculate_item_level_taxes(doc: "Document") -> None:
     """Calculate taxes using each item's individual tax template"""
     for item in doc.items:
-        tax_rate = get_item_tax_rate(item.item_tax_template) if item.item_tax_template else None
-        tax_amount = item.base_net_amount * tax_rate / 100 if tax_rate else 0
+        tax_rate = float(get_item_tax_rate(item.item_tax_template)) if item.item_tax_template else 0.0
+        base_net_amount = float(item.base_net_amount or 0.0)
+        tax_amount = base_net_amount * tax_rate / 100.0
         
-        item.custom_tax_amount = tax_amount
-        item.custom_tax_rate = tax_rate if tax_rate else 0
+        item.custom_tax_amount = float(tax_amount)
+        item.custom_tax_rate = float(tax_rate)
 
 
 def _calculate_document_level_taxes(doc: "Document", taxes: list) -> None:
@@ -546,18 +547,18 @@ def _calculate_document_level_taxes(doc: "Document", taxes: list) -> None:
     Distribute document-level taxes proportionally across all items.
     Tax rates are calculated from the distributed tax amount and item net amount.
     """
-    total_net_amount = sum(item.base_net_amount for item in doc.items)
+    total_net_amount = sum(float(item.base_net_amount or 0) for item in doc.items)
     if total_net_amount == 0:
         return
-    
-    total_tax_amount = sum(tax.tax_amount for tax in taxes)
-    
+
+    total_tax_amount = sum(float(tax.tax_amount or 0) for tax in taxes)
+
     for item in doc.items:
-        item_ratio = item.base_net_amount / total_net_amount
-        item.custom_tax_amount = total_tax_amount * item_ratio
+        item_ratio = float(item.base_net_amount) / total_net_amount
+        item.custom_tax_amount = float(total_tax_amount * item_ratio)
         
-        if item.base_net_amount > 0:
-            item.custom_tax_rate = (item.custom_tax_amount / item.base_net_amount) * 100
+        if float(item.base_net_amount) > 0:
+            item.custom_tax_rate = (float(item.custom_tax_amount) / float(item.base_net_amount)) * 100
         else:
             item.custom_tax_rate = 0
 
@@ -565,7 +566,9 @@ def _calculate_document_level_taxes(doc: "Document", taxes: list) -> None:
 def get_item_tax_rate(item_tax_template: str) -> float:
     """Return the sum of all tax rates in the given Item Tax Template"""
     tax_template = frappe.get_doc("Item Tax Template", item_tax_template)
-    return sum(tax.tax_rate for tax in tax_template.taxes) if tax_template.taxes else 0
+    """Return the sum of all tax rates in the given Item Tax Template"""
+    tax_template = frappe.get_doc("Item Tax Template", item_tax_template)
+    return float(sum(float(tax.tax_rate or 0) for tax in tax_template.taxes) if tax_template.taxes else 0)
 
 
 def _set_taxation_type_codes(doc: "Document") -> None:
