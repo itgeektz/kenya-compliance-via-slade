@@ -53,6 +53,7 @@ from .remote_response_status_handlers import (
     update_invoice_info,
     user_details_fetch_on_success,
     user_details_submission_on_success,
+    verify_and_fix_invoice_info,
 )
 
 endpoints_builder = EndpointsBuilder()
@@ -941,38 +942,88 @@ def initialize_device(request_data: str) -> None:
         request_method="POST",
         doctype=SETTINGS_DOCTYPE_NAME,
     )
+    
+    
+@frappe.whitelist()
+def _process_invoice_fetch_request(
+    id: str = None, 
+    document_name: str = None, 
+    invoice_type: str = "Sales Invoice", 
+    settings_name: str = None, 
+    company: str = None,
+    handler_function = None,
+    reference_number: str = None, 
+    is_return: bool = False,
+    original_invoice_id: str = None,
+) -> None:
+    """Common helper function to process invoice-related requests."""
+    invoice = frappe.get_doc(invoice_type, document_name)
+    
+    if is_return and not original_invoice_id:
+        frappe.throw("Original invoice ID is required for return processing.")
+
+    request_data = {
+        "document_name": document_name,
+        "company": company or invoice.company,
+    }
+    
+    route_key = "TrnsSalesSearchReq"
+    
+    if invoice.is_return or is_return:
+        route_key = "SalesCreditNoteSaveReq"
+    
+    if id:
+        request_data["id"] = id
+    else:
+        if (invoice.is_return and invoice.return_against) or (is_return and original_invoice_id):
+            route_key = "SalesCreditNoteSaveReq"
+            original_invoice_slade_id = original_invoice_id if is_return else frappe.db.get_value("Sales Invoice", invoice.return_against, "custom_slade_id")
+            request_data["invoice"] = original_invoice_slade_id
+        else:
+            route_key = "TrnsSalesSaveWrReq"
+            request_data["reference_number"] = reference_number
+    
+    return process_request(
+        request_data,
+        route_key,
+        handler_function,
+        doctype=invoice_type,
+        settings_name=settings_name,
+        company=company,
+    )
+
 
 @frappe.whitelist()
 def get_invoice_details(
     id: str = None, document_name: str = None, invoice_type: str = "Sales Invoice", settings_name: str = None, company: str = None
 ) -> None:
     invoice = frappe.get_doc(invoice_type, document_name)
-
-    request_data = {
-        "document_name": document_name,
-        "company": company or invoice.company,
-    }
-    route_key = "TrnsSalesSearchReq"
     reference_number = get_invoice_reference_number(invoice)
-    if invoice.is_return:
-        route_key = "SalesCreditNoteSaveReq"
-    if id:
-        request_data["id"] = id
-    else:
-        if invoice.is_return and invoice.return_against:
-            route_key = "SalesCreditNoteSaveReq"
-            original_invoice = frappe.get_doc("Sales Invoice", invoice.return_against)
-            request_data["invoice"] = original_invoice.custom_slade_id
-        else:
-            route_key = "TrnsSalesSaveWrReq"
-            request_data["reference_number"] = reference_number
-    process_request(
-        request_data,
-        route_key,
-        update_invoice_info,
-        doctype=invoice_type,
+    _process_invoice_fetch_request(
+        id=id,
+        document_name=document_name,
+        invoice_type=invoice_type,
         settings_name=settings_name,
         company=company,
+        handler_function=update_invoice_info,
+        reference_number=reference_number,
+    )
+
+
+@frappe.whitelist()
+def verify_invoice_details(
+    id: str = None, document_name: str = None, invoice_type: str = "Sales Invoice", settings_name: str = None, company: str = None
+) -> None:
+    invoice = frappe.get_doc(invoice_type, document_name)
+    reference_number = get_invoice_reference_number(invoice)
+    _process_invoice_fetch_request(
+        id=id,
+        document_name=document_name,
+        invoice_type=invoice_type,
+        settings_name=settings_name,
+        company=company,
+        handler_function=verify_and_fix_invoice_info,
+        reference_number=reference_number,
     )
 
 
