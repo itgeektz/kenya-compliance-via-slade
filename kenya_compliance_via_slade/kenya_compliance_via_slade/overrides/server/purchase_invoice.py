@@ -17,7 +17,7 @@ def validate(doc: Document, method: str = None) -> None:
     get_itemised_tax_breakup_data(doc)
     if not doc.taxes:
         vat_acct = frappe.get_value(
-            "Account", {"account_type": "Tax", "tax_rate": "16"}, ["name"], as_dict=True
+            "Account", {"account_type": "Tax", "tax_rate": "16", "company": doc.company}, ["name"], as_dict=True
         )
         doc.set(
             "taxes",
