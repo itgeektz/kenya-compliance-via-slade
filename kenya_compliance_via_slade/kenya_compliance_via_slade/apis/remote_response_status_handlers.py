@@ -6,6 +6,7 @@ import frappe
 import qrcode
 import time
 
+
 from ... import __version__
 from ..doctype.doctype_names_mapping import (
     COUNTRIES_DOCTYPE_NAME,
@@ -17,6 +18,7 @@ from ..doctype.doctype_names_mapping import (
     REGISTERED_IMPORTED_ITEM_DOCTYPE_NAME,
     REGISTERED_PURCHASES_DOCTYPE_NAME,
     REGISTERED_PURCHASES_DOCTYPE_NAME_ITEM,
+    SETTINGS_DOCTYPE_NAME,
     SLADE_ID_MAPPING_DOCTYPE_NAME,
     TAXATION_TYPE_DOCTYPE_NAME,
     UNIT_OF_QUANTITY_DOCTYPE_NAME,
@@ -474,61 +476,187 @@ def process_sales_sign(document_name: str, doctype: str, invoice_slade_id: str) 
         request_method="POST",
         doctype=doctype,
     )
-
-
+    
+    
 def update_invoice_info(response: dict, document_name: str, doctype: str, settings_name: str | None = None, **kwargs) -> None:
-    doc = frappe.get_doc(doctype, document_name)
-    data = response.get("results", [])[0] if response.get("results") else response
-    scu_data = data.get("scu_data")
-    if not scu_data:
-        return
+    process_invoice_response(response, document_name, doctype)
 
-    custom_slade_id = data.get("id")
+
+def verify_and_fix_invoice_info(response: dict, document_name: str, doctype: str, settings_name: str | None = None, **kwargs) -> None:
+    doc = frappe.get_doc(doctype, document_name)
+    data = get_response_data(response)
+
+    if not data:
+        resend_invoice(document_name, doctype)
+        return
+        
+    if not data.get("scu_data"):
+        if doc.custom_slade_id:
+            process_sales_sign(document_name, doctype, doc.custom_slade_id)
+        return
+    
+    revision_count = int(doc.get("revision_count") or 0)
+    if revision_count > 0:
+        verify_and_fix_invoice_revisions(doctype, document_name, data, settings_name)
 
     invoice_data = build_return_invoice_payload(doc, data) if doc.is_return else build_invoice_payload(doc)
     
     if is_invoice_data_matching(invoice_data, data):
-        updates = {
-            "custom_slade_id": custom_slade_id,
-            **map_scu_fields(scu_data, custom_slade_id, doctype, qr_key="qr_code_url"),
-        }
-
-        if document_name:
-            frappe.db.set_value(doctype, document_name, updates)
-            frappe.publish_realtime("refresh_form", document_name)
-            
+        process_invoice_response(response, document_name, doctype)
     elif doc.status != "Credit Note Issued":
-        from ..overrides.server.shared_overrides import generic_invoices_on_submit_override
-        from .process_request import process_request
-        revision_count = int(doc.get("revision_count") or 0) + 1
-        allowed_revisions = int(frappe.get_value(
-            "Navari eTims Settings", settings_name, "max_allowed_revisions"
-        ) if frappe.get_value(
-            "Navari eTims Settings", settings_name, "max_allowed_revisions"
-        ) else 0)
-        
-        if allowed_revisions and revision_count > allowed_revisions:
-            return
-        
-        frappe.db.set_value(doctype, document_name, {"revision_count": revision_count})
-        new_doc = frappe.get_doc(doctype, document_name)
-        generic_invoices_on_submit_override(new_doc, doctype)
-        if not new_doc.is_return:
-            return_payload = prepare_return_invoice_payload(document_name, data.get("reference_number"), float(data.get("total_gross_amount", 0)), new_doc, data, True)
-            frappe.enqueue(
-                process_request,
-                queue="default",
-                is_async=True,
-                request_data=return_payload,
-                route_key="CreditNoteSaveReq",
-                handler_function=sales_information_submission_on_success,
-                request_method="POST",
-                doctype=doctype,
-                settings_name=settings_name,
-                company=doc.company,
-            )
-    
+        handle_invoice_mismatch(doc, document_name, doctype, settings_name, data)
 
+
+def process_invoice_response(response: dict, document_name: str, doctype: str) -> None:
+    """Common function to process invoice response and update document"""
+    data = get_response_data(response)
+    if not data or not data.get("scu_data"):
+        return
+
+    custom_slade_id = data.get("id")
+    updates = {
+        "custom_slade_id": custom_slade_id,
+        **map_scu_fields(data.get("scu_data"), custom_slade_id, doctype, qr_key="qr_code_url"),
+    }
+
+    if document_name:
+        frappe.db.set_value(doctype, document_name, updates)
+        frappe.publish_realtime("refresh_form", document_name)
+
+def verify_and_fix_invoice_revisions(doctype: str, document_name: str, data: dict, settings_name: str | None = None) -> None:
+    """Verify and enqueue fixing of previous invoice revisions if necessary"""
+    
+    doc = frappe.get_doc(doctype, document_name)
+    revision_count = int(doc.get("revision_count") or 0)
+
+    if revision_count > 0:
+        revisions_to_check = [document_name]  
+
+        for i in range(1, revision_count):
+            revisions_to_check.append(f"{document_name}-REV{i}")
+
+        for rev_docname in revisions_to_check:
+            frappe.enqueue(
+                check_and_credit_invoice_revision,
+                queue='short',
+                doctype=doctype,
+                document_name=document_name,
+                reference_number=rev_docname,
+                settings_name=settings_name
+            )
+            
+            
+def check_and_credit_invoice_revision(doctype: str, document_name: str, reference_number: str | None = None, settings_name: str | None = None) -> None:
+    """Check if an invoice has a credit note, and create one if not"""
+    
+    from .apis import _process_invoice_fetch_request
+
+    original_invoice_data = get_response_data(_process_invoice_fetch_request(
+        document_name=document_name,
+        invoice_type=doctype,
+        settings_name=settings_name,
+        handler_function=update_invoice_response_data,
+        reference_number=reference_number,
+    ))
+    
+    if original_invoice_data and original_invoice_data.get("id"):
+        credit_note_data = get_response_data(_process_invoice_fetch_request(
+            document_name=document_name,
+            invoice_type=doctype,
+            settings_name=settings_name,
+            handler_function=update_invoice_response_data,
+            reference_number=reference_number,
+            is_return=True,
+            original_invoice_id=original_invoice_data.get("id", "")
+        ))
+        
+        if not credit_note_data:
+            request_credit_note_for_wrong_invoice(
+                doctype,
+                document_name,
+                original_invoice_data,
+                original_invoice_data.get("reference_number") or reference_number,
+                settings_name
+            )            
+            
+
+def update_invoice_response_data(response: dict, document_name: str, doctype: str, settings_name: str, **kwargs) -> None:
+    pass  
+    
+def get_response_data(response: dict) -> dict | None:
+    """Extract data from response object"""
+    if response.get("results") is not None:
+        return response.get("results")[0] if response.get("results") else None
+    return response
+
+
+def handle_invoice_mismatch(doc, document_name: str, doctype: str, settings_name: str, data: dict) -> None:
+    """Handle cases where invoice data doesn't match the response"""
+    revision_count = int(doc.get("revision_count") or 0) + 1
+    allowed_revisions = int(frappe.get_value(
+        SETTINGS_DOCTYPE_NAME, settings_name, "max_allowed_revisions"
+    ) if frappe.get_value(
+        SETTINGS_DOCTYPE_NAME, settings_name, "max_allowed_revisions"
+    ) else 0)
+    
+    if allowed_revisions and revision_count > allowed_revisions:
+        return
+    
+    frappe.db.set_value(doctype, document_name, {"revision_count": revision_count})
+    new_doc = frappe.get_doc(doctype, document_name)
+    
+    if not new_doc.is_return:
+        request_credit_note_for_wrong_invoice(doctype, document_name, data, data.get("reference_number"), settings_name)
+        resend_invoice(document_name, doctype)
+
+
+def request_credit_note_for_wrong_invoice(doctype: str, document_name: str, data: dict, reference_number: str, settings_name: str) -> None:
+    """
+    Requests a credit note for an invoice with incorrect data
+    
+    Args:
+        doctype: The document type (Sales Invoice)
+        document_name: The name of the document
+        data: The response data from server containing current invoice details
+        settings_name: The eTims settings name to use for the API request
+    
+    Returns:
+        None: The function enqueues an API request to create a credit note
+    """ 
+    
+    from .process_request import process_request
+    
+    doc = frappe.get_doc(doctype, document_name) 
+    
+    if doc.is_return:
+        return 
+    
+    return_payload = prepare_return_invoice_payload(
+        document_name, 
+        reference_number, 
+        float(data.get("total_gross_amount", 0)), 
+        doc, 
+        data, 
+        True
+    )
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
+        request_data=return_payload,
+        route_key="CreditNoteSaveReq",
+        handler_function=sales_information_submission_on_success,
+        request_method="POST",
+        doctype=doctype,
+        settings_name=settings_name,
+        company=doc.company,
+    )
+      
+def resend_invoice(document_name: str, doctype: str) -> None:   
+    from ..overrides.server.shared_overrides import generic_invoices_on_submit_override
+    doc = frappe.get_doc(doctype, document_name)
+    generic_invoices_on_submit_override(doc, doctype)
+            
 def is_invoice_data_matching(payload: dict, response_data: dict) -> bool:
     """
     Check if the payload invoice data matches the response invoice data.

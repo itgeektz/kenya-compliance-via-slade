@@ -49,7 +49,7 @@ frappe.ui.form.on(parentDoctype, {
         );
       }
 
-      if (frm.doc.custom_successfully_submitted && !frm.doc.custom_qr_code) {
+      if (frm.doc.custom_successfully_submitted) {
         frm.add_custom_button(
           __("Sync Invoice Details"),
           function () {
@@ -74,14 +74,14 @@ frappe.ui.form.on(parentDoctype, {
       }
 
       frm.add_custom_button(
-        __("Verify Submission and Resend if Incorrect"),
+        __("Verify Submission and Fix if Incorrect"),
         function () {
           showSettingsModalAndExecute(
-            "Verify Submission and Resend if Incorrect",
+            "Verify Submission and Fix if Incorrect",
             activeSetting,
             (settings_name) => ({
               method:
-                "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
+                "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.verify_invoice_details",
               args: {
                 document_name: frm.doc.name,
                 invoice_type: "Sales Invoice",
