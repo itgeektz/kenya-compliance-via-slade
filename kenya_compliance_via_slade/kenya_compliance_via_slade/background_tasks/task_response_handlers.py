@@ -412,12 +412,6 @@ def update_workstations(response: dict, settings_name: str, **kwargs) -> None:
         "workstation_type_display": "workstation_type_display",
         "workstation_type": "workstation_type",
         "is_billing_point": lambda x: 1 if x.get("is_billing_point") else 0,
-        "department": {
-            "doctype": "Department",
-            "link_field": "org_unit",
-            "filter_field": "custom_slade_id",
-            "extract_field": "name",
-        },
     }
     update_documents(
         response, WORKSTATION_DOCTYPE_NAME, field_mapping, filter_field="slade_id", settings_name=settings_name
