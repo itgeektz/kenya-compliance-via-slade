@@ -364,8 +364,9 @@ def build_invoice_payload(
     settings_name: str
 ) -> dict:
     reference_number = get_invoice_reference_number(invoice)
-    dt_obj = datetime.fromisoformat(f"{invoice.posting_date} {invoice.posting_time or '00:00:00'}")
-    formatted_date = dt_obj.strftime("%Y-%m-%dT%H:%M:%SZ")
+    date_str = f"{invoice.posting_date} {invoice.posting_time or '00:00:00'}"
+    fmt = "%Y-%m-%d %H:%M:%S.%f" if "." in date_str else "%Y-%m-%d %H:%M:%S"
+    formatted_date = datetime.strptime(date_str, fmt).strftime("%Y-%m-%dT%H:%M:%SZ")
     payload = {
         "document_name": invoice.name,
         "reference_number": reference_number,
@@ -1606,3 +1607,42 @@ def prepare_return_invoice_payload(
         "amount": amount,
         "items": items,
     }
+    
+    
+def prepare_credit_note_payload(
+    document_name: str,
+    data: Dict[str, Any],
+) -> Dict:
+
+    credit_note_details = {
+        "amount": data.get("total_gross_amount", 0),
+        "customer": data.get("customer"),
+        "invoice": data.get("id"),
+        "reason": "13",
+        "source_organisation_unit": data.get("source_organisation_unit"),
+        "organisation": data.get("organisation"),
+        "description": f"Credit Note for {document_name}",
+    }
+
+    return credit_note_details
+    
+def prepare_credit_note_items_payload(
+    credit_note: str,
+    data: Dict[str, Any],
+    settings_name: str,
+) -> Dict:
+    items = data.get("sales_invoice_lines", [])
+    credit_note_items = []
+    for item in items:
+        credit_note_items.append({
+            "item_name": get_slade360_id(
+                "Item",
+                item.get("product_name"),
+                settings_name,
+            ),
+            "credit_note": credit_note,
+            "quantity": abs(item.get("quantity", 0)),
+            "source_organisation_unit": data.get("source_organisation_unit"),
+            "organisation": data.get("organisation"),
+        })
+    return credit_note_items
