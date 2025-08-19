@@ -360,15 +360,24 @@ def extract_document_series_number(document: Document) -> int | None:
 
 
 def build_invoice_payload(
-    invoice: Document
+    invoice: Document,
+    settings_name: str
 ) -> dict:
     reference_number = get_invoice_reference_number(invoice)
+    dt_obj = datetime.fromisoformat(f"{invoice.posting_date} {invoice.posting_time or '00:00:00'}")
+    formatted_date = dt_obj.strftime("%Y-%m-%dT%H:%M:%SZ")
     payload = {
         "document_name": invoice.name,
         "reference_number": reference_number,
         "sales_type": "credit",
         "customer_pin": frappe.get_value("Customer", invoice.customer, "tax_id") or None,
         "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name") or None,
+        "invoice_date": formatted_date,
+        "customer_id": get_slade360_id(
+            "Customer",
+            invoice.customer,
+            settings_name,
+        ),
         "itemDetails": []
     }
     
@@ -384,7 +393,12 @@ def build_invoice_payload(
             "unit_price": round(base_net_rate + (tax_amount / qty if qty else 0), 4),
             "quantity": qty,
             "uom": item.uom or "Pcs",
-            "tax_code": tax_code
+            "tax_code": tax_code,
+            "product_id": get_slade360_id(
+                "Item",
+                item.item_code,
+                settings_name,
+            ),
         })
 
     return payload
