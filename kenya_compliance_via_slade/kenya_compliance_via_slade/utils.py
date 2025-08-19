@@ -1635,14 +1635,14 @@ def prepare_credit_note_items_payload(
     credit_note_items = []
     for item in items:
         credit_note_items.append({
-            "item_name": get_slade360_id(
+            "product": get_slade360_id(
                 "Item",
                 item.get("product_name"),
                 settings_name,
             ),
             "credit_note": credit_note,
             "quantity": abs(item.get("quantity", 0)),
-            "source_organisation_unit": data.get("source_organisation_unit"),
+            "new_price": round(abs(item.get("price_inclusive_tax", 0)), 4),
             "organisation": data.get("organisation"),
         })
     return credit_note_items
