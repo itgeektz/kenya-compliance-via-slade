@@ -49,7 +49,7 @@ frappe.ui.form.on(parentDoctype, {
         );
       }
 
-      if (frm.doc.custom_successfully_submitted) {
+      if (frm.doc.custom_successfully_submitted || frm.doc.custom_slade_id) {
         frm.add_custom_button(
           __("Sync Invoice Details"),
           function () {
