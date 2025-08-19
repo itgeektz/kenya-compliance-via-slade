@@ -76,7 +76,7 @@ def generic_invoices_on_submit_override(
         )
         
     else:
-        payload = build_invoice_payload(doc)
+        payload = build_invoice_payload(doc, settings_doc.name)
         additional_context = {
             "invoice_type": invoice_type,
         }

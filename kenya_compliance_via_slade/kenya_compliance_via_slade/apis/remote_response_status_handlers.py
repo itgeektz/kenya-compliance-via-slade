@@ -495,11 +495,11 @@ def verify_and_fix_invoice_info(response: dict, document_name: str, doctype: str
             process_sales_sign(document_name, doctype, doc.custom_slade_id)
         return
     
-    revision_count = int(doc.get("revision_count") or 0)
+    revision_count = int(doc.get("revision_count") or 0) 
     if revision_count > 0:
         verify_and_fix_invoice_revisions(doctype, document_name, data, settings_name)
 
-    invoice_data = build_return_invoice_payload(doc, data) if doc.is_return else build_invoice_payload(doc)
+    invoice_data = build_return_invoice_payload(doc, data) if doc.is_return else build_invoice_payload(doc, settings_name)
     
     if is_invoice_data_matching(invoice_data, data):
         process_invoice_response(response, document_name, doctype)
