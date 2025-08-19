@@ -35,6 +35,8 @@ from ..utils import (
     get_parent_by_slade360_id,
     get_slade360_id,
     parse_response_data,
+    prepare_credit_note_items_payload,
+    prepare_credit_note_payload,
     prepare_return_invoice_payload,
 )
 
@@ -485,25 +487,25 @@ def update_invoice_info(response: dict, document_name: str, doctype: str, settin
 def verify_and_fix_invoice_info(response: dict, document_name: str, doctype: str, settings_name: str | None = None, **kwargs) -> None:
     doc = frappe.get_doc(doctype, document_name)
     data = get_response_data(response)
-
-    if not data:
-        resend_invoice(document_name, doctype)
-        return
-        
-    if not data.get("scu_data"):
-        if doc.custom_slade_id:
-            process_sales_sign(document_name, doctype, doc.custom_slade_id)
-        return
     
     revision_count = int(doc.get("revision_count") or 0) 
     if revision_count > 0:
         verify_and_fix_invoice_revisions(doctype, document_name, data, settings_name)
 
+    if not data:
+        resend_invoice(document_name, doctype)
+        return
+        
+    elif not data.get("scu_data"):
+        if doc.custom_slade_id:
+            process_sales_sign(document_name, doctype, doc.custom_slade_id)
+            return    
+
     invoice_data = build_return_invoice_payload(doc, data) if doc.is_return else build_invoice_payload(doc, settings_name)
     
     if is_invoice_data_matching(invoice_data, data):
         process_invoice_response(response, document_name, doctype)
-    elif doc.status != "Credit Note Issued":
+    else:
         handle_invoice_mismatch(doc, document_name, doctype, settings_name, data)
 
 
@@ -630,27 +632,64 @@ def request_credit_note_for_wrong_invoice(doctype: str, document_name: str, data
     
     if doc.is_return:
         return 
-    
-    return_payload = prepare_return_invoice_payload(
-        document_name, 
-        reference_number, 
-        float(data.get("total_gross_amount", 0)), 
-        doc, 
-        data, 
-        True
-    )
+
+    return_payload = prepare_credit_note_payload(document_name, data)
+
+    credit_note_data =  process_request(
+        request_data=return_payload,
+        route_key="SalesCreditNoteSaveReq",
+        handler_function=credit_note_on_success,
+        request_method="POST",
+        doctype=doctype,
+        settings_name=settings_name,
+        company=doc.company,
+    )  
+    if credit_note_data and isinstance(credit_note_data, dict):
+        id = credit_note_data.get("id")
+        items_data = prepare_credit_note_items_payload(id, data, settings_name)
+        for item in items_data:
+            process_request(
+                request_data=item,
+                route_key="SalesCreditNoteLineReq",
+                handler_function=credit_note_on_success,
+                request_method="POST",
+                doctype=doctype,
+                settings_name=settings_name,
+                company=doc.company,
+            )
+        payload = {"invoice_id": id, "document_name": document_name}
+        frappe.enqueue(
+            process_request,
+            queue="default",
+            is_async=True,
+            request_data=payload,
+            route_key="SalesCreditNoteTransitionReq",
+            handler_function=sign_credit_note,
+            request_method="PATCH",
+            doctype=doctype,
+            settings_name=settings_name,
+            company=doc.company,
+        )
+
+def sign_credit_note(response: dict, document_name: str, doctype: str, settings_name: str, **kwargs) -> None:
+    from .process_request import process_request
+    doc = frappe.get_doc(doctype, document_name)
+    payload = {"invoice_id": response.get("id"), "document_name": document_name}
     frappe.enqueue(
         process_request,
         queue="default",
         is_async=True,
-        request_data=return_payload,
-        route_key="CreditNoteSaveReq",
-        handler_function=sales_information_submission_on_success,
+        request_data=payload,
+        route_key="SalesCreditNoteSignReq",
+        handler_function=credit_note_on_success,
         request_method="POST",
         doctype=doctype,
         settings_name=settings_name,
         company=doc.company,
     )
+
+def credit_note_on_success(response: dict, document_name: str, doctype: str, settings_name: str, **kwargs) -> None:
+    pass
       
 def resend_invoice(document_name: str, doctype: str) -> None:   
     from ..overrides.server.shared_overrides import generic_invoices_on_submit_override
