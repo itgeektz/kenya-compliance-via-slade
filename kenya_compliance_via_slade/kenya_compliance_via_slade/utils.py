@@ -1236,12 +1236,12 @@ def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME, company: str = Non
             if mapped_settings:
                 return mapped_settings
         
-        return frappe.get_all(
-            doctype,
-            filters={"is_active": 1},
-            fields=["name", "company"],
-            ignore_permissions=True
-        ) or []
+        # return frappe.get_all(
+        #     doctype,
+        #     filters={"is_active": 1},
+        #     fields=["name", "company"],
+        #     ignore_permissions=True
+        # ) or []
 
     except Exception:
         frappe.log_error(frappe.get_traceback(), _("Failed to get active settings"))
