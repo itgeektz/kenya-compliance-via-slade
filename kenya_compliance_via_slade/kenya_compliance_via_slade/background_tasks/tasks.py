@@ -70,8 +70,8 @@ def refresh_notices(settings_name: str = None) -> None:
                 continue
 
 
-def get_timeframe() -> timedelta:
-    settings = get_settings()
+def get_timeframe(settings_name:str) -> timedelta:
+    settings = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
     if not settings:
         return timedelta(seconds=86400)
     timeframe = settings.get("sales_information_submission_timeframe", 86400) or 86400
@@ -88,7 +88,7 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
     settings = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
     if not settings.get("sales_auto_submission_enabled"):
         return
-    timeframe_ago = datetime.now() - get_timeframe()
+    timeframe_ago = datetime.now() - get_timeframe(settings_name)
     all_submitted_unsent = fetch_sales_invoices(
         {
             "docstatus": 1,
@@ -136,10 +136,10 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
 
 
 def handle_invoice_submission(invoices: list, action_func: callable) -> None:
-    max_tries = get_max_submission_attempts()
 
     for sales_invoice in invoices:
         doc = frappe.get_doc("Sales Invoice", sales_invoice.name, for_update=False)
+        max_tries = get_max_submission_attempts(company=doc.company)
         tries = int(doc.custom_submission_attempts or 0)
 
         if tries >= max_tries:
@@ -198,7 +198,7 @@ def fetch_scu_data(invoices: list) -> None:
         try:
             doc = frappe.get_doc("Sales Invoice", sales_invoice.name, for_update=False)
             tries = int(doc.custom_submission_attempts or 0)
-            max_tries = get_max_submission_attempts()
+            max_tries = get_max_submission_attempts(company=doc.company)
             if tries >= max_tries:
                 continue
             get_invoice_details(id=doc.custom_slade_id, document_name=doc.name)
@@ -427,7 +427,7 @@ def send_stock_information(settings_name: str) -> None:
     duration = timedelta(seconds=timeframe)
     timeframe_ago = datetime.now() - duration
     entries = fetch_stock_ledgers(timeframe_ago)  
-    max_tries = get_max_submission_attempts("Stock Ledger Entry")
+    max_tries = get_max_submission_attempts("Stock Ledger Entry", company=settings.company)
     for entry in entries:
         if int(entry.custom_submission_tries) >= max_tries:
             continue
@@ -435,7 +435,8 @@ def send_stock_information(settings_name: str) -> None:
          
 
 def fetch_stock_ledgers(timeframe_ago: datetime) -> List[Document]:
-    max_tries = get_max_submission_attempts("Stock Ledger Entry")
+    company = frappe.defaults.get_user_default("Company") or frappe.get_value("Company", {}, "name")
+    max_tries = get_max_submission_attempts("Stock Ledger Entry", company=company)
     entries = frappe.get_all(
         "Stock Ledger Entry",
         filters={

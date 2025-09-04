@@ -310,11 +310,11 @@ def get_settings(company_name: str = None, branch_id: str = None, settings_name:
         if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"name": settings_name}):
             return frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name).as_dict()
         
-    company_name = (
-        company_name
-        or frappe.defaults.get_user_default("Company")
-        or frappe.get_value("Company", {}, "name")
-    )
+    # company_name = (
+    #     company_name
+    #     or frappe.defaults.get_user_default("Company")
+    #     or frappe.get_value("Company", {}, "name")
+    # )
     if frappe.db.exists(
         ORGANISATION_MAPPING_DOCTYPE_NAME, 
         {"company": company_name, "is_active": 1}
@@ -328,14 +328,14 @@ def get_settings(company_name: str = None, branch_id: str = None, settings_name:
         if mapping and mapping.parent:
             return frappe.get_doc(SETTINGS_DOCTYPE_NAME, mapping.parent).as_dict()
     
-    if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
-        settings = frappe.db.get_value(
-            SETTINGS_DOCTYPE_NAME,
-            {"is_active": 1},
-            "*",
-            as_dict=True,
-        )
-        return settings
+    # if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
+    #     settings = frappe.db.get_value(
+    #         SETTINGS_DOCTYPE_NAME,
+    #         {"is_active": 1},
+    #         "*",
+    #         as_dict=True,
+    #     )
+    #     return settings
     
     return None
 
@@ -395,11 +395,11 @@ def build_invoice_payload(
             "quantity": qty,
             "uom": item.uom or "Pcs",
             "tax_code": tax_code,
-            "product_id": get_slade360_id(
-                "Item",
-                item.item_code,
-                settings_name,
-            ),
+            # "product_id": get_slade360_id(
+            #     "Item",
+            #     item.item_code,
+            #     settings_name,
+            # ),
         })
 
     return payload
@@ -1127,8 +1127,10 @@ def get_total_stock_balance_from_sle(sle_name: str) -> dict:
     return round(balance, 4)
 
 
-def get_max_submission_attempts(doctype: str = "Sales Invoice") -> int:
-    settings = get_settings()
+def get_max_submission_attempts(doctype: str = "Sales Invoice", company: str = None) -> int:
+    settings = get_settings(company_name=company) 
+    if not settings:
+        return 3
     if doctype == "Sales Invoice":
         tries = settings.get("maximum_sales_information_submission_attempts", 3)
     elif doctype == "Purchase Invoice":
@@ -1596,15 +1598,15 @@ def prepare_return_invoice_payload(
             base_amount = round(abs(item.get("base_amount")) or 0, 4)
             items.append({
                 "item_name": item.item_code,
-                "quantity": qty,
-                "amount": round(base_amount + tax_amount, 4),
+                "quantity": 1,
+                "amount": round(base_amount + tax_amount, 4) * qty,
             })
 
     return {
         "document_name": document_name,
         "invoice_reference": reference_number,
         "refund_reason": "13",
-        "amount": amount,
+        # "amount": amount,
         "items": items,
     }
     
