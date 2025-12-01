@@ -206,12 +206,12 @@ def create_and_enqueue_operation(
             "company": doc.company,
             "warehouse": warehouse.name,
             "source_location": (
-                warehouse.custom_slade_supplier_warehouse
+                warehouse.slade_supplier_warehouse
                 if operation_type == "outgoing"
                 else warehouse.custom_slade_id
             ),
             "destination_location": (
-                warehouse.custom_slade_customer_warehouse
+                warehouse.slade_customer_warehouse
                 if operation_type == "incoming"
                 else warehouse.custom_slade_id
             ),
