@@ -50,104 +50,119 @@ from .remote_response_status_handlers import (
 
 endpoints_builder = EndpointsBuilder()
 
+
 @frappe.whitelist()
-def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None) -> None:
+def bulk_submit_sales_invoices(
+    docs_list: str = None, settings_name: str = None
+) -> None:
     from ..overrides.server.sales_invoice import on_submit
 
     invoices_to_process = []
-    
+
     if docs_list:
         data = json.loads(docs_list)
         all_sales_invoices = frappe.db.get_all(
-            "Sales Invoice", {"docstatus": 1, "custom_successfully_submitted": 0}, ["name"]
+            "Sales Invoice",
+            {"docstatus": 1, "custom_successfully_submitted": 0},
+            ["name"],
         )
-        
+
         for record in data:
             for invoice in all_sales_invoices:
                 if record == invoice.name:
                     invoices_to_process.append(record)
     else:
         all_invoices = frappe.db.get_all(
-            "Sales Invoice", {"docstatus": 1, "custom_successfully_submitted": 0}, ["name"]
+            "Sales Invoice",
+            {"docstatus": 1, "custom_successfully_submitted": 0},
+            ["name"],
         )
         invoices_to_process = [invoice.name for invoice in all_invoices]
-    
+
     for invoice_name in invoices_to_process:
         doc = frappe.get_doc("Sales Invoice", invoice_name, for_update=False)
         frappe.enqueue(on_submit, doc=doc)
-                
+
+
 @frappe.whitelist()
 def bulk_verify_and_resend_invoices(docs_list: str, settings_name: str = None) -> None:
     invoices_to_process = []
-    
+
     if docs_list:
         data = json.loads(docs_list)
         all_sales_invoices = frappe.db.get_all(
             "Sales Invoice", {"docstatus": 1}, ["name"]
         )
-        
+
         for record in data:
             for invoice in all_sales_invoices:
                 if record == invoice.name:
                     invoices_to_process.append(record)
     else:
-        all_invoices = frappe.db.get_all(
-            "Sales Invoice", {"docstatus": 1}, ["name"]
-        )
+        all_invoices = frappe.db.get_all("Sales Invoice", {"docstatus": 1}, ["name"])
         invoices_to_process = [invoice.name for invoice in all_invoices]
-    
+
     for invoice_name in invoices_to_process:
         doc = frappe.get_doc("Sales Invoice", invoice_name, for_update=False)
         frappe.enqueue(
-            get_invoice_details, 
+            get_invoice_details,
             id=None,
-            document_name=doc.name, 
+            document_name=doc.name,
             invoice_type="Sales Invoice",
             settings_name=settings_name,
-            company=doc.company
+            company=doc.company,
         )
+
 
 @frappe.whitelist()
 def bulk_register_items(docs_list: str, settings_name: str = None) -> None:
     item_names = json.loads(docs_list)
-    settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
-    
+    settings = (
+        [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
+        if settings_name
+        else get_active_settings()
+    )
+
     if not item_names or not settings:
         return
-    
+
     for setting in settings:
         for item_name in item_names:
             frappe.enqueue(
                 perform_item_registration,
                 item_name=item_name,
-                settings_name=setting.name
+                settings_name=setting.name,
             )
 
 
 @frappe.whitelist()
 def update_all_items(settings_name: str = None) -> None:
-    settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
-    
+    settings = (
+        [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
+        if settings_name
+        else get_active_settings()
+    )
+
     if not settings:
         return
-    
+
     for setting in settings:
         Item = DocType("Item")
         Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
-        
+
         items = (
             frappe.qb.from_(Item)
             .inner_join(Mapping)
             .on(
-                (Mapping.parent == Item.name) &
-                (Mapping.parenttype == "Item") &
-                (Mapping.etims_setup == setting.name)
+                (Mapping.parent == Item.name)
+                & (Mapping.parenttype == "Item")
+                & (Mapping.etims_setup == setting.name)
             )
             .select(Item.name)
             .where(Item.custom_sent_to_slade == 1)
             .run(as_dict=True)
         )
-        
+
         for item in items:
             frappe.enqueue(
                 perform_item_registration,
@@ -155,9 +170,14 @@ def update_all_items(settings_name: str = None) -> None:
                 settings_name=setting.name,
             )
 
+
 @frappe.whitelist()
 def register_all_items(settings_name: str = None) -> None:
-    settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    settings = (
+        [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
+        if settings_name
+        else get_active_settings()
+    )
 
     if not settings:
         return
@@ -165,28 +185,25 @@ def register_all_items(settings_name: str = None) -> None:
     for setting in settings:
         Item = DocType("Item")
         Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
-        
+
         items = (
             frappe.qb.from_(Item)
             .left_join(Mapping)
             .on(
-                (Mapping.parent == Item.name) &
-                (Mapping.parenttype == "Item") &
-                (Mapping.etims_setup == setting.name)
+                (Mapping.parent == Item.name)
+                & (Mapping.parenttype == "Item")
+                & (Mapping.etims_setup == setting.name)
             )
             .select(Item.name)
-            .where(
-                (Item.custom_sent_to_slade == 0) &
-                (Mapping.name.isnull())
-            )
+            .where((Item.custom_sent_to_slade == 0) & (Mapping.name.isnull()))
             .run(as_dict=True)
         )
-        
+
         for item in items:
             frappe.enqueue(
                 perform_item_registration,
                 item_name=item.name,
-                settings_name=setting.name
+                settings_name=setting.name,
             )
 
 
@@ -220,7 +237,7 @@ def perform_item_registration(item_name: str, settings_name: str) -> dict | None
 
     if not item.custom_item_code_etims:
         generate_and_set_etims_code(item)
-    
+
     frappe.enqueue(
         process_request,
         queue="default",
@@ -232,12 +249,12 @@ def perform_item_registration(item_name: str, settings_name: str) -> dict | None
         doctype="Item",
         settings_name=settings_name,
     )
-    
-    
+
 
 def is_item_eligible_for_registration(item) -> bool:
     """Check if item meets basic registration criteria"""
     return not (item.custom_prevent_etims_registration or item.disabled)
+
 
 def validate_required_fields(item) -> list:
     """Validate required fields for item registration"""
@@ -252,6 +269,7 @@ def validate_required_fields(item) -> list:
     ]
     return [field for field in required_fields if not item.get(field)]
 
+
 def generate_and_set_etims_code(item) -> None:
     """Generate and set ETIMS code for item"""
     item.custom_item_code_etims = generate_custom_item_code_etims(item)
@@ -264,124 +282,145 @@ def generate_and_set_etims_code(item) -> None:
 @frappe.whitelist()
 def fetch_item_details(request_data: str, settings_name: str) -> None:
     process_request(
-        request_data, "ItemSearchReq", item_search_on_success, doctype="Item", settings_name=settings_name
+        request_data,
+        "ItemSearchReq",
+        item_search_on_success,
+        doctype="Item",
+        settings_name=settings_name,
     )
 
 
 @frappe.whitelist()
 def submit_all_suppliers(settings_name: str = None) -> None:
-    active_settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    active_settings = (
+        [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
+        if settings_name
+        else get_active_settings()
+    )
     if not active_settings:
         return
     for setting in active_settings:
-        
+
         Supplier = DocType("Supplier")
         Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
-        
+
         query = (
             frappe.qb.from_(Supplier)
             .left_join(Mapping)
             .on(
-                (Mapping.parent == Supplier.name) & 
-                (Mapping.parenttype == "Supplier") & 
-                (Mapping.etims_setup == setting.name)
+                (Mapping.parent == Supplier.name)
+                & (Mapping.parenttype == "Supplier")
+                & (Mapping.etims_setup == setting.name)
             )
             .select(Supplier.name)
-            .where(
-                (Mapping.name.isnull())
-            )
+            .where((Mapping.name.isnull()))
         )
-        
+
         suppliers = query.run(as_dict=True)
-                
+
         for supplier in suppliers:
             frappe.enqueue(
-                send_branch_customer_details, 
-                settings_name=setting.name, 
-                name=supplier.name, 
-                is_customer=False
+                send_branch_customer_details,
+                settings_name=setting.name,
+                name=supplier.name,
+                is_customer=False,
             )
 
-            
-            
+
 @frappe.whitelist()
 def bulk_submit_suppliers(docs_list: str, settings_name: str = None) -> None:
     suppliers = json.loads(docs_list)
-    settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    settings = (
+        [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
+        if settings_name
+        else get_active_settings()
+    )
     if not suppliers or not settings:
         return
-    
+
     for setting in settings:
         for supplier in suppliers:
             frappe.enqueue(
                 send_branch_customer_details,
-                name=supplier, 
+                name=supplier,
                 is_customer=False,
-                settings_name=setting.name
+                settings_name=setting.name,
             )
-            
-            
+
+
 @frappe.whitelist()
 def bulk_submit_customers(docs_list: str, settings_name: str = None) -> None:
     customers = json.loads(docs_list)
-    settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    settings = (
+        [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
+        if settings_name
+        else get_active_settings()
+    )
     if not customers or not settings:
         return
-    
+
     for setting in settings:
         for customer in customers:
             frappe.enqueue(
                 send_branch_customer_details,
-                name=customer, 
+                name=customer,
                 is_customer=True,
-                settings_name=setting.name
+                settings_name=setting.name,
             )
+
 
 @frappe.whitelist()
 def submit_all_customers(settings_name: str = None) -> None:
-    active_settings = [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)] if settings_name else get_active_settings()
+    active_settings = (
+        [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
+        if settings_name
+        else get_active_settings()
+    )
     if not active_settings:
         return
     for setting in active_settings:
-        
+
         Customer = DocType("Customer")
         Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
-        
+
         query = (
             frappe.qb.from_(Customer)
             .left_join(Mapping)
             .on(
-                (Mapping.parent == Customer.name) & 
-                (Mapping.parenttype == "Customer") & 
-                (Mapping.etims_setup == setting.name)
+                (Mapping.parent == Customer.name)
+                & (Mapping.parenttype == "Customer")
+                & (Mapping.etims_setup == setting.name)
             )
             .select(Customer.name)
-            .where( 
-                (Mapping.name.isnull())
-            )
+            .where((Mapping.name.isnull()))
         )
-        
+
         customers = query.run(as_dict=True)
-        
+
         for customer in customers:
             frappe.enqueue(
-                send_branch_customer_details, 
-                settings_name=setting.name, 
-                name=customer.name
+                send_branch_customer_details,
+                settings_name=setting.name,
+                name=customer.name,
             )
 
 
 @frappe.whitelist()
-def send_branch_customer_details(name: str, settings_name: str, is_customer: bool = True) -> None:
+def send_branch_customer_details(
+    name: str, settings_name: str, is_customer: bool = True
+) -> None:
     doctype = "Customer" if is_customer else "Supplier"
     data = frappe.get_doc(doctype, name)
 
-    if (hasattr(data, 'disabled') and data.disabled) or (hasattr(data, 'custom_prevent_etims_registration') and data.custom_prevent_etims_registration):
+    if (hasattr(data, "disabled") and data.disabled) or (
+        hasattr(data, "custom_prevent_etims_registration")
+        and data.custom_prevent_etims_registration
+    ):
         return
-    
+
     request_data = (
-        {"customer_tax_pin": data.tax_id, "document_name": name} 
-        if hasattr(data, 'tax_id') and data.tax_id is not None 
+        {"customer_tax_pin": data.tax_id, "document_name": name}
+        if hasattr(data, "tax_id") and data.tax_id is not None
         else {"partner_name": name, "document_name": name}
     )
 
@@ -396,19 +435,31 @@ def send_branch_customer_details(name: str, settings_name: str, is_customer: boo
         doctype=doctype,
         settings_name=settings_name,
     )
-    
+
 
 @frappe.whitelist()
-def search_customers_request(request_data: str, settings_name: str,) -> None:
+def search_customers_request(
+    request_data: str,
+    settings_name: str,
+) -> None:
     return process_request(
-        request_data, "CustomersSearchReq", customers_search_on_success, settings_name=settings_name
+        request_data,
+        "CustomersSearchReq",
+        customers_search_on_success,
+        settings_name=settings_name,
     )
 
 
 @frappe.whitelist()
-def get_customer_details(request_data: str, settings_name: str,) -> None:
+def get_customer_details(
+    request_data: str,
+    settings_name: str,
+) -> None:
     return process_request(
-        request_data, "CustomerSearchReq", customers_search_on_success, settings_name=settings_name
+        request_data,
+        "CustomerSearchReq",
+        customers_search_on_success,
+        settings_name=settings_name,
     )
 
 
@@ -472,7 +523,11 @@ def create_branch_user() -> None:
 def perform_item_search(request_data: str, settings_name: str) -> None:
 
     process_request(
-        request_data, "ItemsSearchReq", item_search_on_success, doctype="Item", settings_name=settings_name
+        request_data,
+        "ItemsSearchReq",
+        item_search_on_success,
+        doctype="Item",
+        settings_name=settings_name,
     )
 
 
@@ -521,34 +576,28 @@ def perform_purchase_search(request_data: str) -> None:
         doctype=REGISTERED_PURCHASES_DOCTYPE_NAME,
     )
 
+
 @frappe.whitelist()
 def send_entire_stock_balance(settings_name: str) -> None:
     Item = frappe.qb.DocType("Item")
     Mapping = frappe.qb.DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
-    
+
     query = (
         frappe.qb.from_(Item)
         .inner_join(Mapping)
         .on(
-            (Mapping.parent == Item.name) &
-            (Mapping.parenttype == "Item") &
-            (Mapping.etims_setup == settings_name)
+            (Mapping.parent == Item.name)
+            & (Mapping.parenttype == "Item")
+            & (Mapping.etims_setup == settings_name)
         )
         .select(Item.name, Item.item_code, Item.item_name)
-        .where(
-            (Item.is_stock_item == 1) &
-            (Item.custom_sent_to_slade == 1)
-        )
+        .where((Item.is_stock_item == 1) & (Item.custom_sent_to_slade == 1))
     )
-    
+
     items = query.run(as_dict=True)
-    
+
     for item in items:
-        frappe.enqueue(
-            submit_inventory,
-            name=item.name,
-            settings_name=settings_name
-        )
+        frappe.enqueue(submit_inventory, name=item.name, settings_name=settings_name)
 
 
 @frappe.whitelist()
@@ -559,7 +608,7 @@ def submit_inventory(name: str, settings_name: str) -> None:
         frappe.throw("Item name is required.")
 
     settings = get_settings(settings_name=settings_name)
-    
+
     if not settings:
         return
 
@@ -934,23 +983,23 @@ def initialize_device(request_data: str) -> None:
         request_method="POST",
         doctype=SETTINGS_DOCTYPE_NAME,
     )
-    
-    
+
+
 @frappe.whitelist()
 def _process_invoice_fetch_request(
-    id: str = None, 
-    document_name: str = None, 
-    invoice_type: str = "Sales Invoice", 
-    settings_name: str = None, 
+    id: str = None,
+    document_name: str = None,
+    invoice_type: str = "Sales Invoice",
+    settings_name: str = None,
     company: str = None,
-    handler_function = None,
-    reference_number: str = None, 
+    handler_function=None,
+    reference_number: str = None,
     is_return: bool = False,
     original_invoice_id: str = None,
 ) -> None:
     """Common helper function to process invoice-related requests."""
     invoice = frappe.get_doc(invoice_type, document_name)
-    
+
     if is_return and not original_invoice_id:
         frappe.throw("Original invoice ID is required for return processing.")
 
@@ -958,23 +1007,31 @@ def _process_invoice_fetch_request(
         "document_name": document_name,
         "company": company or invoice.company,
     }
-    
+
     route_key = "TrnsSalesSearchReq"
-    
+
     if invoice.is_return or is_return:
         route_key = "SalesCreditNoteSaveReq"
-    
+
     if id:
         request_data["id"] = id
     else:
-        if (invoice.is_return and invoice.return_against) or (is_return and original_invoice_id):
+        if (invoice.is_return and invoice.return_against) or (
+            is_return and original_invoice_id
+        ):
             route_key = "SalesCreditNoteSaveReq"
-            original_invoice_slade_id = original_invoice_id if is_return else frappe.db.get_value("Sales Invoice", invoice.return_against, "custom_slade_id")
+            original_invoice_slade_id = (
+                original_invoice_id
+                if is_return
+                else frappe.db.get_value(
+                    "Sales Invoice", invoice.return_against, "custom_slade_id"
+                )
+            )
             request_data["invoice"] = original_invoice_slade_id
         else:
             route_key = "TrnsSalesSaveWrReq"
             request_data["reference_number"] = reference_number
-    
+
     return process_request(
         request_data,
         route_key,
@@ -987,7 +1044,11 @@ def _process_invoice_fetch_request(
 
 @frappe.whitelist()
 def get_invoice_details(
-    id: str = None, document_name: str = None, invoice_type: str = "Sales Invoice", settings_name: str = None, company: str = None
+    id: str = None,
+    document_name: str = None,
+    invoice_type: str = "Sales Invoice",
+    settings_name: str = None,
+    company: str = None,
 ) -> None:
     invoice = frappe.get_doc(invoice_type, document_name)
     reference_number = get_invoice_reference_number(invoice)
@@ -1004,7 +1065,11 @@ def get_invoice_details(
 
 @frappe.whitelist()
 def verify_invoice_details(
-    id: str = None, document_name: str = None, invoice_type: str = "Sales Invoice", settings_name: str = None, company: str = None
+    id: str = None,
+    document_name: str = None,
+    invoice_type: str = "Sales Invoice",
+    settings_name: str = None,
+    company: str = None,
 ) -> None:
     invoice = frappe.get_doc(invoice_type, document_name)
     reference_number = get_invoice_reference_number(invoice)

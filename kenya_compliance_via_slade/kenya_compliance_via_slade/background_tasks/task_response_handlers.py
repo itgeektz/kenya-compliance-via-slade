@@ -50,7 +50,7 @@ def update_documents(
     filter_field: str = "code",
     table_name: str = None,
     separator: str = " - ",
-    fixed_values: dict = None  
+    fixed_values: dict = None,
 ) -> None:
     if isinstance(data, str):
         try:
@@ -65,13 +65,13 @@ def update_documents(
             continue
 
         temp_doc = frappe.new_doc(doctype_name)
-        
+
         if fixed_values:
             for field, value in fixed_values.items():
                 setattr(temp_doc, field, value)
 
         for field, value in field_mapping.items():
-            if isinstance(value, str):  
+            if isinstance(value, str):
                 setattr(temp_doc, field, record.get(value, ""))
 
         for field, value in field_mapping.items():
@@ -90,9 +90,9 @@ def update_documents(
                     setattr(temp_doc, field, linked_value or "")
 
         for field, value in field_mapping.items():
-            if callable(value):  
+            if callable(value):
                 setattr(temp_doc, field, value(record))
-            elif isinstance(value, dict) and "fields" in value:  
+            elif isinstance(value, dict) and "fields" in value:
                 parts = []
                 for source_field in value["fields"]:
                     part = getattr(temp_doc, source_field, None)
@@ -104,17 +104,21 @@ def update_documents(
 
         filter_value = getattr(temp_doc, filter_field, None)
         if not filter_value:
-            continue  
+            continue
 
         filters = {filter_field: filter_value}
         if settings_name:
-            if frappe.db.exists("DocField", {"parent": doctype_name, "fieldname": "settings"}):
+            if frappe.db.exists(
+                "DocField", {"parent": doctype_name, "fieldname": "settings"}
+            ):
                 filters["settings"] = settings_name
-            elif frappe.db.exists("DocField", {"parent": doctype_name, "fieldname": "custom_settings"}):
+            elif frappe.db.exists(
+                "DocField", {"parent": doctype_name, "fieldname": "custom_settings"}
+            ):
                 filters["custom_settings"] = settings_name
 
         doc_name = frappe.db.get_value(doctype_name, filters, "name")
-        
+
         if doc_name:
             doc = frappe.get_doc(doctype_name, doc_name)
             for field in field_mapping.keys():
@@ -123,7 +127,7 @@ def update_documents(
                 for field, value in fixed_values.items():
                     setattr(doc, field, value)
         else:
-            doc = temp_doc  
+            doc = temp_doc
 
         if is_table and table_name and hasattr(doc, table_name):
             found = False
@@ -133,13 +137,13 @@ def update_documents(
                     child_row.is_active = 1
                     found = True
                     break
-            
+
             if not found and settings_name:
                 new_row = doc.append(table_name)
                 new_row.etims_setup = settings_name
                 new_row.slade360_id = record.get("id")
-                new_row.is_active = 1 
-                
+                new_row.is_active = 1
+
         if settings_name and not is_table:
             if hasattr(doc, "settings"):
                 doc.settings = settings_name
@@ -153,8 +157,8 @@ def update_documents(
             continue
 
     frappe.db.commit()
-    
-    
+
+
 def update_unit_of_quantity(response: dict, settings_name: str, **kwargs) -> None:
     field_mapping = {
         "slade_id": "id",
@@ -163,7 +167,14 @@ def update_unit_of_quantity(response: dict, settings_name: str, **kwargs) -> Non
         "code_name": "name",
         "code_description": "description",
     }
-    update_documents(response, UNIT_OF_QUANTITY_DOCTYPE_NAME, field_mapping, settings_name=settings_name, is_table=True, table_name="etims_setup_mapping")
+    update_documents(
+        response,
+        UNIT_OF_QUANTITY_DOCTYPE_NAME,
+        field_mapping,
+        settings_name=settings_name,
+        is_table=True,
+        table_name="etims_setup_mapping",
+    )
 
 
 def update_packaging_units(response: dict, settings_name: str, **kwargs) -> None:
@@ -174,8 +185,14 @@ def update_packaging_units(response: dict, settings_name: str, **kwargs) -> None
         "sort_order": "sort_order",
         "code_description": "description",
     }
-    update_documents(response, PACKAGING_UNIT_DOCTYPE_NAME, field_mapping, settings_name=settings_name, is_table=True, table_name="etims_setup_mapping")
-
+    update_documents(
+        response,
+        PACKAGING_UNIT_DOCTYPE_NAME,
+        field_mapping,
+        settings_name=settings_name,
+        is_table=True,
+        table_name="etims_setup_mapping",
+    )
 
 
 def update_payment_methods(response: dict, **kwargs) -> None:
@@ -204,7 +221,15 @@ def update_currencies(response: dict, settings_name: str, **kwargs) -> None:
         "enabled": lambda x: 1 if x.get("active") else 0,
         "custom_conversion_rate": "conversion_rate",
     }
-    update_documents(response, "Currency", field_mapping, filter_field="currency_name", settings_name=settings_name, is_table=True, table_name="etims_setup_mapping")
+    update_documents(
+        response,
+        "Currency",
+        field_mapping,
+        filter_field="currency_name",
+        settings_name=settings_name,
+        is_table=True,
+        table_name="etims_setup_mapping",
+    )
 
 
 def update_item_classification_codes(response: dict | list, **kwargs) -> None:
@@ -233,7 +258,15 @@ def update_taxation_type(response: dict, settings_name: str, **kwargs) -> None:
         "cdnm": "name",
         "cddesc": "description",
     }
-    update_documents(response, TAXATION_TYPE_DOCTYPE_NAME, field_mapping, filter_field="cd", settings_name=settings_name, is_table=True, table_name="etims_setup_mapping")
+    update_documents(
+        response,
+        TAXATION_TYPE_DOCTYPE_NAME,
+        field_mapping,
+        filter_field="cd",
+        settings_name=settings_name,
+        is_table=True,
+        table_name="etims_setup_mapping",
+    )
 
 
 def update_countries(response: list, **kwargs) -> None:
@@ -301,8 +334,8 @@ def update_organisations(response: dict, **kwargs) -> None:
     doc.save(ignore_permissions=True)
 
     frappe.db.commit()
-    
-    
+
+
 def update_branches(response: dict, settings_name: str, **kwargs) -> None:
     if isinstance(response, str):
         try:
@@ -318,39 +351,43 @@ def update_branches(response: dict, settings_name: str, **kwargs) -> None:
 
         cluster_id = branch_data.get("parent")
         company = get_company_from_setup_mapping(cluster_id, settings_name)
-        
+
         if not company:
-            frappe.log_error(f"No company found for cluster {cluster_id}", "Branch Update Skipped")
+            frappe.log_error(
+                f"No company found for cluster {cluster_id}", "Branch Update Skipped"
+            )
             continue
 
-        original_branch_name = branch_data.get('name', '').strip()
+        original_branch_name = branch_data.get("name", "").strip()
         if not original_branch_name:
             continue
-            
+
         branch_name = f"eTims - {original_branch_name}"
 
         branch_filters = {
             "branch": branch_name,
         }
         branch_exists = frappe.db.exists("Branch", branch_filters)
-        
+
         if branch_exists:
             branch = frappe.get_doc("Branch", branch_filters)
         else:
             branch = frappe.new_doc("Branch")
 
-        branch.update({
-            "company": company,
-            "branch": branch_name,
-            "slade_id": branch_data.get("id"),
-            "tax_id": branch_data.get("organisation_tax_pin"),
-            "etims_device_serial_no": branch_data.get("etims_device_serial_no"),
-            "branch_code": branch_data.get("etims_branch_id"),
-            "pin": branch_data.get("organisation_tax_pin"),
-            "is_head_office": 1 if branch_data.get("is_headquater") else 0,
-            "is_etims_branch": 1 if branch_data.get("branch_status") else 0,
-            "is_etims_verified": 1 if branch_data.get("is_etims_verified") else 0,
-        })
+        branch.update(
+            {
+                "company": company,
+                "branch": branch_name,
+                "slade_id": branch_data.get("id"),
+                "tax_id": branch_data.get("organisation_tax_pin"),
+                "etims_device_serial_no": branch_data.get("etims_device_serial_no"),
+                "branch_code": branch_data.get("etims_branch_id"),
+                "pin": branch_data.get("organisation_tax_pin"),
+                "is_head_office": 1 if branch_data.get("is_headquater") else 0,
+                "is_etims_branch": 1 if branch_data.get("branch_status") else 0,
+                "is_etims_verified": 1 if branch_data.get("is_etims_verified") else 0,
+            }
+        )
 
         branch.save(ignore_permissions=True)
         frappe.db.commit()
@@ -437,7 +474,7 @@ def warehouse_search_on_success(response: dict, settings_name: str, **kwargs) ->
     )
 
     settings = get_settings(settings_name=settings_name)
-    
+
     if not settings:
         return
 
@@ -557,6 +594,7 @@ def operation_types_search_on_success(
         },
     )
 
+
 def update_clusters(response: dict, settings_name: str, **kwargs) -> None:
     pass
     # if isinstance(response, str):
@@ -566,18 +604,18 @@ def update_clusters(response: dict, settings_name: str, **kwargs) -> None:
     #         raise ValueError(f"Invalid JSON string: {response}")
 
     # doc_list = response if isinstance(response, list) else response.get("results", [response])
-    
+
     # modal_data = []
     # for record in doc_list:
     #     if isinstance(record, str):
     #         continue
-            
+
     #     modal_data.append({
     #         "id": record.get("id"),
     #         "name": record.get("name"),
     #         "organisation": record.get("organisation")
     #     })
-    
+
     # frappe.publish_realtime('show_cluster_matching_modal', {
     #     "data": modal_data,
     #     "settings_name": settings_name

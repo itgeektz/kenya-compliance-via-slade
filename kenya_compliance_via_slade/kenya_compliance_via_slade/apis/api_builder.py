@@ -11,7 +11,11 @@ from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
 
 from ..logger import etims_logger
-from ..utils import update_last_request_date, update_navari_settings_with_token, reset_auth_password
+from ..utils import (
+    update_last_request_date,
+    update_navari_settings_with_token,
+    reset_auth_password,
+)
 from .remote_response_status_handlers import on_slade_error
 
 
@@ -130,11 +134,11 @@ class EndpointsBuilder(BaseEndpointsBuilder):
     @payload.setter
     def payload(self, new_payload: dict) -> None:
         self._payload = new_payload
-        
+
     @property
     def settings(self) -> dict | None:
         return self._settings
-    
+
     @settings.setter
     def settings(self, new_settings: dict) -> None:
         self._settings = new_settings
@@ -276,14 +280,17 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                     "status",
                     "Completed",
                 )
-                
+
                 self._success_callback_handler(
-                    response=response_data, document_name=document_name, doctype=doctype, payload=self._payload, settings_name=self._settings.name
+                    response=response_data,
+                    document_name=document_name,
+                    doctype=doctype,
+                    payload=self._payload,
+                    settings_name=self._settings.name,
                 )
 
                 current_page = response_data.get("current_page", None)
                 total_pages = response_data.get("total_pages", 0)
-                
 
                 update_integration_request(
                     self.integration_request.name,
@@ -303,10 +310,13 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                     error = response_data[0]
                 else:
                     error = str(response_data)
-                    
-                if "could not decode json: Expecting value: line 1 column 1 (char 0)" in error:
+
+                if (
+                    "could not decode json: Expecting value: line 1 column 1 (char 0)"
+                    in error
+                ):
                     reset_auth_password(self._settings.name)
-                    
+
                 update_integration_request(
                     self.integration_request.name,
                     status="Failed",
@@ -326,22 +336,20 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                         doctype=doctype,
                         document_name=document_name,
                         payload=self._payload,
-                        settings_name=self._settings.name
+                        settings_name=self._settings.name,
                     )
-                    
+
                 if response.status_code == 401 and not retrying:
                     # Optionally, you can refresh token and retry here if needed
                     self.refresh_token()
                     self.make_remote_call(doctype, document_name, retrying=True)
-                
 
-                   
             return response_data
 
         except Exception as error:
             frappe.log_error(
                 title="eTims Error",
-                message=error,
+                message=f"Error: {error} \nURL: {route_path} \nTraceback: {frappe.get_traceback()}",
                 reference_doctype=self.doctype,
                 reference_name=self.document_name,
             )
@@ -385,37 +393,48 @@ def update_integration_request(
         error (str | None, optional): The error message, if any. Defaults to None.
         request_description (str | None, optional): Additional description for the request.
     """
-    update_fields = {
-        "status": status
-    }
-    
+    update_fields = {"status": status}
+
     if error:
-        current_error = frappe.db.get_value("Integration Request", integration_request, "error")
+        current_error = frappe.db.get_value(
+            "Integration Request", integration_request, "error"
+        )
         if current_error == "null" or not current_error:
             update_fields["error"] = error[:5000] if len(error) > 5000 else error
         elif error not in current_error:
             new_error = current_error + "\n" + error
-            update_fields["error"] = new_error[:5000] if len(new_error) > 5000 else new_error
-    
+            update_fields["error"] = (
+                new_error[:5000] if len(new_error) > 5000 else new_error
+            )
+
     if output:
-        current_output = frappe.db.get_value("Integration Request", integration_request, "output")
+        current_output = frappe.db.get_value(
+            "Integration Request", integration_request, "output"
+        )
         if current_output == "null" or not current_output:
             update_fields["output"] = output[:5000] if len(output) > 5000 else output
         elif output not in current_output:
             new_output = current_output + "\n" + output
-            update_fields["output"] = new_output[:5000] if len(new_output) > 5000 else new_output
-    
+            update_fields["output"] = (
+                new_output[:5000] if len(new_output) > 5000 else new_output
+            )
+
     if request_description:
-        current_desc = frappe.db.get_value("Integration Request", integration_request, "request_description")
+        current_desc = frappe.db.get_value(
+            "Integration Request", integration_request, "request_description"
+        )
         if current_desc == "null" or not current_desc:
-            update_fields["request_description"] = request_description[:5000] if len(request_description) > 5000 else request_description
+            update_fields["request_description"] = (
+                request_description[:5000]
+                if len(request_description) > 5000
+                else request_description
+            )
         elif request_description not in current_desc:
             new_desc = current_desc + " - " + request_description
-            update_fields["request_description"] = new_desc[:5000] if len(new_desc) > 5000 else new_desc
-    
+            update_fields["request_description"] = (
+                new_desc[:5000] if len(new_desc) > 5000 else new_desc
+            )
+
     frappe.db.set_value(
-        "Integration Request",
-        integration_request,
-        update_fields,
-        update_modified=False
+        "Integration Request", integration_request, update_fields, update_modified=False
     )
