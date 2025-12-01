@@ -13,16 +13,11 @@ from ..apis.remote_response_status_handlers import notices_search_on_success
 from ..doctype.doctype_names_mapping import (
     OPERATION_TYPE_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
-    UOM_CATEGORY_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_settings, get_max_submission_attempts
+from ..utils import get_max_submission_attempts
 from .task_response_handlers import (
-    itemprice_search_on_success,
     operation_types_search_on_success,
-    pricelist_search_on_success,
-    uom_category_search_on_success,
-    uom_search_on_success,
     update_branches,
     update_clusters,
     update_countries,
@@ -318,90 +313,74 @@ def get_cluster_company_matches(cluster_data):
         frappe.log_error(f"Cluster matching failed: {str(e)}")
         return {"error": str(e)}
 
+
+def get_company_from_existing_cluster_mapping(
+    cluster_id: str, settings_name: str
+) -> str | None:
+    """
+    Check Company → eTims Setup Mapping child table for an existing cluster mapping.
+    Returns Company name if found, otherwise None.
+    """
+    return frappe.db.get_value(
+        "eTims Company Setup Mapping",
+        {"cluster": cluster_id, "etims_setup": settings_name, "is_active": 1},
+        "parent",
+    )
+
+
 def find_best_company_match(cluster_name, companies):
     """Simple company matching using string comparison"""
     if not cluster_name or not companies:
         return ""
-    
+
     cluster_lower = cluster_name.lower()
-    
+
     for company in companies:
         if company.lower() == cluster_lower:
             return company
-    
+
     for company in companies:
         company_lower = company.lower()
         if cluster_lower in company_lower or company_lower in cluster_lower:
             return company
-    
+
     cluster_words = get_significant_words(cluster_lower)
     if cluster_words:
         for company in companies:
             company_words = get_significant_words(company.lower())
             if any(word in company_words for word in cluster_words):
                 return company
-    
+
     return ""
+
 
 def get_significant_words(text):
     """Extract meaningful words for matching"""
-    common_words = {'the', 'and', 'of', 'for', 'in', 'with', 'company', 'co', 'ltd', 'pty'}
-    return [
-        word for word in text.split() 
-        if len(word) > 3 and word not in common_words
-    ]
+    common_words = {
+        "the",
+        "and",
+        "of",
+        "for",
+        "in",
+        "with",
+        "company",
+        "co",
+        "ltd",
+        "pty",
+    }
+    return [word for word in text.split() if len(word) > 3 and word not in common_words]
+
 
 @frappe.whitelist()
 def get_item_classification_codes(request_data: str | dict, settings_name: str) -> str:
     """Function to get item classification codes."""
     message = process_request(
-        request_data, "ItemClsSearchReq", update_item_classification_codes, settings_name=settings_name
+        request_data,
+        "ItemClsSearchReq",
+        update_item_classification_codes,
+        settings_name=settings_name,
     )
     return message
-
-
-@frappe.whitelist()
-def fetch_etims_uom_categories(request_data: str) -> None:
-    message = process_request(
-        request_data,
-        "UOMCategoriesSearchReq",
-        uom_category_search_on_success,
-        doctype=UOM_CATEGORY_DOCTYPE_NAME,
-    )
-    return message
-
-
-@frappe.whitelist()
-def fetch_etims_uom_list(request_data: str) -> None:
-    message = process_request(
-        request_data,
-        "UOMListSearchReq",
-        uom_search_on_success,
-        doctype="UOM",
-    )
-    return message
-
-
-@frappe.whitelist()
-def fetch_etims_pricelists(request_data: str) -> None:
-    pricelists = process_request(
-        request_data,
-        "PriceListsSearchReq",
-        pricelist_search_on_success,
-        doctype="Price List",
-    )
-    return pricelists
-
-
-@frappe.whitelist()
-def fetch_etims_item_prices(request_data: str) -> None:
-    itemprices = process_request(
-        request_data,
-        "ItemPricesSearchReq",
-        itemprice_search_on_success,
-        doctype="Item Price",
-    )
-    return itemprices
 
 
 @frappe.whitelist()

@@ -414,37 +414,12 @@ def update_workstations(response: dict, settings_name: str, **kwargs) -> None:
         "is_billing_point": lambda x: 1 if x.get("is_billing_point") else 0,
     }
     update_documents(
-        response, WORKSTATION_DOCTYPE_NAME, field_mapping, filter_field="slade_id", settings_name=settings_name
+        response,
+        WORKSTATION_DOCTYPE_NAME,
+        field_mapping,
+        filter_field="slade_id",
+        settings_name=settings_name,
     )
-
-
-def uom_category_search_on_success(response: dict, **kwargs) -> None:
-    field_mapping = {
-        "slade_id": "id",
-        "measure_type": "measure_type",
-        "category_name": "name",
-        "active": lambda x: 1 if x.get("active") else 0,
-    }
-    update_documents(
-        response, UOM_CATEGORY_DOCTYPE_NAME, field_mapping, filter_field="category_name"
-    )
-
-
-def uom_search_on_success(response: dict, **kwargs) -> None:
-    field_mapping = {
-        "custom_slade_id": "id",
-        "custom_uom_type": "uom_type",
-        "custom_factor": "factor",
-        "custom_category": {
-            "doctype": UOM_CATEGORY_DOCTYPE_NAME,
-            "link_field": "category",
-            "filter_field": "slade_id",
-            "extract_field": "name",
-        },
-        "uom_name": "name",
-        "active": lambda x: 1 if x.get("active") else 0,
-    }
-    update_documents(response, "UOM", field_mapping, filter_field="uom_name")
 
 
 def warehouse_search_on_success(response: dict, settings_name: str, **kwargs) -> None:

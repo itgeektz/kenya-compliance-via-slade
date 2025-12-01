@@ -9,8 +9,6 @@ from frappe.query_builder import DocType
 
 from ..background_tasks.task_response_handlers import (
     operation_types_search_on_success,
-    uom_category_search_on_success,
-    uom_search_on_success,
 )
 from ..doctype.doctype_names_mapping import (
     COUNTRIES_DOCTYPE_NAME,
@@ -18,7 +16,6 @@ from ..doctype.doctype_names_mapping import (
     REGISTERED_PURCHASES_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
     SLADE_ID_MAPPING_DOCTYPE_NAME,
-    UOM_CATEGORY_DOCTYPE_NAME,
     USER_DOCTYPE_NAME,
 )
 from ..utils import (
@@ -28,13 +25,11 @@ from ..utils import (
     get_invoice_reference_number,
     get_link_value,
     get_settings,
-    get_slade360_id,
     make_get_request,
 )
 from .api_builder import EndpointsBuilder
 from .process_request import process_request
 from .remote_response_status_handlers import (
-    customer_branch_details_submission_on_success,
     customer_search_on_success,
     customers_search_on_success,
     fetch_matching_items_on_success,
@@ -43,10 +38,7 @@ from .remote_response_status_handlers import (
     imported_items_search_on_success,
     initialize_device_submission_on_success,
     item_composition_submission_on_success,
-    item_price_update_on_success,
     item_search_on_success,
-    mode_of_payment_on_success,
-    pricelist_update_on_success,
     purchase_search_on_success,
     sales_information_submission_on_success,
     submit_inventory_on_success,
@@ -1027,267 +1019,6 @@ def verify_invoice_details(
     )
 
 
-
-@frappe.whitelist()
-def save_uom_category_details(name: str) -> dict | None:
-    item = frappe.get_doc(UOM_CATEGORY_DOCTYPE_NAME, name)
-
-    slade_id = item.get("slade_id", None)
-
-    request_data = {
-        "name": item.get("category_name"),
-        "document_name": item.get("name"),
-        "measure_type": item.get("measure_type"),
-        "active": True if item.get("active") == 1 else False,
-    }
-
-    if slade_id:
-        request_data["id"] = slade_id
-        process_request(
-            request_data,
-            "UOMCategoriesSearchReq",
-            uom_category_search_on_success,
-            request_method="PATCH",
-            doctype=UOM_CATEGORY_DOCTYPE_NAME,
-        )
-    else:
-        process_request(
-            request_data,
-            "UOMCategoriesSearchReq",
-            uom_category_search_on_success,
-            request_method="POST",
-            doctype=UOM_CATEGORY_DOCTYPE_NAME,
-        )
-
-
-@frappe.whitelist()
-def sync_uom_category_details(request_data: str) -> None:
-    process_request(
-        request_data,
-        "UOMCategorySearchReq",
-        uom_category_search_on_success,
-        doctype=UOM_CATEGORY_DOCTYPE_NAME,
-    )
-
-
-@frappe.whitelist()
-def save_uom_details(name: str) -> dict | None:
-    item = frappe.get_doc("UOM", name)
-
-    slade_id = item.get("slade_id", None)
-
-    request_data = {
-        "name": item.get("uom_name"),
-        "document_name": item.get("name"),
-        "factor": item.get("custom_factor"),
-        "uom_type": item.get("custom_uom_type"),
-        "category": get_link_value(
-            UOM_CATEGORY_DOCTYPE_NAME,
-            "name",
-            item.get("custom_category"),
-            "slade_id",
-        ),
-        "active": True if item.get("active") == 1 else False,
-    }
-
-    if slade_id:
-        request_data["id"] = slade_id
-        process_request(
-            request_data,
-            "UOMListSearchReq",
-            uom_search_on_success,
-            request_method="PATCH",
-            doctype="UOM",
-        )
-    else:
-        process_request(
-            request_data,
-            "UOMListSearchReq",
-            uom_search_on_success,
-            request_method="POST",
-            doctype="UOM",
-        )
-
-
-@frappe.whitelist()
-def sync_uom_details(request_data: str) -> None:
-    process_request(
-        request_data,
-        "UOMDetailSearchReq",
-        uom_search_on_success,
-        doctype="UOM",
-    )
-
-
-@frappe.whitelist()
-def submit_uom_list() -> dict | None:
-    uoms = frappe.get_all(
-        "UOM", filters={"custom_slade_id": ["is", "not set"]}, fields=["name"]
-    )
-    request_data = []
-    for uom in uoms:
-        item = frappe.get_doc("UOM", uom.name)
-        category = item.get("custom_category") or "Unit"
-        item_data = {
-            "name": item.get("uom_name"),
-            "factor": item.get("custom_factor"),
-            "uom_type": item.get("custom_uom_type") or "reference",
-            "category": get_link_value(
-                UOM_CATEGORY_DOCTYPE_NAME,
-                "name",
-                category,
-                "slade_id",
-            ),
-            "active": True if item.get("active") == 1 else False,
-        }
-        request_data.append(item_data)
-
-    process_request(
-        request_data,
-        "UOMListSearchReq",
-        uom_search_on_success,
-        request_method="POST",
-        doctype="UOM",
-    )
-
-
-@frappe.whitelist()
-def submit_pricelist(name: str) -> dict | None:
-    item = frappe.get_doc("Price List", name)
-    slade_id = item.get("custom_slade_id", None)
-
-    route_key = "PriceListsSearchReq"
-    on_success = pricelist_update_on_success
-
-    # pricelist_type is mandatory for the request and cannot accept both selling and buying
-    pricelist_type = (
-        "selling"
-        if item.get("selling") == 1
-        else "purchases" if item.get("buying") == 1 else "selling"
-    )
-    request_data = {
-        "name": item.get("price_list_name"),
-        "document_name": item.get("name"),
-        "pricelist_status": item.get("custom_pricelist_status"),
-        "pricelist_type": pricelist_type,
-        "organisation": get_link_value(
-            "Company",
-            "name",
-            item.get("custom_company"),
-            "custom_slade_id",
-        ),
-        "active": False if item.get("enabled") == 0 else True,
-    }
-
-    if item.get("custom_warehouse"):
-        request_data["location"] = get_link_value(
-            "Warehouse",
-            "name",
-            item.get("custom_warehouse"),
-            "custom_slade_id",
-        )
-
-    if item.get("custom_effective_from"):
-        request_data["effective_from"] = item.get("custom_effective_from").strftime(
-            "%Y-%m-%d"
-        )
-
-    if item.get("custom_effective_to"):
-        request_data["effective_to"] = item.get("custom_effective_to").strftime(
-            "%Y-%m-%d"
-        )
-
-    if slade_id:
-        request_data["id"] = slade_id
-        method = "PATCH"
-    else:
-        method = "POST"
-
-    process_request(
-        request_data,
-        route_key=route_key,
-        handler_function=on_success,
-        request_method=method,
-        doctype="Price List",
-    )
-
-
-@frappe.whitelist()
-def sync_pricelist(request_data: str) -> None:
-    process_request(
-        request_data,
-        "PriceListSearchReq",
-        pricelist_update_on_success,
-        doctype="Price List",
-    )
-
-
-@frappe.whitelist()
-def submit_item_price(name: str) -> dict | None:
-    item = frappe.get_doc("Item Price", name)
-    slade_id = item.get("custom_slade_id", None)
-    item_code = item.get("item_code", None)
-    item_name = item.get("name", None)
-
-    route_key = "ItemPricesSearchReq"
-    on_success = item_price_update_on_success
-
-    request_data = {
-        "name": f"{item_code} - {item_name}",
-        "document_name": item_name,
-        "price_inclusive_tax": item.get("price_list_rate"),
-        "organisation": get_link_value(
-            "Company",
-            "name",
-            item.get("custom_company"),
-            "custom_slade_id",
-        ),
-        "product": get_link_value(
-            "Item",
-            "name",
-            item_code,
-            "custom_slade_id",
-        ),
-        "currency": get_link_value(
-            "Currency",
-            "name",
-            item.get("currency"),
-            "custom_slade_id",
-        ),
-        "pricelist": get_link_value(
-            "Price List",
-            "name",
-            item.get("price_list"),
-            "custom_slade_id",
-        ),
-        "active": False if item.get("enabled") == 0 else True,
-    }
-
-    if slade_id:
-        request_data["id"] = slade_id
-        method = "PATCH"
-    else:
-        method = "POST"
-
-    process_request(
-        request_data,
-        route_key=route_key,
-        handler_function=on_success,
-        request_method=method,
-        doctype="Item Price",
-    )
-
-
-@frappe.whitelist()
-def sync_item_price(request_data: str) -> None:
-    process_request(
-        request_data,
-        "ItemPriceSearchReq",
-        item_price_update_on_success,
-        doctype="Item Price",
-    )
-
-
 @frappe.whitelist()
 def save_operation_type(name: str) -> dict | None:
     item = frappe.get_doc(OPERATION_TYPE_DOCTYPE_NAME, name)
@@ -1337,70 +1068,9 @@ def sync_operation_type(request_data: str) -> None:
 
 
 @frappe.whitelist()
-def send_all_mode_of_payments(settings_name: str) -> None:
-    mode_of_payments = frappe.get_all("Mode of Payment", fields=["name"])
-    
-    for mop in mode_of_payments:
-        send_mode_of_payment_details(mop.name, settings_name)
-            
-
-
-@frappe.whitelist()
-def send_mode_of_payment_details(name: str, settings_name: str) -> dict | None:
-    route_key = "AccountsSearchReq"
-    on_success = reaceavable_accouct_search_on_success
-    request_data = {
-        "number": "1000-0001",
-        "document_name": name,
-    }
-    
-    frappe.enqueue(
-        process_request,
-        queue="default",
-        is_async=True,
-        doctype="Mode of Payment",
-        request_data=request_data,
-        route_key=route_key,
-        handler_function=on_success,
-        request_method="GET",
-        settings_name=settings_name,
-    )
-
-
-def reaceavable_accouct_search_on_success(
-    response: dict, document_name: str, settings_name: str, **kwargs
+def submit_credit_note(
+    response: dict, document_name: str, doctype: str, settings_name: str, **kwargs
 ) -> None:
-    if isinstance(response, str):
-        try:
-            response = json.loads(response)
-        except json.JSONDecodeError:
-            raise ValueError(f"Invalid JSON string: {response}")
-
-    account = (
-        response if isinstance(response, list) else response.get("results", [response])
-    )[0]
-
-    mode_of_payment = frappe.get_doc("Mode of Payment", document_name)
-
-    request_data = {
-        "account": account.get("id"),
-        "name": mode_of_payment.get("mode_of_payment"),
-        "organisation": account.get("organisation"),
-        "document_name": document_name,
-    }
-
-    process_request(
-        request_data,
-        route_key="PaymentMtdSearchReq",
-        handler_function=mode_of_payment_on_success,
-        request_method="POST",
-        doctype="Mode of Payment",
-        settings_name=settings_name,
-    )
-    
-
-@frappe.whitelist()
-def submit_credit_note(response: dict, document_name: str, doctype: str, settings_name: str, **kwargs) -> None:
     doc = frappe.get_doc(doctype, document_name)
     data = response.get("results", [])[0] if response.get("results") else response
     scu_data = data.get("scu_data")
@@ -1419,5 +1089,3 @@ def submit_credit_note(response: dict, document_name: str, doctype: str, setting
         settings_name=settings_name,
         company=doc.company,
     )
-
-    

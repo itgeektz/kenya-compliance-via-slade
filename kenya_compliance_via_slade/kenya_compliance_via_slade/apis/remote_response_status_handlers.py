@@ -1435,18 +1435,6 @@ def location_update_on_success(response: dict, document_name: str, **kwargs) -> 
     )
 
 
-def pricelist_update_on_success(response: dict, document_name: str, **kwargs) -> None:
-    frappe.db.set_value(
-        "Price List", document_name, {"custom_slade_id": response.get("id")}
-    )
-
-
-def item_price_update_on_success(response: dict, document_name: str, **kwargs) -> None:
-    frappe.db.set_value(
-        "Item Price", document_name, {"custom_slade_id": response.get("id")}
-    )
-
-
 def operation_type_create_on_success(
     response: dict, document_name: str, **kwargs
 ) -> None:
