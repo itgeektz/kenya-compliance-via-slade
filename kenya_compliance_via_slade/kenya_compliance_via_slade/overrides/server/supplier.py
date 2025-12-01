@@ -1,23 +1,30 @@
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 from ...apis.apis import send_branch_customer_details
-from ...doctype.doctype_names_mapping import SLADE_ID_MAPPING_DOCTYPE_NAME
 from ...utils import get_active_settings
 
 
-def on_update(doc: Document, method: str = None) -> None:
+def before_save(doc: Document, method: str = None) -> None:
+    if not doc.has_value_changed("tax_id") or doc.is_new():
+        return
+    submit_details(doc)
+
+
+def after_insert(doc: Document, method: str = None) -> None:
+    submit_details(doc)
+
+
+def validate(doc: Document, method: str = None) -> None:
+    if getattr(doc, "require_tax_id", False):
+        if not getattr(doc, "tax_id", None):
+            frappe.throw(_("Tax ID is required"))
+
+
+def submit_details(doc: Document) -> None:
     active_settings = get_active_settings()
-    
     if not active_settings:
         return
-    
     for setting in active_settings:
-        setup_mapping = frappe.db.get_value(
-            SLADE_ID_MAPPING_DOCTYPE_NAME,
-            {"parent": doc.name, "etims_setup": setting.name},
-            "name"
-        )
-        
-        if not setup_mapping:
-            send_branch_customer_details(doc.name, setting.name, False)
+        send_branch_customer_details(doc.name, setting.name, False)

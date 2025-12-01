@@ -214,16 +214,25 @@ doc_events = {
         ]
     },
     "Supplier": {
-        "on_update": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.supplier.on_update"
+        "before_save": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.supplier.before_save"
+        ],
+        "after_insert": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.supplier.after_insert"
+        ],
+        "validate": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.supplier.validate"
         ],
     },
     "Customer": {
-        "on_update": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.on_update"
+        "before_save": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.before_save"
         ],
         "validate": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.validate"
+        ],
+        "after_insert": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.after_insert"
         ],
     },
     "Stock Ledger Entry": {
