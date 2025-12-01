@@ -55,9 +55,28 @@
   "stock_information_submission_timeframe",
   "maximum_stock_information_submission_attempts",
   "field_defaults_tab",
-  "sales_details_defaults_section",
-  "sales_payment_type",
-  "column_break_qugc",
+  "item_defaults_section",
+  "item_classification",
+  "etims_country_of_origin",
+  "taxation_type",
+  "column_break_pybw",
+  "item_classification_name",
+  "etims_country_of_origin_code",
+  "taxation_type_name",
+  "packaging_unit_details_section",
+  "packaging_unit",
+  "column_break_jaqq",
+  "packaging_unit_code",
+  "unit_of_quantity_details_section",
+  "unit_of_quantity",
+  "column_break_oqib",
+  "unit_of_quantity_code",
+  "product_type_details_section",
+  "product_type",
+  "item_type",
+  "column_break_dxoa",
+  "product_type_name",
+  "item_type_name",
   "auth_details_tab",
   "client_id",
   "client_secret",
@@ -228,22 +247,6 @@
    "fieldname": "field_defaults_tab",
    "fieldtype": "Tab Break",
    "label": "Field Defaults"
-  },
-  {
-   "fieldname": "sales_details_defaults_section",
-   "fieldtype": "Section Break",
-   "label": "Sales Details Defaults"
-  },
-  {
-   "fieldname": "column_break_qugc",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "Cash",
-   "fieldname": "sales_payment_type",
-   "fieldtype": "Link",
-   "label": "Mode of Payment",
-   "options": "Mode of Payment"
   },
   {
    "fieldname": "column_break_fsjl",
@@ -488,6 +491,133 @@
    "fieldname": "max_allowed_revisions",
    "fieldtype": "Int",
    "label": "Max Allowed Revisions"
+  },
+  {
+   "fieldname": "item_defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Item Classification Details"
+  },
+  {
+   "fieldname": "column_break_pybw",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "item_classification_code.itemclsnm",
+   "fieldname": "item_classification_name",
+   "fieldtype": "Small Text",
+   "label": "Item Classification Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "etims_country_of_origin",
+   "fieldtype": "Link",
+   "label": "eTims Country of Origin",
+   "options": "Navari eTims Country"
+  },
+  {
+   "fetch_from": "etims_country_of_origin.code",
+   "fieldname": "etims_country_of_origin_code",
+   "fieldtype": "Data",
+   "label": "eTims Country of Origin Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "taxation_type",
+   "fieldtype": "Link",
+   "label": "Taxation Type",
+   "options": "Navari KRA eTims Taxation Type"
+  },
+  {
+   "fieldname": "packaging_unit_details_section",
+   "fieldtype": "Section Break",
+   "label": "Packaging Unit Details"
+  },
+  {
+   "fieldname": "packaging_unit",
+   "fieldtype": "Link",
+   "label": "Packaging Unit",
+   "options": "Navari eTims Packaging Unit"
+  },
+  {
+   "fieldname": "column_break_jaqq",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "packaging_unit.code",
+   "fieldname": "packaging_unit_code",
+   "fieldtype": "Data",
+   "label": "Packaging Unit Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "unit_of_quantity_details_section",
+   "fieldtype": "Section Break",
+   "label": "Unit of Quantity Details"
+  },
+  {
+   "fieldname": "unit_of_quantity",
+   "fieldtype": "Link",
+   "label": "Unit of Quantity",
+   "options": "Navari eTims Unit of Quantity"
+  },
+  {
+   "fieldname": "column_break_oqib",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "unit_of_quantity.code",
+   "fieldname": "unit_of_quantity_code",
+   "fieldtype": "Data",
+   "label": "Unit of Quantity Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "product_type_details_section",
+   "fieldtype": "Section Break",
+   "label": "Product Type Details"
+  },
+  {
+   "fieldname": "column_break_dxoa",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "product_type_code.code_name",
+   "fieldname": "product_type_name",
+   "fieldtype": "Data",
+   "label": "Product Type Name",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "etims_item_type.code_name",
+   "fieldname": "item_type_name",
+   "fieldtype": "Data",
+   "label": "Item Type Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "item_type",
+   "fieldtype": "Link",
+   "label": "eTims Item Type",
+   "options": "Navari eTims Item Type"
+  },
+  {
+   "fieldname": "item_classification",
+   "fieldtype": "Link",
+   "label": "Item Classification Code",
+   "options": "Navari KRA eTims Item Classification"
+  },
+  {
+   "fetch_from": "taxation_type.cdnm",
+   "fieldname": "taxation_type_name",
+   "fieldtype": "Data",
+   "label": "Taxation Type Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "product_type",
+   "fieldtype": "Link",
+   "label": "Product Type Code",
+   "options": "Navari eTims Product Type"
   }
  ],
  "grid_page_length": 50,
@@ -499,7 +629,7 @@
    "link_fieldname": "reference_docname"
   }
  ],
- "modified": "2025-07-28 07:17:03.064936",
+ "modified": "2025-12-01 11:04:41.463231",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari KRA eTims Settings",
