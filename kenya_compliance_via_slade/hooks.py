@@ -156,7 +156,7 @@ doctype_list_js = {
 # Override standard doctype classes
 
 override_doctype_class = {
-	"Scheduled Job Type": "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.scheduled_job_type.CustomScheduledJobType",
+    "Scheduled Job Type": "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.scheduled_job_type.CustomScheduledJobType",
 }
 # Document Events
 # ---------------
