@@ -9,6 +9,7 @@ import time
 
 from ... import __version__
 from ..doctype.doctype_names_mapping import (
+    COMPANY_MAPPING_DOCTYPE_NAME,
     COUNTRIES_DOCTYPE_NAME,
     IMPORTED_ITEMS_STATUS_DOCTYPE_NAME,
     ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
@@ -85,9 +86,11 @@ def customer_search_on_success(response: dict, document_name: str, **kwargs) -> 
     )
 
 
-def update_document_mapping(doc_type: str, document_name: str, settings_name: str, slade_id: str) -> None:
+def update_document_mapping(
+    doc_type: str, document_name: str, settings_name: str, slade_id: str
+) -> None:
     """Common function to update document mapping with Slade IDs
-    
+
     Args:
         doc_type (str): The document type to update
         document_name (str): The name of the document to update
@@ -109,22 +112,30 @@ def update_document_mapping(doc_type: str, document_name: str, settings_name: st
             break
 
     if not found:
-        doc.append("etims_setup_mapping", {
-            "etims_setup": settings_name,
-            "slade360_id": slade_id,
-        })
+        doc.append(
+            "etims_setup_mapping",
+            {
+                "etims_setup": settings_name,
+                "slade360_id": slade_id,
+            },
+        )
         doc.save(ignore_permissions=True)
-        
+
     return doc
 
 
-def item_registration_on_success(response: dict, document_name: str, settings_name: str, **kwargs) -> None:
-    item = update_document_mapping("Item", document_name, settings_name, response.get("id"))
-    
+def item_registration_on_success(
+    response: dict, document_name: str, settings_name: str, **kwargs
+) -> None:
+    item = update_document_mapping(
+        "Item", document_name, settings_name, response.get("id")
+    )
+
     if item.is_stock_item:
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.submit_inventory",
             name=document_name,
+            settings_name=settings_name,
             queue="long",
         )
 
@@ -227,7 +238,9 @@ def imported_item_submission_on_success(
     frappe.db.set_value("Item", document_name, {"custom_imported_item_submitted": 1})
 
 
-def submit_inventory_on_success(response: dict, document_name: str, settings_name: str, **kwargs) -> None:
+def submit_inventory_on_success(
+    response: dict, document_name: str, settings_name: str, **kwargs
+) -> None:
     from .process_request import process_request
 
     # item = frappe.get_doc("Item", document_name)
@@ -283,7 +296,9 @@ def process_inventory_transition(response: dict, document_name: str, **kwargs) -
     pass
 
 
-def sales_information_submission_on_success(response: dict, document_name: str, doctype: str, settings_name: str, **kwargs) -> None:
+def sales_information_submission_on_success(
+    response: dict, document_name: str, doctype: str, settings_name: str, **kwargs
+) -> None:
     """
     Callback after successful submission. Maps SCU data and signature_link.
     """
@@ -300,36 +315,44 @@ def sales_information_submission_on_success(response: dict, document_name: str, 
         settings_name=settings_name,
         queue="long",
     )
-    
-    
-def sales_information_submission_on_error(response: dict, document_name: str, doctype: str, settings_name: str, **kwargs) -> None:
+
+
+def sales_information_submission_on_error(
+    response: dict, document_name: str, doctype: str, settings_name: str, **kwargs
+) -> None:
     from ..overrides.server.sales_invoice import send_invoice_details
     from .apis import perform_item_registration
+
     doc = frappe.get_doc(doctype, document_name)
     error_message = response if isinstance(response, str) else str(response)
     if "get() returned more than one Product -- it returned 2!" in error_message:
         for item in doc.items:
             perform_item_registration(item.item_code, settings_name)
-            
-        time.sleep(15)  
+
+        time.sleep(15)
         # frappe.enqueue(
         #     send_invoice_details,
         #     name=doc.name,
         #     queue='long', timeout=600, now=False, enqueue_after_commit=True,
         #     at_front=False, job_name=f"retry_invoice_{doc.name}_{int(time.time())}",
         # )
-        
-    elif "get() returned more than one BusinessPartner -- it returned 2!" in error_message:
+
+    elif (
+        "get() returned more than one BusinessPartner -- it returned 2!"
+        in error_message
+    ):
         from .apis import send_branch_customer_details
+
         send_branch_customer_details(doc.customer, settings_name)
-        time.sleep(15) 
+        time.sleep(15)
         # frappe.enqueue(
         #     send_invoice_details,
         #     name=doc.name,
         #     queue='long', timeout=600, now=False, enqueue_after_commit=True,
         #     at_front=False, job_name=f"retry_invoice_{doc.name}_{int(time.time())}",
         # )
-        
+
+
 # def sales_information_submission_on_success(
 #     response: dict, document_name: str, doctype: str, **kwargs
 # ) -> None:
@@ -382,7 +405,9 @@ def process_invoice_items(
     for item in items:
         tax_amount = item.get("custom_tax_amount", 0) or 0
 
-        converted_tax_amount = round(tax_amount * conversion_rate, 4) if tax_amount else 0
+        converted_tax_amount = (
+            round(tax_amount * conversion_rate, 4) if tax_amount else 0
+        )
 
         qty = abs(item.get("qty"))
         base_net_rate = round(item.get("base_net_rate") or 0, 4)
@@ -393,7 +418,9 @@ def process_invoice_items(
                 "Item", "name", item.get("item_code"), "custom_slade_id"
             ),
             "quantity": round(qty, 4),
-            "new_price": round(base_net_rate + (converted_tax_amount / qty if qty else 0), 4),
+            "new_price": round(
+                base_net_rate + (converted_tax_amount / qty if qty else 0), 4
+            ),
             "amount": round(base_amount + converted_tax_amount, 4),
             "credit_note" if invoice.is_return else "sales_invoice": invoice_slade_id,
             "document_name": item.get("name"),
@@ -478,31 +505,47 @@ def process_sales_sign(document_name: str, doctype: str, invoice_slade_id: str) 
         request_method="POST",
         doctype=doctype,
     )
-    
-    
-def update_invoice_info(response: dict, document_name: str, doctype: str, settings_name: str | None = None, **kwargs) -> None:
+
+
+def update_invoice_info(
+    response: dict,
+    document_name: str,
+    doctype: str,
+    settings_name: str | None = None,
+    **kwargs,
+) -> None:
     process_invoice_response(response, document_name, doctype)
 
 
-def verify_and_fix_invoice_info(response: dict, document_name: str, doctype: str, settings_name: str | None = None, **kwargs) -> None:
+def verify_and_fix_invoice_info(
+    response: dict,
+    document_name: str,
+    doctype: str,
+    settings_name: str | None = None,
+    **kwargs,
+) -> None:
     doc = frappe.get_doc(doctype, document_name)
     data = get_response_data(response)
-    
-    revision_count = int(doc.get("revision_count") or 0) 
+
+    revision_count = int(doc.get("revision_count") or 0)
     if revision_count > 0:
         verify_and_fix_invoice_revisions(doctype, document_name, data, settings_name)
 
     if not data:
         resend_invoice(document_name, doctype)
         return
-        
+
     elif not data.get("scu_data"):
         if doc.custom_slade_id:
             process_sales_sign(document_name, doctype, doc.custom_slade_id)
-            return    
+            return
 
-    invoice_data = build_return_invoice_payload(doc, data) if doc.is_return else build_invoice_payload(doc, settings_name)
-    
+    invoice_data = (
+        build_return_invoice_payload(doc, data)
+        if doc.is_return
+        else build_invoice_payload(doc, settings_name)
+    )
+
     if is_invoice_data_matching(invoice_data, data):
         process_invoice_response(response, document_name, doctype)
     else:
@@ -518,21 +561,26 @@ def process_invoice_response(response: dict, document_name: str, doctype: str) -
     custom_slade_id = data.get("id")
     updates = {
         "custom_slade_id": custom_slade_id,
-        **map_scu_fields(data.get("scu_data"), custom_slade_id, doctype, qr_key="qr_code_url"),
+        **map_scu_fields(
+            data.get("scu_data"), custom_slade_id, doctype, qr_key="qr_code_url"
+        ),
     }
 
     if document_name:
         frappe.db.set_value(doctype, document_name, updates)
         frappe.publish_realtime("refresh_form", document_name)
 
-def verify_and_fix_invoice_revisions(doctype: str, document_name: str, data: dict, settings_name: str | None = None) -> None:
+
+def verify_and_fix_invoice_revisions(
+    doctype: str, document_name: str, data: dict, settings_name: str | None = None
+) -> None:
     """Verify and enqueue fixing of previous invoice revisions if necessary"""
-    
+
     doc = frappe.get_doc(doctype, document_name)
     revision_count = int(doc.get("revision_count") or 0)
 
     if revision_count > 0:
-        revisions_to_check = [document_name]  
+        revisions_to_check = [document_name]
 
         for i in range(1, revision_count):
             revisions_to_check.append(f"{document_name}-REV{i}")
@@ -540,51 +588,63 @@ def verify_and_fix_invoice_revisions(doctype: str, document_name: str, data: dic
         for rev_docname in revisions_to_check:
             frappe.enqueue(
                 check_and_credit_invoice_revision,
-                queue='short',
+                queue="short",
                 doctype=doctype,
                 document_name=document_name,
                 reference_number=rev_docname,
-                settings_name=settings_name
+                settings_name=settings_name,
             )
-            
-            
-def check_and_credit_invoice_revision(doctype: str, document_name: str, reference_number: str | None = None, settings_name: str | None = None) -> None:
+
+
+def check_and_credit_invoice_revision(
+    doctype: str,
+    document_name: str,
+    reference_number: str | None = None,
+    settings_name: str | None = None,
+) -> None:
     """Check if an invoice has a credit note, and create one if not"""
-    
+
     from .apis import _process_invoice_fetch_request
 
-    original_invoice_data = get_response_data(_process_invoice_fetch_request(
-        document_name=document_name,
-        invoice_type=doctype,
-        settings_name=settings_name,
-        handler_function=update_invoice_response_data,
-        reference_number=reference_number,
-    ))
-    
-    if original_invoice_data and original_invoice_data.get("id"):
-        credit_note_data = get_response_data(_process_invoice_fetch_request(
+    original_invoice_data = get_response_data(
+        _process_invoice_fetch_request(
             document_name=document_name,
             invoice_type=doctype,
             settings_name=settings_name,
             handler_function=update_invoice_response_data,
             reference_number=reference_number,
-            is_return=True,
-            original_invoice_id=original_invoice_data.get("id", "")
-        ))
-        
+        )
+    )
+
+    if original_invoice_data and original_invoice_data.get("id"):
+        credit_note_data = get_response_data(
+            _process_invoice_fetch_request(
+                document_name=document_name,
+                invoice_type=doctype,
+                settings_name=settings_name,
+                handler_function=update_invoice_response_data,
+                reference_number=reference_number,
+                is_return=True,
+                original_invoice_id=original_invoice_data.get("id", ""),
+            )
+        )
+
         if not credit_note_data:
             request_credit_note_for_wrong_invoice(
                 doctype,
                 document_name,
                 original_invoice_data,
                 original_invoice_data.get("reference_number") or reference_number,
-                settings_name
-            )            
-            
+                settings_name,
+            )
 
-def update_invoice_response_data(response: dict, document_name: str, doctype: str, settings_name: str, **kwargs) -> None:
-    pass  
-    
+
+def update_invoice_response_data(
+    response: dict, document_name: str, doctype: str, settings_name: str, **kwargs
+) -> None:
+    pass
+
+
 def get_response_data(response: dict) -> dict | None:
     """Extract data from response object"""
     if response.get("results") is not None:
@@ -592,50 +652,62 @@ def get_response_data(response: dict) -> dict | None:
     return response
 
 
-def handle_invoice_mismatch(doc, document_name: str, doctype: str, settings_name: str, data: dict) -> None:
+def handle_invoice_mismatch(
+    doc, document_name: str, doctype: str, settings_name: str, data: dict
+) -> None:
     """Handle cases where invoice data doesn't match the response"""
     revision_count = int(doc.get("revision_count") or 0) + 1
-    allowed_revisions = int(frappe.get_value(
-        SETTINGS_DOCTYPE_NAME, settings_name, "max_allowed_revisions"
-    ) if frappe.get_value(
-        SETTINGS_DOCTYPE_NAME, settings_name, "max_allowed_revisions"
-    ) else 0)
-    
+    allowed_revisions = int(
+        frappe.get_value(SETTINGS_DOCTYPE_NAME, settings_name, "max_allowed_revisions")
+        if frappe.get_value(
+            SETTINGS_DOCTYPE_NAME, settings_name, "max_allowed_revisions"
+        )
+        else 0
+    )
+
     if allowed_revisions and revision_count > allowed_revisions:
         return
-    
+
     frappe.db.set_value(doctype, document_name, {"revision_count": revision_count})
     new_doc = frappe.get_doc(doctype, document_name)
-    
+
     if not new_doc.is_return:
-        request_credit_note_for_wrong_invoice(doctype, document_name, data, data.get("reference_number"), settings_name)
+        request_credit_note_for_wrong_invoice(
+            doctype, document_name, data, data.get("reference_number"), settings_name
+        )
         resend_invoice(document_name, doctype)
 
 
-def request_credit_note_for_wrong_invoice(doctype: str, document_name: str, data: dict, reference_number: str, settings_name: str) -> None:
+def request_credit_note_for_wrong_invoice(
+    doctype: str,
+    document_name: str,
+    data: dict,
+    reference_number: str,
+    settings_name: str,
+) -> None:
     """
     Requests a credit note for an invoice with incorrect data
-    
+
     Args:
         doctype: The document type (Sales Invoice)
         document_name: The name of the document
         data: The response data from server containing current invoice details
         settings_name: The eTims settings name to use for the API request
-    
+
     Returns:
         None: The function enqueues an API request to create a credit note
-    """ 
-    
+    """
+
     from .process_request import process_request
-    
-    doc = frappe.get_doc(doctype, document_name) 
-    
+
+    doc = frappe.get_doc(doctype, document_name)
+
     if doc.is_return:
-        return 
+        return
 
     return_payload = prepare_credit_note_payload(document_name, data)
 
-    credit_note_data =  process_request(
+    credit_note_data = process_request(
         request_data=return_payload,
         route_key="SalesCreditNoteSaveReq",
         handler_function=credit_note_on_success,
@@ -643,7 +715,7 @@ def request_credit_note_for_wrong_invoice(doctype: str, document_name: str, data
         doctype=doctype,
         settings_name=settings_name,
         company=doc.company,
-    )  
+    )
     if credit_note_data and isinstance(credit_note_data, dict):
         id = credit_note_data.get("id")
         items_data = prepare_credit_note_items_payload(id, data, settings_name)
@@ -671,8 +743,12 @@ def request_credit_note_for_wrong_invoice(doctype: str, document_name: str, data
             company=doc.company,
         )
 
-def sign_credit_note(response: dict, document_name: str, doctype: str, settings_name: str, **kwargs) -> None:
+
+def sign_credit_note(
+    response: dict, document_name: str, doctype: str, settings_name: str, **kwargs
+) -> None:
     from .process_request import process_request
+
     doc = frappe.get_doc(doctype, document_name)
     payload = {"invoice_id": response.get("id"), "document_name": document_name}
     frappe.enqueue(
@@ -688,52 +764,70 @@ def sign_credit_note(response: dict, document_name: str, doctype: str, settings_
         company=doc.company,
     )
 
-def credit_note_on_success(response: dict, document_name: str, doctype: str, settings_name: str, **kwargs) -> None:
+
+def credit_note_on_success(
+    response: dict, document_name: str, doctype: str, settings_name: str, **kwargs
+) -> None:
     pass
-      
-def resend_invoice(document_name: str, doctype: str) -> None:   
+
+
+def resend_invoice(document_name: str, doctype: str) -> None:
     from ..overrides.server.shared_overrides import generic_invoices_on_submit_override
+
     doc = frappe.get_doc(doctype, document_name)
     generic_invoices_on_submit_override(doc, doctype)
-            
+
+
 def is_invoice_data_matching(payload: dict, response_data: dict) -> bool:
     """
     Check if the payload invoice data matches the response invoice data.
     Ignores order and allows tolerance for value differences (nearest whole number).
     """
-    is_credit_note = 'sales_credit_note_lines' in response_data
-    payload_items = payload.get('itemDetails', [])
-    response_items = response_data.get('sales_credit_note_lines' if is_credit_note else 'sales_invoice_lines', [])
+    is_credit_note = "sales_credit_note_lines" in response_data
+    payload_items = payload.get("itemDetails", [])
+    response_items = response_data.get(
+        "sales_credit_note_lines" if is_credit_note else "sales_invoice_lines", []
+    )
 
     if len(payload_items) != len(response_items):
         return False
 
-    payload_total = payload.get('amount') or sum((i.get('unit_price', 0) * i.get('quantity', 0)) for i in payload_items)
-    response_total = response_data.get('crn_total_amount') if is_credit_note else response_data.get('total_gross_amount')
+    payload_total = payload.get("amount") or sum(
+        (i.get("unit_price", 0) * i.get("quantity", 0)) for i in payload_items
+    )
+    response_total = (
+        response_data.get("crn_total_amount")
+        if is_credit_note
+        else response_data.get("total_gross_amount")
+    )
 
     if round(float(payload_total), 0) != round(float(response_total or 0), 0):
         return False
 
     def normalize(item):
-        qty = round(float(item.get('quantity', 0)), 0)  
-        price = round(float(item.get('unit_price', 0)), 2)
+        qty = round(float(item.get("quantity", 0)), 0)
+        price = round(float(item.get("unit_price", 0)), 2)
         total = round(qty * price, 2)
         return (qty, price, total)
 
-    normalized_response = [normalize({
-        'quantity': i.get('quantity', 0),
-        'unit_price': i.get('price_inclusive_tax', 0)
-    }) for i in response_items]
+    normalized_response = [
+        normalize(
+            {
+                "quantity": i.get("quantity", 0),
+                "unit_price": i.get("price_inclusive_tax", 0),
+            }
+        )
+        for i in response_items
+    ]
 
     for p_item in payload_items:
         p_norm = normalize(p_item)
         if p_norm in normalized_response:
-            normalized_response.remove(p_norm)  
+            normalized_response.remove(p_norm)
         else:
-            return False  
+            return False
 
     return True
-
 
 
 def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:
@@ -751,14 +845,16 @@ def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:
     img.save(buffer, format="PNG")
     buffer.seek(0)
 
-    file_doc = frappe.get_doc({
-        "doctype": "File",
-        "file_name": f"QR-{docname}.png",
-        "is_private": 0,
-        "content": buffer.read(),
-        "attached_to_doctype": doctype,
-        "attached_to_name": docname,
-    })
+    file_doc = frappe.get_doc(
+        {
+            "doctype": "File",
+            "file_name": f"QR-{docname}.png",
+            "is_private": 0,
+            "content": buffer.read(),
+            "attached_to_doctype": doctype,
+            "attached_to_name": docname,
+        }
+    )
     file_doc.save(ignore_permissions=True)
 
     return file_doc.file_url
@@ -766,21 +862,23 @@ def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:
 
 def map_scu_fields(data: dict, docname: str, doctype: str, qr_key: str) -> dict:
     qr_url = data.get(qr_key)
-    image_url = generate_and_attach_qr_code(qr_url, docname, doctype) if qr_url else None
+    image_url = (
+        generate_and_attach_qr_code(qr_url, docname, doctype) if qr_url else None
+    )
 
     return {
         "custom_qr_code_url": qr_url,
         "custom_qr_code": image_url,
         "custom_current_receipt_number": data.get("scu_receipt_number"),
-        "custom_control_unit_date_time": parse_datetime(data.get("scu_receipt_timestamp")),
+        "custom_control_unit_date_time": parse_datetime(
+            data.get("scu_receipt_timestamp")
+        ),
         "custom_receipt_signature": data.get("scu_receipt_signature"),
         "custom_internal_data": data.get("scu_internal_data"),
         "custom_scu_id": data.get("scu_id"),
         "custom_scu_mrc_no": data.get("scu_mrc_number"),
         "custom_scu_invoice_number": data.get("scu_invoice_number"),
     }
-
-
 
 
 def sales_item_submission_on_success(
@@ -856,7 +954,7 @@ def purchase_invoice_submission_on_success(
     )
 
 
-def purchase_search_on_success(response: dict, **kwargs) -> None:
+def purchase_search_on_success(response: dict, settings_name: str, **kwargs) -> None:
     sales_list = (
         response.get("results", [])
         if isinstance(response, dict)
@@ -867,11 +965,12 @@ def purchase_search_on_success(response: dict, **kwargs) -> None:
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.fetch_purchase_items",
             registered_purchase=registered_purchase,
+            settings_name=settings_name,
             queue="long",
         )
 
 
-def fetch_purchase_items(registered_purchase: str) -> None:
+def fetch_purchase_items(registered_purchase: str, settings_name: str) -> None:
     from .process_request import process_request
 
     payload = {
@@ -885,6 +984,7 @@ def fetch_purchase_items(registered_purchase: str) -> None:
         create_and_link_purchase_item,
         request_method="GET",
         doctype=REGISTERED_PURCHASES_DOCTYPE_NAME,
+        settings_name=settings_name,
     )
 
 
@@ -962,7 +1062,12 @@ def create_purchase_from_search_details(fetched_purchase: dict) -> str:
     doc.workflow_state = fetched_purchase["workflow_state"]
     doc.branch = (get_link_value("Branch", "slade_id", fetched_purchase["branch"]),)
     doc.organisation = (
-        get_link_value("Company", "custom_slade_id", fetched_purchase["organisation"]),
+        get_link_value(
+            COMPANY_MAPPING_DOCTYPE_NAME,
+            "organisation",
+            fetched_purchase["organisation"],
+            "parent",
+        ),
     )
     doc.can_send_to_etims = fetched_purchase["can_send_to_etims"]
 
@@ -1083,7 +1188,9 @@ def create_notice_if_new(notice: dict) -> None:
         )
 
 
-def imported_items_search_on_success(response: dict,  settings_name: str, **kwargs) -> None:
+def imported_items_search_on_success(
+    response: dict, settings_name: str, **kwargs
+) -> None:
     items = response.get("results", [])
     batch_size = 20
     counter = 0
@@ -1167,26 +1274,46 @@ def imported_items_search_on_success(response: dict,  settings_name: str, **kwar
 
             if item.get("product"):
                 product_name = None
-                if frappe.db.exists(SLADE_ID_MAPPING_DOCTYPE_NAME, {"slade360_id": item.get("product"), "etims_setup": settings_name}):
+                if frappe.db.exists(
+                    SLADE_ID_MAPPING_DOCTYPE_NAME,
+                    {"slade360_id": item.get("product"), "etims_setup": settings_name},
+                ):
                     product_name = frappe.db.get_value(
-                        SLADE_ID_MAPPING_DOCTYPE_NAME, 
-                        {"slade360_id": item.get("product"), "etims_setup": settings_name}, 
-                        "parent", 
-                        order_by="creation desc"
+                        SLADE_ID_MAPPING_DOCTYPE_NAME,
+                        {
+                            "slade360_id": item.get("product"),
+                            "etims_setup": settings_name,
+                        },
+                        "parent",
+                        order_by="creation desc",
                     )
                     product = frappe.get_doc("Item", product_name)
                 else:
-                    item_name = item.get("item_name") or item.get("product_name", "Imported Item")
+                    item_name = item.get("item_name") or item.get(
+                        "product_name", "Imported Item"
+                    )
                     product_code = item.get("product_code") or item_name
-                    
-                    if product_code and frappe.db.exists("Item", {"item_code": product_code}):
+
+                    if product_code and frappe.db.exists(
+                        "Item", {"item_code": product_code}
+                    ):
                         product = frappe.get_doc("Item", {"item_code": product_code})
                     else:
                         product = frappe.new_doc("Item")
                         product.item_name = item_name
                         product.item_code = product_code or item_name
-                        default_item_group = frappe.get_all("Item Group", filters={"is_group": 1}, fields=["name"], limit=1)
-                        product.item_group = default_item_group[0].name if default_item_group else "All Item Groups"
+                        product.custom_prevent_etims_registration = 1
+                        default_item_group = frappe.get_all(
+                            "Item Group",
+                            filters={"is_group": 1},
+                            fields=["name"],
+                            limit=1,
+                        )
+                        product.item_group = (
+                            default_item_group[0].name
+                            if default_item_group
+                            else "All Item Groups"
+                        )
                         product.flags.ignore_mandatory = True
                         product.insert(ignore_permissions=True)
                     frappe.get_doc(
@@ -1199,16 +1326,28 @@ def imported_items_search_on_success(response: dict,  settings_name: str, **kwar
                             "etims_setup": settings_name,
                         }
                     ).insert(ignore_permissions=True)
-                
+
                 update_data = {
                     "custom_referenced_imported_item": item_doc.name,
                     "custom_imported_item_task_code": item_doc.task_code,
                     "custom_hs_code": item_doc.hs_code,
                     "custom_imported_item_submitted": item_doc.sent_to_etims,
                     "custom_imported_item_status": item_doc.imported_item_status,
-                    "custom_imported_item_status_code": item_doc.imported_item_status_code
+                    "custom_imported_item_status_code": item_doc.imported_item_status_code,
                 }
-                frappe.db.set_value("Item", product.name, update_data, update_modified=False)
+                frappe.db.set_value(
+                    "Item", product.name, update_data, update_modified=False
+                )
+                request_data = {
+                    "document_name": product.name,
+                    "id": item.get("product"),
+                }
+                frappe.enqueue(
+                    "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.fetch_item_details",
+                    request_data=request_data,
+                    settings_name=settings_name,
+                    queue="long",
+                )
 
             counter += 1
             if counter % batch_size == 0:
@@ -1285,17 +1424,22 @@ def search_branch_request_on_success(response: dict, **kwargs) -> None:
             doc.save(ignore_permissions=True)
 
 
-def item_search_on_success(response: dict, settings_name : str, **kwargs) -> None:
+def item_search_on_success(response: dict, settings_name: str, **kwargs) -> None:
     items = parse_response_data(response, list)
     for item_data in items:
         try:
             slade_id = item_data.get("id")
             existing_item = frappe.db.get_value(
-                SLADE_ID_MAPPING_DOCTYPE_NAME, {"slade360_id": slade_id, "etims_setup": settings_name}, "parent", order_by="creation desc"
+                SLADE_ID_MAPPING_DOCTYPE_NAME,
+                {"slade360_id": slade_id, "etims_setup": settings_name},
+                "parent",
+                order_by="creation desc",
             )
-            country_of_origin_code = item_data.get("country_of_origin")[
-                :2
-            ] if item_data.get("country_of_origin") else "ke"
+            country_of_origin_code = (
+                item_data.get("country_of_origin")[:2]
+                if item_data.get("country_of_origin")
+                else "ke"
+            )
             country_of_origin = get_link_value(
                 COUNTRIES_DOCTYPE_NAME, "code", country_of_origin_code
             )
@@ -1352,7 +1496,10 @@ def item_search_on_success(response: dict, settings_name : str, **kwargs) -> Non
                 item_doc.flags.ignore_mandatory = True
                 item_doc.save(ignore_permissions=True)
             else:
-                request_data["item_group"] = frappe.db.get_value("Item Group", {"is_group": 1}, "name") or "All Item Groups"
+                request_data["item_group"] = (
+                    frappe.db.get_value("Item Group", {"is_group": 1}, "name")
+                    or "All Item Groups"
+                )
                 item_doc = frappe.get_doc({"doctype": "Item", **request_data})
                 item_doc.flags.ignore_mandatory = True
                 item_doc.insert(
@@ -1360,29 +1507,34 @@ def item_search_on_success(response: dict, settings_name : str, **kwargs) -> Non
                     ignore_mandatory=True,
                     ignore_if_duplicate=True,
                 )
-                
-            existing_mapping = frappe.db.exists(SLADE_ID_MAPPING_DOCTYPE_NAME, {
-                "parent": item_doc.name,
-                "parenttype": "Item",
-                "parentfield": "etims_setup_mapping",
-                "etims_setup": settings_name
-            })
-            
+
+            existing_mapping = frappe.db.exists(
+                SLADE_ID_MAPPING_DOCTYPE_NAME,
+                {
+                    "parent": item_doc.name,
+                    "parenttype": "Item",
+                    "parentfield": "etims_setup_mapping",
+                    "etims_setup": settings_name,
+                },
+            )
+
             if existing_mapping:
                 frappe.db.set_value(
                     SLADE_ID_MAPPING_DOCTYPE_NAME,
                     existing_mapping,
-                    {"slade360_id": slade_id}
+                    {"slade360_id": slade_id},
                 )
             else:
-                frappe.get_doc({
-                    "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
-                    "parent": item_doc.name,
-                    "parenttype": "Item",
-                    "parentfield": "etims_setup_mapping",
-                    "slade360_id": slade_id,
-                    "etims_setup": settings_name,
-                }).insert(ignore_permissions=True)
+                frappe.get_doc(
+                    {
+                        "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
+                        "parent": item_doc.name,
+                        "parenttype": "Item",
+                        "parentfield": "etims_setup_mapping",
+                        "slade360_id": slade_id,
+                        "etims_setup": settings_name,
+                    }
+                ).insert(ignore_permissions=True)
 
         except Exception as e:
             frappe.log_error(
@@ -1390,7 +1542,7 @@ def item_search_on_success(response: dict, settings_name : str, **kwargs) -> Non
                 message=f"Error processing item {item_data.get('code')}: {str(e)}",
             )
             continue
-        
+
     frappe.db.commit()
 
 
@@ -1435,18 +1587,6 @@ def location_update_on_success(response: dict, document_name: str, **kwargs) -> 
     )
 
 
-def pricelist_update_on_success(response: dict, document_name: str, **kwargs) -> None:
-    frappe.db.set_value(
-        "Price List", document_name, {"custom_slade_id": response.get("id")}
-    )
-
-
-def item_price_update_on_success(response: dict, document_name: str, **kwargs) -> None:
-    frappe.db.set_value(
-        "Item Price", document_name, {"custom_slade_id": response.get("id")}
-    )
-
-
 def operation_type_create_on_success(
     response: dict, document_name: str, **kwargs
 ) -> None:
@@ -1455,41 +1595,34 @@ def operation_type_create_on_success(
     )
 
 
-def mode_of_payment_on_success(response: dict, document_name: str, settings_name: str, **kwargs) -> None:
-    # Get the Mode of Payment document
-    mop_doc = frappe.get_doc("Mode of Payment", document_name)
-    slade_id = response.get("id")
-    
-    # Find existing mapping or create new one
-    for mapping in mop_doc.get("etims_setup_mapping", []):
-        if mapping.etims_setup == settings_name:
-            mapping.slade360_id = slade_id
-            break
-    else:
-        mop_doc.append("etims_setup_mapping", {
-            "etims_setup": settings_name,
-            "slade360_id": slade_id
-        })
-        
-    mop_doc.save(ignore_permissions=True)
-
-
-def fetch_matching_items_on_success(response: dict, document_name: str, settings_name: str, **kwargs) -> None:
+def fetch_matching_items_on_success(
+    response: dict, document_name: str, settings_name: str, **kwargs
+) -> None:
     from .process_request import process_request
+
     items = parse_response_data(response, list)
     item_doc = frappe.get_doc("Item", document_name)
-    existing_id = next((row.slade360_id for row in item_doc.etims_setup_mapping if row.etims_setup == settings_name), None)
+    existing_id = next(
+        (
+            row.slade360_id
+            for row in item_doc.etims_setup_mapping
+            if row.etims_setup == settings_name
+        ),
+        None,
+    )
     if len(items) > 0:
         if not item_doc.etims_setup_mapping:
-            frappe.get_doc({
-                "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
-                "parent": item_doc.name,
-                "parenttype": "Item",
-                "parentfield": "etims_setup_mapping",
-                "slade360_id": items[0].get("id"),
-                "etims_setup": settings_name
-            }).insert(ignore_permissions=True)
-            
+            frappe.get_doc(
+                {
+                    "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
+                    "parent": item_doc.name,
+                    "parenttype": "Item",
+                    "parentfield": "etims_setup_mapping",
+                    "slade360_id": items[0].get("id"),
+                    "etims_setup": settings_name,
+                }
+            ).insert(ignore_permissions=True)
+
             existing_id = items[0].get("id")
 
         for item in items:
@@ -1502,7 +1635,7 @@ def fetch_matching_items_on_success(response: dict, document_name: str, settings
                         "document_name": item_doc.name,
                         "name": f"{item_doc.name} - Archived",
                         "id": item.get("id"),
-                        "active": False, 
+                        "active": False,
                     },
                     route_key="ItemsSearchReq",
                     handler_function=item_archive_on_success,
@@ -1510,7 +1643,7 @@ def fetch_matching_items_on_success(response: dict, document_name: str, settings
                     settings_name=settings_name,
                 )
     request_data = build_item_payload(item_doc, settings_name, existing_id)
-    request_method = "PATCH" if "id" in request_data else "POST"        
+    request_method = "PATCH" if "id" in request_data else "POST"
     frappe.enqueue(
         process_request,
         queue="default",
@@ -1522,26 +1655,39 @@ def fetch_matching_items_on_success(response: dict, document_name: str, settings
         settings_name=settings_name,
     )
 
+
 def item_archive_on_success(response: dict, document_name: str, **kwargs) -> None:
     pass
 
 
-def fetch_matching_partner_on_success(response: dict, doctype: str, document_name: str, settings_name: str, **kwargs) -> None:
+def fetch_matching_partner_on_success(
+    response: dict, doctype: str, document_name: str, settings_name: str, **kwargs
+) -> None:
     from .process_request import process_request
+
     partners = parse_response_data(response, list)
     partner_doc = frappe.get_doc(doctype, document_name)
-    existing_id = next((row.slade360_id for row in partner_doc.etims_setup_mapping if row.etims_setup == settings_name), None)
+    existing_id = next(
+        (
+            row.slade360_id
+            for row in partner_doc.etims_setup_mapping
+            if row.etims_setup == settings_name
+        ),
+        None,
+    )
     if len(partners) > 0:
         if not partner_doc.etims_setup_mapping:
-            frappe.get_doc({
-                "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
-                "parent": partner_doc.name,
-                "parenttype": doctype,
-                "parentfield": "etims_setup_mapping",
-                "slade360_id": partners[0].get("id"),
-                "etims_setup": settings_name
-            }).insert(ignore_permissions=True)
-            
+            frappe.get_doc(
+                {
+                    "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
+                    "parent": partner_doc.name,
+                    "parenttype": doctype,
+                    "parentfield": "etims_setup_mapping",
+                    "slade360_id": partners[0].get("id"),
+                    "etims_setup": settings_name,
+                }
+            ).insert(ignore_permissions=True)
+
             existing_id = partners[0].get("id")
 
         for partner in partners:
@@ -1555,15 +1701,20 @@ def fetch_matching_partner_on_success(response: dict, doctype: str, document_nam
                         "partner_name": f"{partner_doc.name} - Archived",
                         "customer_tax_pin": None,
                         "id": partner.get("id"),
-                        "active": False, 
+                        "active": False,
                     },
                     route_key="BhfCustSaveReq",
                     handler_function=partner_archive_on_success,
                     request_method="PATCH",
                     settings_name=settings_name,
                 )
-    request_data = build_partner_payload(partner_doc, settings_name, is_customer=(doctype == "Customer"), existing_id=existing_id)
-    request_method = "PATCH" if "id" in request_data else "POST"        
+    request_data = build_partner_payload(
+        partner_doc,
+        settings_name,
+        is_customer=(doctype == "Customer"),
+        existing_id=existing_id,
+    )
+    request_method = "PATCH" if "id" in request_data else "POST"
     frappe.enqueue(
         process_request,
         queue="default",
@@ -1574,6 +1725,7 @@ def fetch_matching_partner_on_success(response: dict, doctype: str, document_nam
         request_method=request_method,
         settings_name=settings_name,
     )
+
 
 def partner_archive_on_success(response: dict, document_name: str, **kwargs) -> None:
     pass

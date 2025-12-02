@@ -15,6 +15,22 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             docname: frm.doc.name,
             skip_checks: true,
           },
+          freeze: true,
+          freeze_message: __("Updating token..."),
+          callback: (response) => {
+            frappe.msgprint({
+              title: __("Success"),
+              indicator: "green",
+              message: __("Token updated successfully."),
+            });
+          },
+          error: (error) => {
+            frappe.msgprint({
+              title: __("Error"),
+              indicator: "red",
+              message: __("Failed to update token."),
+            });
+          },
         });
       });
 
@@ -26,6 +42,22 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.reset_auth_password",
           args: {
             docname: frm.doc.name,
+          },
+          freeze: true,
+          freeze_message: __("Resetting authentication password..."),
+          callback: (response) => {
+            frappe.msgprint({
+              title: __("Success"),
+              indicator: "green",
+              message: __("Authentication password reset successfully."),
+            });
+          },
+          error: (error) => {
+            frappe.msgprint({
+              title: __("Error"),
+              indicator: "red",
+              message: __("Failed to reset authentication password."),
+            });
           },
         });
       });
@@ -45,9 +77,22 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
                 branch_id: frm.doc.bhfid,
               },
             },
-            callback: (response) => {},
+            freeze: true,
+            freeze_message: __("Initiating notice search..."),
+            callback: (response) => {
+              frappe.msgprint({
+                title: __("Success"),
+                indicator: "green",
+                message: __("Notice search initiated successfully."),
+              });
+            },
             error: (error) => {
               // Error Handling is Defered to the Server
+              frappe.msgprint({
+                title: __("Error"),
+                indicator: "red",
+                message: __("Failed to initiate notice search."),
+              });
             },
           });
         },
@@ -68,6 +113,8 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
                 branch_id: frm.doc.bhfid,
               },
             },
+            freeze: true,
+            freeze_message: __("Refreshing code lists..."),
             callback: (response) => {
               frappe.call({
                 method:
@@ -80,14 +127,30 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
                     branch_id: frm.doc.bhfid,
                   },
                 },
-                callback: (response) => {},
+                callback: (response) => {
+                  frappe.msgprint({
+                    title: __("Success"),
+                    indicator: "green",
+                    message: __("Code lists refreshed successfully."),
+                  });
+                },
                 error: (error) => {
                   // Error Handling is Defered to the Server
+                  frappe.msgprint({
+                    title: __("Error"),
+                    indicator: "red",
+                    message: __("Failed to refresh code lists."),
+                  });
                 },
               });
             },
             error: (error) => {
               // Error Handling is Defered to the Server
+              frappe.msgprint({
+                title: __("Error"),
+                indicator: "red",
+                message: __("Failed to refresh code lists."),
+              });
             },
           });
         },
@@ -122,23 +185,6 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
         },
         __("eTims Actions")
       );
-
-      // frm.add_custom_button(
-      //   __("Submit Mode of Payments"),
-      //   function () {
-      //     frappe.call({
-      //       method:
-      //         "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.send_all_mode_of_payments",
-      //       args: { settings_name: frm.doc.name },
-
-      //       callback: (response) => {},
-      //       error: (error) => {
-      //         // Error Handling is Defered to the Server
-      //       },
-      //     });
-      //   },
-      //   __("eTims Actions")
-      // );
     }
 
     frm.add_custom_button(
@@ -154,7 +200,6 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
           freeze_message: __("Syncing user details..."),
           callback: function (response) {
             if (response) {
-              // Show toast notification
               frappe.show_alert(
                 {
                   message: __("User details synced successfully"),
@@ -187,6 +232,22 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             docname: frm.doc.name,
             skip_checks: true,
           },
+          freeze: true,
+          freeze_message: __("Updating token..."),
+          callback: (response) => {
+            frappe.msgprint({
+              title: __("Success"),
+              indicator: "green",
+              message: __("Token updated successfully."),
+            });
+          },
+          error: (error) => {
+            frappe.msgprint({
+              title: __("Error"),
+              indicator: "red",
+              message: __("Failed to update token."),
+            });
+          },
         });
       },
       __("eTims Actions")
@@ -203,6 +264,22 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
               server_url: frm.doc.server_url + "/alive",
               auth_url: frm.doc.auth_server_url,
             },
+          },
+          freeze: true,
+          freeze_message: __("Pinging server..."),
+          callback: (response) => {
+            frappe.msgprint({
+              title: __("Success"),
+              indicator: "green",
+              message: __("Server is alive and reachable."),
+            });
+          },
+          error: (error) => {
+            frappe.msgprint({
+              title: __("Error"),
+              indicator: "red",
+              message: __("Failed to reach the server."),
+            });
           },
         });
       },

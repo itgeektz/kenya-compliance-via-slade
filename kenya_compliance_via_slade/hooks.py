@@ -59,12 +59,7 @@ doctype_js = {
     "Item": "kenya_compliance_via_slade/overrides/client/items.js",
     "BOM": "kenya_compliance_via_slade/overrides/client/bom.js",
     "Branch": "kenya_compliance_via_slade/overrides/client/branch.js",
-    "UOM": "kenya_compliance_via_slade/overrides/client/uom.js",
-    # "Warehouse": "kenya_compliance_via_slade/overrides/client/warehouse.js",
-    "Mode of Payment": "kenya_compliance_via_slade/overrides/client/mode_of_payment.js",
     "Stock Ledger Entry": "kenya_compliance_via_slade/overrides/client/stock_ledger_entry.js",
-    # "Price List": "kenya_compliance_via_slade/overrides/client/price_list.js",
-    # "Item Price": "kenya_compliance_via_slade/overrides/client/item_price.js",
 }
 
 doctype_list_js = {
@@ -72,12 +67,7 @@ doctype_list_js = {
     "Sales Invoice": "kenya_compliance_via_slade/overrides/client/sales_invoice_list.js",
     "Branch": "kenya_compliance_via_slade/overrides/client/branch_list.js",
     "Customer": "kenya_compliance_via_slade/overrides/client/customer_list.js",
-    "UOM": "kenya_compliance_via_slade/overrides/client/uom_list.js",
-    # "Warehouse": "kenya_compliance_via_slade/overrides/client/warehouse_list.js",
-    "Mode of Payment": "kenya_compliance_via_slade/overrides/client/mode_of_payment_list.js",
     "Supplier": "kenya_compliance_via_slade/overrides/client/supplier_list.js",
-    # "Price List": "kenya_compliance_via_slade/overrides/client/price_list_list.js",
-    # "Item Price": "kenya_compliance_via_slade/overrides/client/item_price_list.js",
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -166,7 +156,7 @@ doctype_list_js = {
 # Override standard doctype classes
 
 override_doctype_class = {
-	"Scheduled Job Type": "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.scheduled_job_type.CustomScheduledJobType",
+    "Scheduled Job Type": "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.scheduled_job_type.CustomScheduledJobType",
 }
 # Document Events
 # ---------------
@@ -224,16 +214,25 @@ doc_events = {
         ]
     },
     "Supplier": {
-        "on_update": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.supplier.on_update"
+        "before_save": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.supplier.before_save"
+        ],
+        "after_insert": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.supplier.after_insert"
+        ],
+        "validate": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.supplier.validate"
         ],
     },
     "Customer": {
-        "on_update": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.on_update"
+        "before_save": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.before_save"
         ],
         "validate": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.validate"
+        ],
+        "after_insert": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.after_insert"
         ],
     },
     "Stock Ledger Entry": {
@@ -250,22 +249,18 @@ scheduler_events = {
     "daily": [
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.refresh_notices",
     ],
-    "hourly": [
-        # "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.send_sales_invoices_information",
-        # "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.send_purchase_information",
-        # "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.send_stock_information",
-    ],
     "weekly": [
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.update_setting_passwords",
     ],
     "monthly": [
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.refresh_code_lists",
-        # "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.search_organisations_request",
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.get_item_classification_codes",
     ],
 }
 
-after_migrate = ["kenya_compliance_via_slade.kenya_compliance_via_slade.patches.migrate_to_multi_company.execute"]
+after_migrate = [
+    "kenya_compliance_via_slade.kenya_compliance_via_slade.patches.migrate_to_multi_company.execute"
+]
 
 # Testing
 # -------
