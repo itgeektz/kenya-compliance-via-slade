@@ -1302,6 +1302,7 @@ def imported_items_search_on_success(
                         product = frappe.new_doc("Item")
                         product.item_name = item_name
                         product.item_code = product_code or item_name
+                        product.custom_prevent_etims_registration = 1
                         default_item_group = frappe.get_all(
                             "Item Group",
                             filters={"is_group": 1},
@@ -1336,6 +1337,16 @@ def imported_items_search_on_success(
                 }
                 frappe.db.set_value(
                     "Item", product.name, update_data, update_modified=False
+                )
+                request_data = {
+                    "document_name": product.name,
+                    "id": item.get("product"),
+                }
+                frappe.enqueue(
+                    "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.fetch_item_details",
+                    request_data=request_data,
+                    settings_name=settings_name,
+                    queue="long",
                 )
 
             counter += 1

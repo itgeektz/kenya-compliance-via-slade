@@ -768,7 +768,7 @@ def create_item(item: dict | frappe._dict) -> Document:
 
     new_item = frappe.new_doc("Item")
     new_item.is_stock_item = 0  # Default to 0
-    new_item.item_code = item["product_code"]
+    new_item.item_code = item["item_code"]
     new_item.item_name = item["item_name"]
     new_item.item_group = "All Item Groups"
     if "item_classification_code" in item:
