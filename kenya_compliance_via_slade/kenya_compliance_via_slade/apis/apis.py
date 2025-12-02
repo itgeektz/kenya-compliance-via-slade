@@ -710,12 +710,12 @@ def submit_item_composition(name: str) -> None:
 
 
 @frappe.whitelist()
-def create_supplier_from_fetched_registered_purchases(request_data: str) -> None:
+def create_supplier_from_fetched_registered_purchases(request_data: str) -> Document:
     data: dict = json.loads(request_data)
 
     new_supplier = create_supplier(data)
 
-    frappe.msgprint(f"Supplier: {new_supplier.name} created")
+    return new_supplier
 
 
 def create_supplier(supplier_details: dict) -> Document:
@@ -723,6 +723,7 @@ def create_supplier(supplier_details: dict) -> Document:
 
     new_supplier.supplier_name = supplier_details["supplier_name"]
     new_supplier.tax_id = supplier_details["supplier_pin"]
+    new_supplier.require_tax_id = 0
     new_supplier.custom_supplier_branch = supplier_details["supplier_branch_id"]
 
     if "supplier_currency" in supplier_details:
@@ -740,10 +741,26 @@ def create_supplier(supplier_details: dict) -> Document:
 def create_items_from_fetched_registered(request_data: str) -> None:
     data = json.loads(request_data)
 
-    if data["items"]:
-        items = data["items"]
-        for item in items:
-            create_item(item)
+    if data.get("items"):
+        created = []
+        errors = []
+        for item in data["items"]:
+            try:
+                new_item = create_item(item)
+                created.append(new_item.name if hasattr(new_item, "name") else new_item)
+            except Exception as e:
+                frappe.log_error(
+                    message=frappe.get_traceback(),
+                    title="create_items_from_fetched_registered error",
+                )
+                errors.append(
+                    {
+                        "item": item.get("item_code") or item.get("item_name"),
+                        "error": str(e),
+                    }
+                )
+
+        return {"created": created, "errors": errors}
 
 
 def create_item(item: dict | frappe._dict) -> Document:
