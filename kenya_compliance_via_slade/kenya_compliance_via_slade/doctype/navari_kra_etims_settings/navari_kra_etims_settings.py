@@ -84,11 +84,22 @@ class NavariKRAeTimsSettings(Document):
             task.enqueue()
 
         def disable_scheduled_job(name: str) -> None:
-            task_name = frappe.db.exists("Scheduled Job Type", name)
+            task_name = frappe.db.exists(
+                "Scheduled Job Type", {"job_name": name}
+            ) or frappe.db.exists("Scheduled Job Type", name)
             if task_name:
-                task = frappe.get_doc("Scheduled Job Type", task_name)
-                task.stopped = 1
-                task.save(ignore_permissions=True)
+                try:
+                    frappe.delete_doc(
+                        "Scheduled Job Type",
+                        task_name,
+                        force=True,
+                        ignore_permissions=True,
+                    )
+                except Exception as e:
+                    frappe.log_error(
+                        message=f"Failed to delete Scheduled Job Type '{task_name}': {e}",
+                        title="Scheduled Job Deletion Error",
+                    )
 
         task_configs = [
             {
