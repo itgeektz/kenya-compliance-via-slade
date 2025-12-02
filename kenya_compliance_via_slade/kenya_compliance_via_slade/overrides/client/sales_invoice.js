@@ -104,6 +104,8 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
     frappe.call({
       method: method,
       args: args,
+      freeze: true,
+      freeze_message: "Processing...",
       callback: () => frappe.msgprint(__(success_msg)),
       error: (err) => {
         console.error(err);
@@ -135,6 +137,8 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
       frappe.call({
         method: method,
         args: args,
+        freeze: true,
+        freeze_message: "Processing...",
         callback: () => frappe.msgprint(__(success_msg)),
         error: (err) => {
           console.error(err);

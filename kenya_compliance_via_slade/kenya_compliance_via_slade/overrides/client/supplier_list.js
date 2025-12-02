@@ -56,6 +56,8 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
     frappe.call({
       method: `kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.${method}`,
       args: args,
+      freeze: true,
+      freeze_message: "Processing...",
       callback: () => frappe.msgprint(__(success_msg)),
       error: (err) => {
         console.error(err);
@@ -87,6 +89,8 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
       frappe.call({
         method: `kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.${method}`,
         args: args,
+        freeze: true,
+        freeze_message: "Processing...",
         callback: () => frappe.msgprint(__(success_msg)),
         error: (err) => {
           console.error(err);
