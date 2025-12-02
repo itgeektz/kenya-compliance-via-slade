@@ -807,7 +807,7 @@ def create_item(item: dict | frappe._dict) -> Document:
 
 
 @frappe.whitelist()
-def create_purchase_invoice_from_request(request_data: str) -> None:
+def create_purchase_invoice_from_request(request_data: str) -> Document:
     data = json.loads(request_data)
 
     if not data.get("company_name"):
@@ -816,49 +816,31 @@ def create_purchase_invoice_from_request(request_data: str) -> None:
         ) or frappe.get_value("Company", {}, "name")
 
     # Check if supplier exists
-    supplier = None
-    if not frappe.db.exists("Supplier", data["supplier_name"], cache=False):
+    supplier = data.get("supplier", None)
+    if not supplier and not frappe.db.exists(
+        "Supplier", data["supplier_name"], cache=False
+    ):
         supplier = create_supplier(data).name
 
-    all_items = []
-    all_existing_items = {
-        item["name"]: item for item in frappe.db.get_all("Item", ["*"])
-    }
-
-    for received_item in data["items"]:
-        # Check if item exists
-        if received_item["item_name"] not in all_existing_items:
-            created_item = create_item(received_item)
-            all_items.append(created_item)
-
     set_warehouse = frappe.get_value(
-        "Warehouse",
-        {"custom_branch": data["branch"]},
-        ["name"],
-        as_dict=True,
-    )
+        "Warehouse", {"is_group": 0, "company": data["company_name"]}, "name"
+    )  # use first warehouse
 
-    if not set_warehouse:
-        set_warehouse = frappe.get_value(
-            "Warehouse", {"is_group": 0, "company": data["company_name"]}, "name"
-        )  # use first warehouse match if not available for the branch
+    currency = data.get("currency") or frappe.get_value(
+        "Company", data["company_name"], "default_currency"
+    )
 
     # Create the Purchase Invoice
     purchase_invoice = frappe.new_doc("Purchase Invoice")
     purchase_invoice.supplier = supplier or data["supplier_name"]
-    purchase_invoice.supplier = supplier or data["supplier_name"]
     purchase_invoice.update_stock = 1
     purchase_invoice.set_warehouse = set_warehouse
-    purchase_invoice.branch = data["branch"]
     purchase_invoice.company = data["company_name"]
-    purchase_invoice.custom_slade_organisation = data["organisation"]
     purchase_invoice.bill_no = data["supplier_invoice_no"]
-    purchase_invoice.bill_date = data["supplier_invoice_date"]
     purchase_invoice.bill_date = data["supplier_invoice_date"]
 
     if "currency" in data:
-        # The "currency" key is only available when creating from Imported Item
-        purchase_invoice.currency = data["currency"]
+        purchase_invoice.currency = currency
         purchase_invoice.custom_source_registered_imported_item = data["name"]
     else:
         purchase_invoice.custom_source_registered_purchase = data["name"]
@@ -868,54 +850,147 @@ def create_purchase_invoice_from_request(request_data: str) -> None:
 
     purchase_invoice.set("items", [])
 
-    # TODO: Remove Hard-coded values
-    purchase_invoice.custom_purchase_type = "Copy"
-    purchase_invoice.custom_receipt_type = "Purchase"
-    purchase_invoice.custom_payment_type = "CASH"
-    purchase_invoice.custom_purchase_status = "Approved"
+    expense_account = get_or_create_account(
+        account_type="Cost of Goods Sold",
+        account_name_template="Cost of Goods Sold",
+        company=data["company_name"],
+        currency=currency,
+    )
 
-    company_abbr = frappe.get_value(
-        "Company", {"name": frappe.defaults.get_user_default("Company")}, ["abbr"]
+    credit_to_account = get_or_create_account(
+        account_type="Payable",
+        company=data["company_name"],
+        account_name_template="Creditors",
+        currency=currency,
     )
-    expense_account = frappe.db.get_value(
-        "Account",
-        {
-            "name": [
-                "like",
-                f"%Cost of Goods Sold%{company_abbr}",
-            ]
-        },
-        ["name"],
-    )
+    purchase_invoice.credit_to = credit_to_account
 
     for item in data["items"]:
         matching_item = frappe.get_all(
             "Item",
             filters={
                 "item_name": item["item_name"],
-                "custom_item_classification": item["item_classification_code"],
             },
             fields=["name"],
         )
         item_code = matching_item[0]["name"]
-        purchase_invoice.append(
-            "items",
-            {
-                "item_name": item["item_name"],
-                "item_code": item_code,
-                "qty": item["quantity"],
-                "rate": item["unit_price"],
-                "expense_account": expense_account,
-                "custom_item_classification": item["item_classification_code"],
-                "custom_packaging_unit": item["packaging_unit_code"],
-                "custom_unit_of_quantity": item["quantity_unit_code"],
-                "custom_taxation_type": item["taxation_type_code"],
-            },
-        )
+
+        item_doc = {
+            "item_name": item["item_name"],
+            "item_code": item_code,
+            "qty": item.get("quantity") or 1,
+            "rate": item.get("unit_price") or 0,
+            "expense_account": expense_account,
+        }
+
+        if item.get("discount_amount") not in (None, ""):
+            item_doc["discount_amount"] = item["discount_amount"]
+        if item.get("total_amount") not in (None, ""):
+            item_doc["net_amount"] = item["total_amount"]
+        if item.get("tax_amount") not in (None, ""):
+            tax_amount = float(item.get("tax_amount") or 0.0)
+            total_amount = float(item.get("total_amount") or 0.0) - tax_amount
+            net_rate = total_amount / float(item_doc["qty"]) if item_doc["qty"] else 0.0
+            custom_tax_rate = (
+                (tax_amount / total_amount * 100.0) if total_amount else 0.0
+            )
+            item_doc["custom_tax_rate"] = custom_tax_rate
+            item_doc["net_amount"] = total_amount
+            item_doc["rate"] = net_rate
+
+            purchase_invoice.append(
+                "taxes",
+                {
+                    "charge_type": "On Net Total",
+                    "account_head": get_link_value(
+                        "Account",
+                        "name",
+                        "VAT - " + data["company_name"],
+                        "account_name",
+                    ),
+                    "description": "Tax for " + item["item_name"],
+                    "rate": custom_tax_rate,
+                },
+            )
+
+        purchase_invoice.append("items", item_doc)
 
     purchase_invoice.insert(ignore_mandatory=True)
 
-    frappe.msgprint("Purchase Invoices have been created")
+    return purchase_invoice
+
+
+def get_or_create_account(
+    account_type: str, company: str, currency: str, account_name_template: str = None
+) -> str:
+    if account_name_template:
+        account = frappe.db.get_value(
+            "Account",
+            filters=[
+                ["account_type", "=", account_type],
+                ["company", "=", company],
+                ["account_currency", "=", currency],
+                ["account_name", "like", f"%{account_name_template}%"],
+            ],
+            fieldname="name",
+        )
+    else:
+        account = frappe.db.get_value(
+            "Account",
+            {
+                "account_type": account_type,
+                "company": company,
+                "account_currency": currency,
+            },
+            "name",
+        )
+
+    if account:
+        return account
+
+    template_account = frappe.get_all(
+        "Account",
+        filters={
+            "account_type": account_type,
+            "company": company,
+            "is_group": 0,
+            "account_name": ["like", f"%{account_name_template}%"],
+        },
+        fields=["name"],
+        limit=1,
+    )
+
+    if not template_account:
+        frappe.throw(
+            f"No template account found for type '{account_type}' in company {company}"
+        )
+
+    template = frappe.get_doc("Account", template_account[0].name)
+
+    new_account = frappe.new_doc("Account")
+
+    base_name = (
+        account_name_template if account_name_template else template.account_name
+    )
+    new_account.update(
+        {
+            "account_name": f"{base_name} - {currency}",
+            "account_currency": currency,
+            "company": company,
+            "parent_account": template.parent_account,
+            "root_type": template.root_type,
+            "report_type": template.report_type,
+            "account_type": template.account_type,
+            "is_group": template.is_group,
+            "freeze_account": template.freeze_account,
+            "balance_must_be": template.balance_must_be,
+            "account_number": None,
+        }
+    )
+
+    new_account.insert(ignore_mandatory=True)
+    frappe.db.commit()
+    return new_account.name
 
 
 @frappe.whitelist()
