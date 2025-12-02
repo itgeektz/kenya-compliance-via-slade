@@ -11,7 +11,6 @@
   "sandbox",
   "column_break_swix",
   "is_active",
-  "autocreate_branch_dimension",
   "settings_section",
   "server_url",
   "auth_server_url",
@@ -235,13 +234,6 @@
    "fieldtype": "Data",
    "label": "Purchase Info. Cron Format",
    "mandatory_depends_on": "eval:doc.purchase_information_submission === \"Cron\";"
-  },
-  {
-   "default": "1",
-   "description": "Auto creates the \"Branch\" Accounting Dimension which will be mandatory for all P&L transactions. Recommended.",
-   "fieldname": "autocreate_branch_dimension",
-   "fieldtype": "Check",
-   "label": "Auto Create Branch Accounting Dimension"
   },
   {
    "fieldname": "field_defaults_tab",
@@ -502,7 +494,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "fetch_from": "item_classification_code.itemclsnm",
+   "fetch_from": "item_classification.itemclsnm",
    "fieldname": "item_classification_name",
    "fieldtype": "Small Text",
    "label": "Item Classification Name",
@@ -581,14 +573,14 @@
    "fieldtype": "Column Break"
   },
   {
-   "fetch_from": "product_type_code.code_name",
+   "fetch_from": "product_type.code_name",
    "fieldname": "product_type_name",
    "fieldtype": "Data",
    "label": "Product Type Name",
    "read_only": 1
   },
   {
-   "fetch_from": "etims_item_type.code_name",
+   "fetch_from": "item_type.code_name",
    "fieldname": "item_type_name",
    "fieldtype": "Data",
    "label": "Item Type Name",
@@ -629,7 +621,7 @@
    "link_fieldname": "reference_docname"
   }
  ],
- "modified": "2025-12-01 11:04:41.463231",
+ "modified": "2025-12-02 14:43:22.329617",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari KRA eTims Settings",

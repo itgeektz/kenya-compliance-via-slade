@@ -132,6 +132,8 @@ function executeEtimsAction(method, args, successMsg) {
   frappe.call({
     method: `kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.${method}`,
     args: args,
+    freeze: true,
+    freeze_message: "Processing...",
     callback: () => frappe.msgprint(__(successMsg)),
     error: (err) => {
       console.error(err);

@@ -27,6 +27,8 @@ frappe.ui.form.on(doctypeName, {
                 args: {
                   name: frm.doc.name,
                 },
+                freeze: true,
+                freeze_message: "Processing...",
                 callback: (response) => {
                   frappe.msgprint(
                     "Submit request queued. Please check in later."
@@ -51,6 +53,8 @@ frappe.ui.form.on(doctypeName, {
                     args: {
                       name: frm.doc.name,
                     },
+                    freeze: true,
+                    freeze_message: "Processing...",
                     callback: (response) => {
                       frappe.msgprint(
                         "Processing request queued. Please check in later."
@@ -73,6 +77,8 @@ frappe.ui.form.on(doctypeName, {
                     args: {
                       name: frm.doc.name,
                     },
+                    freeze: true,
+                    freeze_message: "Processing...",
                     callback: (response) => {
                       frappe.msgprint(
                         "Submit line request queued. Please check in later."
@@ -96,6 +102,8 @@ frappe.ui.form.on(doctypeName, {
                 args: {
                   name: frm.doc.name,
                 },
+                freeze: true,
+                freeze_message: "Processing...",
                 callback: (response) => {
                   frappe.msgprint(
                     "Status check request queued. Please check in later."

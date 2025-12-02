@@ -33,6 +33,8 @@ frappe.ui.form.on(doctype, {
               args: {
                 name: frm.doc.name,
               },
+              freeze: true,
+              freeze_message: "Processing...",
               callback: (response) => {},
               error: (r) => {
                 // Error Handling is Defered to the Server

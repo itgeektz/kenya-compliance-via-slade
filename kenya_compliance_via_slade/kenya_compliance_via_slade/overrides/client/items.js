@@ -235,6 +235,8 @@ function executeItemAction(frm, actionType, settingName) {
       };
       frappe.msgprint(messages[actionType] || "Request submitted.");
     },
+    freeze: true,
+    freeze_message: "Processing...",
     error(error) {
       frappe.msgprint(__("Action failed."));
       console.error(error);
