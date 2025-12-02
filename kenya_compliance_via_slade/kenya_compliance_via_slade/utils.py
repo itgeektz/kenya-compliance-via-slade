@@ -1101,7 +1101,7 @@ def get_link_value(
             title=f"Error Fetching Link for {doctype}",
             message=f"Error while fetching link for {doctype} with {field_name}={value}: {str(e)}",
         )
-        return None
+        return None 
 
 
 def get_or_create_link(doctype: str, field_name: str, value: str) -> str:
