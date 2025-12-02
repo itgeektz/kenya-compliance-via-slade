@@ -9,6 +9,7 @@ import time
 
 from ... import __version__
 from ..doctype.doctype_names_mapping import (
+    COMPANY_MAPPING_DOCTYPE_NAME,
     COUNTRIES_DOCTYPE_NAME,
     IMPORTED_ITEMS_STATUS_DOCTYPE_NAME,
     ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
