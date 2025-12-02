@@ -1060,7 +1060,12 @@ def create_purchase_from_search_details(fetched_purchase: dict) -> str:
     doc.workflow_state = fetched_purchase["workflow_state"]
     doc.branch = (get_link_value("Branch", "slade_id", fetched_purchase["branch"]),)
     doc.organisation = (
-        get_link_value("Company", "custom_slade_id", fetched_purchase["organisation"]),
+        get_link_value(
+            COMPANY_MAPPING_DOCTYPE_NAME,
+            "organisation",
+            fetched_purchase["organisation"],
+            "parent",
+        ),
     )
     doc.can_send_to_etims = fetched_purchase["can_send_to_etims"]
 
