@@ -2,96 +2,16 @@ const itemDoctypName = "Item";
 
 frappe.ui.form.on(itemDoctypName, {
   refresh: async function (frm) {
-    if (frm.is_new()) return;
-    const { message: data } = await frappe.call({
-      method:
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_etims_action_data",
-      args: {
-        doctype: frm.doctype,
-        docname: frm.doc.name,
-      },
-    });
-
-    const allSettings = data?.settings || [];
-    const registeredMappings = data?.registered_mappings || [];
-    const unregisteredSettings = data?.unregistered_settings || [];
-
-    if (!allSettings.length) return;
-
-    if (frm.doc.custom_imported_item_submitted) {
-      frm.toggle_enable("custom_referenced_imported_item", false);
-      frm.toggle_enable("custom_imported_item_status", false);
-    }
-
+    await getEtimsSettings(frm);
+    await applyEtimsAutofillFields(frm);
+    toggleImportedLocks(frm);
     if (!frm.is_new()) {
-      const canRegister =
-        frm.doc.custom_item_classification &&
-        frm.doc.custom_taxation_type &&
-        unregisteredSettings.length;
-
-      if (canRegister) {
-        frm.add_custom_button(
-          __("Register Item"),
-          function () {
-            showCompanySelectionModal(
-              frm,
-              "register_item",
-              unregisteredSettings
-            );
-          },
-          __("eTims Actions")
-        );
-      }
-
-      if (registeredMappings.length) {
-        frm.add_custom_button(
-          __("Fetch Item Details"),
-          function () {
-            showCompanySelectionModal(
-              frm,
-              "fetch_item_details",
-              registeredMappings.map((r) => ({
-                name: r.etims_setup,
-                company: getCompanyName(allSettings, r.etims_setup),
-              }))
-            );
-          },
-          __("eTims Actions")
-        );
-
-        frm.add_custom_button(
-          __("Update Item"),
-          function () {
-            showCompanySelectionModal(
-              frm,
-              "update_item",
-              registeredMappings.map((r) => ({
-                name: r.etims_setup,
-                company: getCompanyName(allSettings, r.etims_setup),
-              }))
-            );
-          },
-          __("eTims Actions")
-        );
-      }
-
-      if (frm.doc.is_stock_item && registeredMappings.length) {
-        frm.add_custom_button(
-          __("Submit Item Inventory"),
-          function () {
-            showCompanySelectionModal(
-              frm,
-              "submit_inventory",
-              registeredMappings.map((r) => ({
-                name: r.etims_setup,
-                company: getCompanyName(allSettings, r.etims_setup),
-              }))
-            );
-          },
-          __("eTims Actions")
-        );
-      }
+      setupButtons(frm);
     }
+  },
+
+  item_group: async function (frm) {
+    await applyEtimsAutofillFields(frm);
   },
 
   custom_product_type_name: function (frm) {
@@ -102,16 +22,121 @@ frappe.ui.form.on(itemDoctypName, {
   },
 });
 
-function getCompanyName(allSettings, settingName) {
-  const match = allSettings.find((s) => s.name === settingName);
-  return match ? match.company : "Unknown";
+async function getEtimsSettings(frm) {
+  const { message: data } = await frappe.call({
+    method:
+      "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_etims_action_data",
+    args: {
+      doctype: frm.doctype,
+      docname: frm.is_new() ? null : frm.doc.name,
+    },
+  });
+
+  frm.etims = {
+    allSettings: data?.settings || [],
+    registeredMappings: data?.registered_mappings || [],
+    unregisteredSettings: data?.unregistered_settings || [],
+  };
 }
 
-async function showCompanySelectionModal(frm, actionType, availableSettings) {
+async function applyEtimsAutofillFields(frm) {
+  const fallbackSetting = frm.etims?.allSettings?.length
+    ? frm.etims.allSettings[0].name
+    : null;
+
+  const { message: values } = await frappe.call({
+    method:
+      "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.item.autofill_item_etims_fields",
+    args: {
+      item_group: frm.doc.item_group,
+      settings_name: fallbackSetting,
+    },
+  });
+
+  if (!values) return;
+
+  let changed = false;
+
+  Object.keys(values).forEach((field) => {
+    if (values[field] !== null && frm.doc[field] !== values[field]) {
+      frm.set_value(field, values[field]);
+      changed = true;
+    }
+  });
+
+  if (changed) frm.refresh_fields();
+}
+
+function toggleImportedLocks(frm) {
+  if (frm.doc.custom_imported_item_submitted) {
+    frm.toggle_enable("custom_referenced_imported_item", false);
+    frm.toggle_enable("custom_imported_item_status", false);
+  }
+}
+
+function setupButtons(frm) {
+  const allSettings = frm.etims?.allSettings || [];
+  const registeredMappings = frm.etims?.registeredMappings || [];
+  const unregisteredSettings = frm.etims?.unregisteredSettings || [];
+
+  if (!allSettings.length || frm.is_new()) return;
+
+  const canRegister =
+    frm.doc.custom_item_classification &&
+    frm.doc.custom_taxation_type &&
+    unregisteredSettings.length;
+
+  if (canRegister) {
+    frm.add_custom_button(
+      __("Register Item"),
+      () =>
+        showCompanySelectionModal(frm, "register_item", unregisteredSettings),
+      __("eTims Actions")
+    );
+  }
+
+  if (registeredMappings.length) {
+    const registeredSetups = registeredMappings.map((r) => ({
+      name: r.etims_setup,
+      company: getCompanyName(allSettings, r.etims_setup),
+    }));
+
+    frm.add_custom_button(
+      __("Fetch Item Details"),
+      () =>
+        showCompanySelectionModal(frm, "fetch_item_details", registeredSetups),
+      __("eTims Actions")
+    );
+
+    frm.add_custom_button(
+      __("Update Item"),
+      () => showCompanySelectionModal(frm, "update_item", registeredSetups),
+      __("eTims Actions")
+    );
+  }
+
+  if (frm.doc.is_stock_item && registeredMappings.length) {
+    frm.add_custom_button(
+      __("Submit Item Inventory"),
+      () =>
+        showCompanySelectionModal(
+          frm,
+          "submit_inventory",
+          registeredMappings.map((r) => ({
+            name: r.etims_setup,
+            company: getCompanyName(allSettings, r.etims_setup),
+          }))
+        ),
+      __("eTims Actions")
+    );
+  }
+}
+
+function showCompanySelectionModal(frm, actionType, availableSettings) {
   if (!availableSettings.length) {
     frappe.msgprint(
       __(
-        "No available eTims settings for this action. Please check configuration."
+        "No available eTIMS settings for this action. Please check configuration."
       )
     );
     return;
@@ -125,28 +150,24 @@ async function showCompanySelectionModal(frm, actionType, availableSettings) {
   const options = availableSettings.map((setting) => ({
     label: `${setting.company} (${setting.name})`,
     value: setting.name,
-    company_name: setting.company,
   }));
-
-  const fields = [
-    {
-      label: __("Select Company Setup"),
-      fieldname: "selected_settings_name",
-      fieldtype: "Select",
-      options: options,
-      reqd: 1,
-      default: options[0]?.value || null,
-    },
-  ];
 
   const dialog = new frappe.ui.Dialog({
     title: __("Select Company Setup"),
-    fields: fields,
+    fields: [
+      {
+        label: __("Select Company Setup"),
+        fieldname: "selected_settings_name",
+        fieldtype: "Select",
+        options: options,
+        reqd: 1,
+        default: options[0].value,
+      },
+    ],
     primary_action_label: __("Proceed"),
-    primary_action: (data) => {
-      const selectedSettingName = data.selected_settings_name;
+    primary_action(values) {
       dialog.hide();
-      executeItemAction(frm, actionType, selectedSettingName);
+      executeItemAction(frm, actionType, values.selected_settings_name);
     },
   });
 
@@ -154,15 +175,15 @@ async function showCompanySelectionModal(frm, actionType, availableSettings) {
 }
 
 function executeItemAction(frm, actionType, settingName) {
-  let method;
+  let method = "";
   let args = {};
-
   let sladeId = "";
+
   if (frm.doc.etims_setup_mapping) {
-    const mappingRow = frm.doc.etims_setup_mapping.find(
-      (row) => row.etims_setup === settingName
+    const row = frm.doc.etims_setup_mapping.find(
+      (r) => r.etims_setup === settingName
     );
-    sladeId = mappingRow ? mappingRow.slade360_id : "";
+    sladeId = row ? row.slade360_id : "";
   }
 
   switch (actionType) {
@@ -198,25 +219,32 @@ function executeItemAction(frm, actionType, settingName) {
       break;
 
     default:
-      frappe.msgprint(__("Unknown action type."));
+      frappe.msgprint(__("Invalid action"));
       return;
   }
 
   frappe.call({
-    method: method,
-    args: args,
-    callback: () => {
+    method,
+    args,
+    callback() {
       const messages = {
-        register_item: "Item Registration Queued. Please check in later.",
-        fetch_item_details: "Item Fetch Request Queued. Please check in later.",
-        update_item: "Item Update Queued. Please check in later.",
-        submit_inventory: "Inventory submission queued.",
+        register_item: "Item Registration Queued.",
+        fetch_item_details: "Fetch Request Queued.",
+        update_item: "Update Queued.",
+        submit_inventory: "Inventory Queued.",
       };
-      frappe.msgprint(messages[actionType] || "Request queued.");
+      frappe.msgprint(messages[actionType] || "Request submitted.");
     },
-    error: (error) => {
-      frappe.msgprint(__("An error occurred during the request."));
+    freeze: true,
+    freeze_message: "Processing...",
+    error(error) {
+      frappe.msgprint(__("Action failed."));
       console.error(error);
     },
   });
+}
+
+function getCompanyName(allSettings, settingName) {
+  const setting = allSettings.find((s) => s.name === settingName);
+  return setting ? setting.company : "Unknown";
 }

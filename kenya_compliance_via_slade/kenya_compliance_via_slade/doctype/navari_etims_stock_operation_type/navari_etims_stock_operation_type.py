@@ -16,8 +16,8 @@ class NavarieTimsStockOperationType(Document):
         if not self.slade_id and self.warehouse:
             warehouse = frappe.get_doc("Warehouse", self.warehouse)
             if self.operation_type == "incoming":
-                self.source_location = warehouse.custom_slade_supplier_warehouse
+                self.source_location = warehouse.slade_supplier_warehouse
                 self.destination_location = warehouse.custom_slade_id
             elif self.operation_type == "outgoing":
                 self.source_location = warehouse.custom_slade_id
-                self.destination_location = warehouse.custom_slade_customer_warehouse
+                self.destination_location = warehouse.slade_customer_warehouse

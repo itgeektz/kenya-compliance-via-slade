@@ -195,6 +195,8 @@ function executeSupplierAction(frm, actionType, settingsName) {
   frappe.call({
     method: method,
     args: args,
+    freeze: true,
+    freeze_message: "Processing...",
     callback: () => frappe.msgprint(__(successMessage)),
     error: (err) => {
       console.error(err);

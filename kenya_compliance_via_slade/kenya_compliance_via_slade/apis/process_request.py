@@ -29,12 +29,19 @@ def process_request(
     company: str = None,
 ) -> str:
     """Reusable function to process requests with common logic."""
-    if not settings_name and not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
+    if not settings_name and not frappe.db.exists(
+        SETTINGS_DOCTYPE_NAME, {"is_active": 1}
+    ):
         return
 
     data = parse_request_data(request_data)
     extracted_company, branch_id, document_name = extract_metadata(data)
-    company_name = company or extracted_company or frappe.defaults.get_user_default("Company") or frappe.get_value("Company", {}, "name")
+    company_name = (
+        company
+        or extracted_company
+        or frappe.defaults.get_user_default("Company")
+        or frappe.get_value("Company", {}, "name")
+    )
 
     headers = build_headers(company_name, branch_id, settings_name)
 
@@ -42,9 +49,9 @@ def process_request(
     route_path, _ = get_route_path(route_key, "VSCU Slade 360")
     dynamic_route_path = process_dynamic_url(route_path, request_data)
     url = f"{server_url}{dynamic_route_path}"
-    settings = get_settings(company_name, branch_id, settings_name) 
-    
-    if not settings:
+    settings = get_settings(company_name, branch_id, settings_name)
+
+    if not settings or settings.get("is_active") != 1:
         return
     # if request_method != "GET":
     #     updates = add_organisation_branch_department(settings)
@@ -62,7 +69,7 @@ def process_request(
             doctype,
             document_name,
             error_callback,
-            settings
+            settings,
         )
     else:
         return f"Failed to process {route_key}. Missing required configuration."
@@ -139,11 +146,11 @@ def execute_request(
     document_name: str,
     error_callback: Callable = None,
     settings: dict = None,
-) -> str | dict | None: 
+) -> str | dict | None:
     if request_method == "GET":
         clean_data_for_get_request(data)
 
-    last_response_data = None 
+    last_response_data = None
 
     while url:
         endpoints_builder.headers = headers
@@ -161,11 +168,15 @@ def execute_request(
             document_name=document_name,
         )
 
-        if isinstance(response, dict) and "next" in response and response.get("next") != url:
+        if (
+            isinstance(response, dict)
+            and "next" in response
+            and response.get("next") != url
+        ):
             url = response["next"]
-            last_response_data = response 
+            last_response_data = response
         else:
             last_response_data = response
-            url = None 
+            url = None
 
-    return last_response_data 
+    return last_response_data

@@ -228,7 +228,9 @@ def get_current_environment_state(
     return environment
 
 
-def get_server_url(company_name: str, branch_id: str = "00", settings_name: str = None) -> str | None:
+def get_server_url(
+    company_name: str, branch_id: str = "00", settings_name: str = None
+) -> str | None:
     settings = get_settings(company_name, branch_id, settings_name)
 
     if settings:
@@ -239,7 +241,9 @@ def get_server_url(company_name: str, branch_id: str = "00", settings_name: str 
     return
 
 
-def build_headers(company_name: str, branch_id: str, settings_name: str = None) -> dict[str, str] | None:
+def build_headers(
+    company_name: str, branch_id: str, settings_name: str = None
+) -> dict[str, str] | None:
     """
     Build headers for Slade360 API requests.
     Checks for token validity and refreshes the token if expired.
@@ -283,12 +287,22 @@ def build_headers(company_name: str, branch_id: str, settings_name: str = None) 
 
         workstation = None
         if company_name:
-            mapping = next((m for m in settings.get("organisation_mapping", []) 
-                  if m.get("company") == company_name), None)
+            mapping = next(
+                (
+                    m
+                    for m in settings.get("organisation_mapping", [])
+                    if m.get("company") == company_name
+                ),
+                None,
+            )
             if mapping:
-                workstation = frappe.db.get_value(WORKSTATION_DOCTYPE_NAME, {"name": mapping.get("workstation")}, "slade_id")
+                workstation = frappe.db.get_value(
+                    WORKSTATION_DOCTYPE_NAME,
+                    {"name": mapping.get("workstation")},
+                    "slade_id",
+                )
 
-        if workstation: 
+        if workstation:
             headers["X-Workstation"] = workstation
 
         return headers
@@ -296,7 +310,9 @@ def build_headers(company_name: str, branch_id: str, settings_name: str = None) 
     return None
 
 
-def get_settings(company_name: str = None, branch_id: str = None, settings_name: str = None) -> dict | None:
+def get_settings(
+    company_name: str = None, branch_id: str = None, settings_name: str = None
+) -> dict | None:
     """Fetch settings for a given company and branch.
 
     Args:
@@ -309,15 +325,14 @@ def get_settings(company_name: str = None, branch_id: str = None, settings_name:
     if settings_name:
         if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"name": settings_name}):
             return frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name).as_dict()
-        
+
     # company_name = (
     #     company_name
     #     or frappe.defaults.get_user_default("Company")
     #     or frappe.get_value("Company", {}, "name")
     # )
     if frappe.db.exists(
-        ORGANISATION_MAPPING_DOCTYPE_NAME, 
-        {"company": company_name, "is_active": 1}
+        ORGANISATION_MAPPING_DOCTYPE_NAME, {"company": company_name, "is_active": 1}
     ):
         mapping = frappe.db.get_value(
             ORGANISATION_MAPPING_DOCTYPE_NAME,
@@ -327,7 +342,7 @@ def get_settings(company_name: str = None, branch_id: str = None, settings_name:
         )
         if mapping and mapping.parent:
             return frappe.get_doc(SETTINGS_DOCTYPE_NAME, mapping.parent).as_dict()
-    
+
     # if frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
     #     settings = frappe.db.get_value(
     #         SETTINGS_DOCTYPE_NAME,
@@ -336,7 +351,7 @@ def get_settings(company_name: str = None, branch_id: str = None, settings_name:
     #         as_dict=True,
     #     )
     #     return settings
-    
+
     return None
 
 
@@ -359,10 +374,7 @@ def extract_document_series_number(document: Document) -> int | None:
         return int(split_invoice_name[-2])
 
 
-def build_invoice_payload(
-    invoice: Document,
-    settings_name: str
-) -> dict:
+def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
     reference_number = get_invoice_reference_number(invoice)
     date_str = f"{invoice.posting_date} {invoice.posting_time or '00:00:00'}"
     fmt = "%Y-%m-%d %H:%M:%S.%f" if "." in date_str else "%Y-%m-%d %H:%M:%S"
@@ -371,36 +383,42 @@ def build_invoice_payload(
         "document_name": invoice.name,
         "reference_number": reference_number,
         "sales_type": "credit",
-        "customer_pin": frappe.get_value("Customer", invoice.customer, "tax_id") or None,
-        "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name") or None,
+        "customer_pin": frappe.get_value("Customer", invoice.customer, "tax_id")
+        or None,
+        "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name")
+        or None,
         "invoice_date": formatted_date,
-        "customer_id": get_slade360_id(
-            "Customer",
-            invoice.customer,
-            settings_name,
-        ),
-        "itemDetails": []
+        # "customer_id": get_slade360_id(
+        #     "Customer",
+        #     invoice.customer,
+        #     settings_name,
+        # ),
+        "itemDetails": [],
     }
-    
+
     calculate_tax(invoice)
-    
+
     for item in invoice.items:
         tax_amount = item.get("custom_tax_amount", 0) or 0
         qty = abs(item.get("qty"))
         base_net_rate = round(item.get("base_net_rate") or 0, 4)
         tax_code = item.get("taxation_type_code", "A") or "A"
-        payload["itemDetails"].append({
-            "product_name": item.item_code,
-            "unit_price": round(base_net_rate + (tax_amount / qty if qty else 0), 4),
-            "quantity": qty,
-            "uom": item.uom or "Pcs",
-            "tax_code": tax_code,
-            # "product_id": get_slade360_id(
-            #     "Item",
-            #     item.item_code,
-            #     settings_name,
-            # ),
-        })
+        payload["itemDetails"].append(
+            {
+                "product_name": item.item_code,
+                "unit_price": round(
+                    base_net_rate + (tax_amount / qty if qty else 0), 4
+                ),
+                "quantity": qty,
+                "uom": item.uom or "Pcs",
+                "tax_code": tax_code,
+                # "product_id": get_slade360_id(
+                #     "Item",
+                #     item.item_code,
+                #     settings_name,
+                # ),
+            }
+        )
 
     return payload
 
@@ -445,10 +463,7 @@ def update_last_request_date(
     if len(route) < 5:
         return
 
-    doc = frappe.get_doc(
-        routes_table,
-        {"url_path": route}
-    )
+    doc = frappe.get_doc(routes_table, {"url_path": route})
 
     doc.last_request_date = response_datetime
 
@@ -537,22 +552,26 @@ def calculate_tax(doc: "Document") -> None:
     """
     taxes = doc.get("taxes", [])
     has_item_level_tax = any(item.item_tax_template for item in doc.items)
-    
+
     if has_item_level_tax:
         _calculate_item_level_taxes(doc)
     elif taxes:
         _calculate_document_level_taxes(doc, taxes)
-    
+
     _set_taxation_type_codes(doc)
 
 
 def _calculate_item_level_taxes(doc: "Document") -> None:
     """Calculate taxes using each item's individual tax template"""
     for item in doc.items:
-        tax_rate = float(get_item_tax_rate(item.item_tax_template)) if item.item_tax_template else 0.0
+        tax_rate = (
+            float(get_item_tax_rate(item.item_tax_template))
+            if item.item_tax_template
+            else 0.0
+        )
         base_net_amount = float(item.base_net_amount or 0.0)
         tax_amount = base_net_amount * tax_rate / 100.0
-        
+
         item.custom_tax_amount = float(tax_amount)
         item.custom_tax_rate = float(tax_rate)
 
@@ -571,9 +590,11 @@ def _calculate_document_level_taxes(doc: "Document", taxes: list) -> None:
     for item in doc.items:
         item_ratio = float(item.base_net_amount) / total_net_amount
         item.custom_tax_amount = float(total_tax_amount * item_ratio)
-        
+
         if float(item.base_net_amount) > 0:
-            item.custom_tax_rate = (float(item.custom_tax_amount) / float(item.base_net_amount)) * 100
+            item.custom_tax_rate = (
+                float(item.custom_tax_amount) / float(item.base_net_amount)
+            ) * 100
         else:
             item.custom_tax_rate = 0
 
@@ -583,7 +604,11 @@ def get_item_tax_rate(item_tax_template: str) -> float:
     tax_template = frappe.get_doc("Item Tax Template", item_tax_template)
     """Return the sum of all tax rates in the given Item Tax Template"""
     tax_template = frappe.get_doc("Item Tax Template", item_tax_template)
-    return float(sum(float(tax.tax_rate or 0) for tax in tax_template.taxes) if tax_template.taxes else 0)
+    return float(
+        sum(float(tax.tax_rate or 0) for tax in tax_template.taxes)
+        if tax_template.taxes
+        else 0
+    )
 
 
 def _set_taxation_type_codes(doc: "Document") -> None:
@@ -596,8 +621,9 @@ def _set_taxation_type_codes(doc: "Document") -> None:
     """
     for item in doc.items:
         item.taxation_type_code = (
-            _get_taxation_type_from_template(item) or
-            _get_taxation_type_from_rate(item) or
+            _get_taxation_type_from_template(item)
+            or _get_taxation_type_from_rate(item)
+            or
             # _get_taxation_type_from_item(item) or
             "A"
         )
@@ -606,7 +632,9 @@ def _set_taxation_type_codes(doc: "Document") -> None:
 def _get_taxation_type_from_template(item) -> str:
     """Get taxation type from item's tax template if available"""
     if item.item_tax_template:
-        return frappe.get_value("Item Tax Template", item.item_tax_template, "custom_etims_taxation_type")
+        return frappe.get_value(
+            "Item Tax Template", item.item_tax_template, "custom_etims_taxation_type"
+        )
     return ""
 
 
@@ -617,7 +645,7 @@ def _get_taxation_type_from_item(item) -> str:
 
 def _get_taxation_type_from_rate(item) -> str:
     """Determine taxation type based on item's tax rate"""
-    if not hasattr(item, 'custom_tax_rate'):
+    if not hasattr(item, "custom_tax_rate"):
         return ""
     if round(item.custom_tax_rate) >= 16:
         return "B"
@@ -736,11 +764,23 @@ def authenticate_and_get_token(
 
     try:
         response = requests.post(url, headers=headers, data=urlencode(payload))
-        frappe.db.set_value("Integration Request", integration_request.name, "output", response.text, update_modified=False)
+        frappe.db.set_value(
+            "Integration Request",
+            integration_request.name,
+            "output",
+            response.text,
+            update_modified=False,
+        )
 
         if response.ok:
             data = response.json()
-            frappe.db.set_value("Integration Request", integration_request.name, "status", "Completed", update_modified=False)
+            frappe.db.set_value(
+                "Integration Request",
+                integration_request.name,
+                "status",
+                "Completed",
+                update_modified=False,
+            )
             return {
                 "access_token": data.get("access_token"),
                 "refresh_token": data.get("refresh_token"),
@@ -749,27 +789,49 @@ def authenticate_and_get_token(
                 "scope": data.get("scope"),
             }
 
-        error = response.json().get("error", "Unknown error") if response.headers.get("content-type", "").startswith("application/json") else "Invalid response"
-        frappe.db.set_value("Integration Request", integration_request.name, "status", "Failed", update_modified=False)
-        frappe.db.set_value("Integration Request", integration_request.name, "error", error, update_modified=False)
+        error = (
+            response.json().get("error", "Unknown error")
+            if response.headers.get("content-type", "").startswith("application/json")
+            else "Invalid response"
+        )
+        frappe.db.set_value(
+            "Integration Request",
+            integration_request.name,
+            "status",
+            "Failed",
+            update_modified=False,
+        )
+        frappe.db.set_value(
+            "Integration Request",
+            integration_request.name,
+            "error",
+            error,
+            update_modified=False,
+        )
         frappe.throw(f"Authentication failed: <b>{error}</b>")
 
     except Exception as e:
-        frappe.db.set_value("Integration Request", integration_request.name, {
-            "status": "Failed",
-            "error": str(e)
-        }, update_modified=False)
+        frappe.db.set_value(
+            "Integration Request",
+            integration_request.name,
+            {"status": "Failed", "error": str(e)},
+            update_modified=False,
+        )
         frappe.throw(f"Authentication request failed: <b>{e}</b>")
 
 
 @frappe.whitelist()
 def update_navari_settings_with_token(docname: str, skip_checks: bool = False) -> str:
     settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, docname)
-    needs_update = skip_checks or not settings_doc.get("access_token") or (
-        datetime.strptime(
-            str(settings_doc.get("token_expiry")).split(".")[0], "%Y-%m-%d %H:%M:%S"
+    needs_update = (
+        skip_checks
+        or not settings_doc.get("access_token")
+        or (
+            datetime.strptime(
+                str(settings_doc.get("token_expiry")).split(".")[0], "%Y-%m-%d %H:%M:%S"
+            )
+            < datetime.now()
         )
-        < datetime.now()
     )
     if needs_update:
         auth_server_url = settings_doc.auth_server_url
@@ -811,12 +873,33 @@ def user_details_fetch(document_name: str, **kwargs) -> None:
         settings_name=document_name,
         doctype=SETTINGS_DOCTYPE_NAME,
     )
-    
+
+
+def filter_first_workstation_per_cluster(user_workstations: list) -> list:
+    """
+    Keeps only the FIRST workstation per cluster (cluster = parent.parent).
+    """
+    seen_clusters = set()
+    filtered = []
+
+    for ws in user_workstations:
+        cluster_id = ws.get("workstation__org_unit__parent__parent")
+
+        if not cluster_id:
+            continue
+
+        if cluster_id not in seen_clusters:
+            seen_clusters.add(cluster_id)
+            filtered.append(ws)
+
+    return filtered
+
+
 @frappe.whitelist()
 def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) -> None:
     settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, document_name)
-    default_company = settings_doc.company  
-    
+    default_company = settings_doc.company
+
     result = response.get("results", [])[0] if response.get("results") else response
     user_workstations = result.get("user_workstations") or []
     organisation_id = result.get("organisation_id")
@@ -825,36 +908,53 @@ def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) 
         frappe.throw("No user workstations found in response.")
 
     existing_mappings = {
-        mapping.workstation: mapping 
+        mapping.workstation: mapping
         for mapping in settings_doc.get("organisation_mapping", [])
     }
 
-    processed_companies = set()  
+    processed_companies = set()
+
+    user_workstations = filter_first_workstation_per_cluster(user_workstations)
+
     for workstation_entry in user_workstations:
         workstation_id = workstation_entry.get("workstation")
         cluster_id = workstation_entry.get("workstation__org_unit__parent__parent")
-        
+
         if not workstation_id or not cluster_id:
             continue
 
-        workstation_link = get_link_value(WORKSTATION_DOCTYPE_NAME, "slade_id", workstation_id)
+        workstation_link = get_link_value(
+            WORKSTATION_DOCTYPE_NAME, "slade_id", workstation_id
+        )
         if not workstation_link:
             continue
 
-        company_link = get_company_from_setup_mapping(cluster_id, document_name) or default_company
-        
+        company_link = (
+            get_company_from_setup_mapping(cluster_id, document_name) or default_company
+        )
+
         if not company_link:
             continue
 
         branch_id = workstation_entry.get("workstation__org_unit__parent")
-        branch_link = frappe.db.get_value("Branch", {"slade_id": branch_id, "company": company_link}, "name") if branch_id else None
-        
+        branch_link = (
+            frappe.db.get_value(
+                "Branch", {"slade_id": branch_id, "company": company_link}, "name"
+            )
+            if branch_id
+            else None
+        )
+
         department_id = workstation_entry.get("workstation__org_unit")
-        department_link = get_department(department_id, company_link) if department_id else None
-        
+        department_link = (
+            get_department(department_id, company_link) if department_id else None
+        )
+
         warehouse_link = get_default_warehouse(company_link)
 
-        cluster_name = workstation_entry.get("workstation__org_unit__parent__parent__name")
+        cluster_name = workstation_entry.get(
+            "workstation__org_unit__parent__parent__name"
+        )
 
         mapping_data = {
             "workstation": workstation_link,
@@ -865,19 +965,20 @@ def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) 
             "company": company_link,
             "branch": branch_link,
             "warehouse": warehouse_link,
-            "is_active": 1
+            "is_active": 1,
         }
 
-        if workstation_link in existing_mappings:
+        if existing_mappings and workstation_link in existing_mappings:
             update_existing_mapping(settings_doc.name, workstation_link, mapping_data)
         else:
             settings_doc.append("organisation_mapping", mapping_data)
-            processed_companies.add(company_link)  
+            processed_companies.add(company_link)
             settings_doc.save(ignore_permissions=True)
-        
+
     update_company_slade_ids(processed_companies, organisation_id, settings_doc.name)
-        
+
     frappe.db.commit()
+
 
 def get_company_from_setup_mapping(cluster_id: str, setup_name: str) -> str:
     """Get company from active eTims Setup Mapping that matches cluster and setup"""
@@ -887,73 +988,79 @@ def get_company_from_setup_mapping(cluster_id: str, setup_name: str) -> str:
             "etims_setup": setup_name,
             "cluster": cluster_id,
             "parenttype": "Company",
-            "is_active": 1
+            "is_active": 1,
         },
         fields=["parent"],
-        distinct=True
+        distinct=True,
     )
-    
+
     return mappings[0].parent if mappings else None
+
 
 def get_default_warehouse(company: str) -> str:
     """Get default warehouse for company"""
     warehouses = frappe.get_all(
         "Warehouse",
-        filters={
-            "is_group": 1,
-            "company": company
-        },
+        filters={"is_group": 1, "company": company},
         fields=["name"],
-        limit=1
+        limit=1,
     )
     return warehouses[0].name if warehouses else None
+
 
 def update_existing_mapping(parent: str, workstation: str, data: dict) -> None:
     """Update existing organisation mapping"""
     mapping_name = frappe.get_value(
         ORGANISATION_MAPPING_DOCTYPE_NAME,
-        filters={
-            "parent": parent,
-            "workstation": workstation
-        },
-        fieldname="name"
+        filters={"parent": parent, "workstation": workstation},
+        fieldname="name",
     )
-    
+
     if mapping_name:
-        frappe.db.set_value(ORGANISATION_MAPPING_DOCTYPE_NAME, mapping_name, data, update_modified=False)
-        
-def update_company_slade_ids(companies: set, organisation_id: str, setting_name: str) -> None:
+        frappe.db.set_value(
+            ORGANISATION_MAPPING_DOCTYPE_NAME, mapping_name, data, update_modified=False
+        )
+
+
+def update_company_slade_ids(
+    companies: set, organisation_id: str, setting_name: str
+) -> None:
     for company in companies:
         if not frappe.db.exists("Company", company):
             continue
-      
+
         company_doc = frappe.get_doc("Company", company)
-      
-        existing_mapping = next(
-            (m for m in company_doc.get("etims_setup_mapping", []) 
-            if m.etims_setup == setting_name),
-            None
+
+        mappings = company_doc.get("etims_setup_mapping") or []
+        existing_mapping = (
+            next((m for m in mappings if m.etims_setup == setting_name), None)
+            if mappings
+            else None
         )
-        
+
         if existing_mapping:
             frappe.db.set_value(
                 "eTims Company Setup Mapping",
                 existing_mapping.name,
-                {
-                    "organisation": organisation_id,
-                    "is_active": 1
-                }
+                {"organisation": organisation_id, "is_active": 1},
             )
         else:
-            company_doc.append("etims_setup_mapping", {
-                "etims_setup": setting_name,
-                "organisation": organisation_id,
-                "is_active": 1
-            })
-            
+            doc = frappe.get_doc(
+                {
+                    "doctype": "eTims Company Setup Mapping",
+                    "parent": company_doc.name,
+                    "parenttype": SETTINGS_DOCTYPE_NAME,
+                    "parentfield": "etims_setup_mapping",
+                    "etims_setup": setting_name,
+                    "organisation": organisation_id,
+                    "is_active": 1,
+                }
+            )
+            doc.insert(ignore_permissions=True)
+
         if not existing_mapping:
             company_doc.save(ignore_permissions=True)
-            
+
 
 def get_department(id: str, company: str) -> str:
     department_name = f"{company} - eTims Department"
@@ -961,20 +1068,26 @@ def get_department(id: str, company: str) -> str:
         "Department", {"department_name": department_name}, "name"
     )
     if existing_department:
-        frappe.db.set_value("Department", existing_department, {
-            "custom_slade_id": id,
-            "custom_is_etims_department": 1,
-            "company": company
-        })
+        frappe.db.set_value(
+            "Department",
+            existing_department,
+            {
+                "custom_slade_id": id,
+                "custom_is_etims_department": 1,
+                "company": company,
+            },
+        )
         return existing_department
     else:
-        new_department = frappe.get_doc({
-            "doctype": "Department",
-            "department_name": department_name,
-            "custom_slade_id": id,
-            "custom_is_etims_department": 1,
-            "company": company,
-        }).insert(ignore_permissions=True, ignore_mandatory=True)
+        new_department = frappe.get_doc(
+            {
+                "doctype": "Department",
+                "department_name": department_name,
+                "custom_slade_id": id,
+                "custom_is_etims_department": 1,
+                "company": company,
+            }
+        ).insert(ignore_permissions=True, ignore_mandatory=True)
         return new_department.name
 
 
@@ -988,7 +1101,7 @@ def get_link_value(
             title=f"Error Fetching Link for {doctype}",
             message=f"Error while fetching link for {doctype} with {field_name}={value}: {str(e)}",
         )
-        return None
+        return None 
 
 
 def get_or_create_link(doctype: str, field_name: str, value: str) -> str:
@@ -1083,10 +1196,7 @@ def get_total_stock_balance_from_sle(sle_name: str) -> dict:
         return 0
 
     sle = frappe.db.get_value(
-        "Stock Ledger Entry", 
-        sle_name, 
-        ["item_code", "creation"], 
-        as_dict=True
+        "Stock Ledger Entry", sle_name, ["item_code", "creation"], as_dict=True
     )
 
     if not sle:
@@ -1102,7 +1212,7 @@ def get_total_stock_balance_from_sle(sle_name: str) -> dict:
             "docstatus": 1,
         },
         distinct=True,
-        pluck="warehouse"
+        pluck="warehouse",
     )
 
     balance = 0
@@ -1118,7 +1228,7 @@ def get_total_stock_balance_from_sle(sle_name: str) -> dict:
             },
             fields=["qty_after_transaction"],
             order_by="posting_date desc, posting_time desc, creation desc",
-            limit=1
+            limit=1,
         )
 
         if latest_sle:
@@ -1127,8 +1237,10 @@ def get_total_stock_balance_from_sle(sle_name: str) -> dict:
     return round(balance, 4)
 
 
-def get_max_submission_attempts(doctype: str = "Sales Invoice", company: str = None) -> int:
-    settings = get_settings(company_name=company) 
+def get_max_submission_attempts(
+    doctype: str = "Sales Invoice", company: str = None
+) -> int:
+    settings = get_settings(company_name=company)
     if not settings:
         return 3
     if doctype == "Sales Invoice":
@@ -1138,21 +1250,23 @@ def get_max_submission_attempts(doctype: str = "Sales Invoice", company: str = N
     elif doctype == "Stock Ledger Entry":
         tries = settings.get("maximum_stock_information_submission_attempts", 3)
     else:
-        tries = 3  
+        tries = 3
     return tries
-
 
 
 def generate_strong_password(length: int = 16) -> str:
     """Generate a strong random password"""
     characters = string.ascii_letters + string.digits + string.punctuation
     while True:
-        password = ''.join(secrets.choice(characters) for _ in range(length))
-        if (any(c.islower() for c in password) and
-            any(c.isupper() for c in password) and
-            any(c.isdigit() for c in password) and
-            any(c in string.punctuation for c in password)):
+        password = "".join(secrets.choice(characters) for _ in range(length))
+        if (
+            any(c.islower() for c in password)
+            and any(c.isupper() for c in password)
+            and any(c.isdigit() for c in password)
+            and any(c in string.punctuation for c in password)
+        ):
             return password
+
 
 @frappe.whitelist()
 def reset_auth_password(docname: str) -> None:
@@ -1171,7 +1285,7 @@ def reset_auth_password(docname: str) -> None:
     headers = {
         "Authorization": f"Bearer {settings_doc.access_token}",
         "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Accept": "application/json",
     }
 
     integration_request = create_request_log(
@@ -1187,34 +1301,58 @@ def reset_auth_password(docname: str) -> None:
 
     try:
         response = requests.post(url, headers=headers, json=payload)
-        frappe.db.set_value("Integration Request", integration_request.name, "output", response.text, update_modified=False)
+        frappe.db.set_value(
+            "Integration Request",
+            integration_request.name,
+            "output",
+            response.text,
+            update_modified=False,
+        )
 
         if response.status_code == 200:
-            frappe.db.set_value(SETTINGS_DOCTYPE_NAME, docname, "auth_password", new_password, update_modified=False)
-            frappe.db.set_value("Integration Request", integration_request.name, "status", "Completed", update_modified=False)
+            frappe.db.set_value(
+                SETTINGS_DOCTYPE_NAME,
+                docname,
+                "auth_password",
+                new_password,
+                update_modified=False,
+            )
+            frappe.db.set_value(
+                "Integration Request",
+                integration_request.name,
+                "status",
+                "Completed",
+                update_modified=False,
+            )
         else:
             try:
                 error_message = response.json().get("error", "Unknown error")
             except json.JSONDecodeError:
                 error_message = f"Invalid response: {response.text}"
 
-            frappe.db.set_value("Integration Request", integration_request.name, {
-                "status": "Failed",
-                "error": error_message
-            }, update_modified=False)
+            frappe.db.set_value(
+                "Integration Request",
+                integration_request.name,
+                {"status": "Failed", "error": error_message},
+                update_modified=False,
+            )
 
             frappe.throw(f"Password update failed: <b>{error_message}</b>")
 
     except Exception as e:
-        frappe.db.set_value("Integration Request", integration_request.name, {
-            "status": "Failed",
-            "error": str(e)
-        }, update_modified=False)
+        frappe.db.set_value(
+            "Integration Request",
+            integration_request.name,
+            {"status": "Failed", "error": str(e)},
+            update_modified=False,
+        )
         frappe.throw(f"Password update request failed: <b>{e}</b>")
-        
+
 
 @frappe.whitelist()
-def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME, company: str = None) -> list[dict]:
+def get_active_settings(
+    doctype: str = SETTINGS_DOCTYPE_NAME, company: str = None
+) -> list[dict]:
     """
     Get active settings for a company:
     1. If company is provided and has organization mappings, return only settings for that company
@@ -1224,27 +1362,27 @@ def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME, company: str = Non
         if company:
             mapped_settings = frappe.get_all(
                 ORGANISATION_MAPPING_DOCTYPE_NAME,
-                filters={
-                    "company": company,
-                    "is_active": 1
-                },
+                filters={"company": company, "is_active": 1},
                 fields=["parent as name", "company"],
                 distinct=True,
-                ignore_permissions=True
+                ignore_permissions=True,
             )
             if mapped_settings:
                 return mapped_settings
-        
-        return frappe.get_all(
-            doctype,
-            filters={"is_active": 1},
-            fields=["name", "company"],
-            ignore_permissions=True
-        ) or []
+
+        return (
+            frappe.get_all(
+                doctype,
+                filters={"is_active": 1},
+                fields=["name", "company"],
+                ignore_permissions=True,
+            )
+            or []
+        )
 
     except Exception:
         frappe.log_error(frappe.get_traceback(), _("Failed to get active settings"))
-        return []  
+        return []
 
 
 # def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME) -> list[dict]:
@@ -1253,7 +1391,7 @@ def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME, company: str = Non
 #             doctype,
 #             filters={"is_active": 1},
 #             fields=["name", "company"],
-#             ignore_permissions=True  
+#             ignore_permissions=True
 #         )
 #         return results
 #     except Exception as e:
@@ -1261,31 +1399,29 @@ def get_active_settings(doctype: str = SETTINGS_DOCTYPE_NAME, company: str = Non
 #         frappe.throw(_("An error occurred while fetching settings"))
 
 
-def get_slade360_id(doctype: str, name: str, setting: str) -> str:        
+def get_slade360_id(doctype: str, name: str, setting: str) -> str:
     if not frappe.db.exists(doctype, name):
-        frappe.throw(_("Document {0} with name {1} does not exist.").format(doctype, name))
-    
+        frappe.throw(
+            _("Document {0} with name {1} does not exist.").format(doctype, name)
+        )
+
     slade_id = frappe.db.get_value(
         SLADE_ID_MAPPING_DOCTYPE_NAME,
-        filters={
-            "etims_setup": setting,
-            "parenttype": doctype,
-            "parent": name
-        },
-        fieldname="slade360_id"
+        filters={"etims_setup": setting, "parenttype": doctype, "parent": name},
+        fieldname="slade360_id",
     )
-    
+
     return slade_id
 
 
 def get_parent_by_slade360_id(doctype: str, slade360_id: str, setting: str) -> str:
     """Returns the parent document name for a given Slade360 ID.
-    
+
     Args:
         doctype (str): The parent doctype
         slade360_id (str): The Slade360 ID to search for
         setting (str): The eTims setting name
-        
+
     Returns:
         str: The parent document name if found, None otherwise
     """
@@ -1294,43 +1430,41 @@ def get_parent_by_slade360_id(doctype: str, slade360_id: str, setting: str) -> s
         filters={
             "etims_setup": setting,
             "parenttype": doctype,
-            "slade360_id": slade360_id
+            "slade360_id": slade360_id,
         },
-        fieldname="parent"
+        fieldname="parent",
     )
-    
-    return parent_name
 
+    return parent_name
 
 
 @frappe.whitelist()
 def get_etims_action_data(doctype: str, docname: str = None) -> dict[str, Any]:
     active_settings = get_active_settings()
-    
+
     if not docname:
         return {
             "settings": active_settings,
             "has_mappings": False,
             "registered_mappings": [],
-            "unregistered_settings": []
+            "unregistered_settings": [],
         }
     try:
         doc = frappe.get_doc(doctype, docname)
-    except :
+    except:
         return {
             "settings": active_settings,
             "has_mappings": False,
             "registered_mappings": [],
-            "unregistered_settings": []
+            "unregistered_settings": [],
         }
-
 
     if not active_settings:
         return {
             "settings": [],
             "has_mappings": False,
             "registered_mappings": [],
-            "unregistered_settings": []
+            "unregistered_settings": [],
         }
 
     active_setting_names = [s["name"] for s in active_settings]
@@ -1340,11 +1474,13 @@ def get_etims_action_data(doctype: str, docname: str = None) -> dict[str, Any]:
 
     for row in getattr(doc, "etims_setup_mapping", []):
         if row.etims_setup in active_setting_names:
-            registered_mappings.append({
-                "etims_setup": row.etims_setup,
-                "slade360_id": row.slade360_id,
-                "name": row.name
-            })
+            registered_mappings.append(
+                {
+                    "etims_setup": row.etims_setup,
+                    "slade360_id": row.slade360_id,
+                    "name": row.name,
+                }
+            )
             registered_setup_names.add(row.etims_setup)
 
     unregistered_settings = [
@@ -1355,23 +1491,22 @@ def get_etims_action_data(doctype: str, docname: str = None) -> dict[str, Any]:
         "settings": active_settings,
         "has_mappings": bool(registered_mappings),
         "registered_mappings": registered_mappings,
-        "unregistered_settings": unregistered_settings
+        "unregistered_settings": unregistered_settings,
     }
 
 
 def parse_response_data(
-    response: Union[str, bytes, dict, list], 
-    expected_type: type = list
+    response: Union[str, bytes, dict, list], expected_type: type = list
 ) -> Union[List[Any], Dict[str, Any], Any]:
     """Parse and convert response data to expected type using standard json.
-    
+
     Args:
         response: Input data (JSON string, bytes, or Python object)
         expected_type: Desired output type (list, dict, or other)
-        
+
     Returns:
         Data converted to expected type
-        
+
     Raises:
         ValueError: If JSON parsing fails
         TypeError: If type conversion fails
@@ -1381,37 +1516,42 @@ def parse_response_data(
             response = json.loads(response)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON: {str(e)}") from e
-    
+
     if response is None:
         return expected_type()
-    
+
     try:
         if expected_type is list:
             if isinstance(response, dict):
-                return response.get('results', [response])
+                return response.get("results", [response])
             return response if isinstance(response, list) else [response]
-            
+
         elif expected_type is dict:
             if isinstance(response, list):
                 return response[0] if response else {}
-            return response if isinstance(response, dict) else {'data': response}
-            
+            return response if isinstance(response, dict) else {"data": response}
+
         return expected_type(response) if response else expected_type()
-        
+
     except (TypeError, AttributeError) as e:
-        raise TypeError(f"Cannot convert to {expected_type}: {str(e)}") from e 
-        
+        raise TypeError(f"Cannot convert to {expected_type}: {str(e)}") from e
+
 
 def build_item_payload(item, settings_name: str, slade_id: str = None) -> dict:
     """Construct the payload for item registration"""
     selling_price = round(item.get("valuation_rate", 1), 2) or 1
     purchasing_price = round(item.get("last_purchase_rate", 1), 2)
     tax = get_slade360_id(
-        TAXATION_TYPE_DOCTYPE_NAME, 
-        item.get("custom_taxation_type"), 
-        settings_name
+        TAXATION_TYPE_DOCTYPE_NAME, item.get("custom_taxation_type"), settings_name
     )
-    id = slade_id or next((row.slade360_id for row in item.etims_setup_mapping if row.etims_setup == settings_name), None)
+    id = slade_id or next(
+        (
+            row.slade360_id
+            for row in item.etims_setup_mapping
+            if row.etims_setup == settings_name
+        ),
+        None,
+    )
 
     payload = {
         "name": item.name,
@@ -1452,17 +1592,19 @@ def build_item_payload(item, settings_name: str, slade_id: str = None) -> dict:
         payload["id"] = id
 
     return payload
-    
 
-def build_partner_payload(data, settings_name: str, is_customer: bool = True, existing_id: str = None) -> dict:
+
+def build_partner_payload(
+    data, settings_name: str, is_customer: bool = True, existing_id: str = None
+) -> dict:
     """Build payload for customer/supplier data submission to Slade
-    
+
     Args:
         data: The document containing partner data
         settings_name (str): The name of the eTims settings
         is_customer (bool): Whether the partner is a customer
         existing_id (str): Existing Slade360 ID if available
-        
+
     Returns:
         dict: The payload for the API request
     """
@@ -1482,23 +1624,27 @@ def build_partner_payload(data, settings_name: str, is_customer: bool = True, ex
         customer_type = data.get("customer_type")
         mapped_customer_type = partner_type_mapping.get(customer_type, customer_type)
 
-        payload.update({
-            "is_customer": True,
-            "customer_tax_pin": data.get("tax_id"),
-            "partner_name": data.get("customer_name"),
-            "phone_number": data.get("mobile_no"),
-            "customer_type": mapped_customer_type,
-        })
+        payload.update(
+            {
+                "is_customer": True,
+                "customer_tax_pin": data.get("tax_id"),
+                "partner_name": data.get("customer_name"),
+                "phone_number": data.get("mobile_no"),
+                "customer_type": mapped_customer_type,
+            }
+        )
     else:
         supplier_type = data.get("supplier_type")
         mapped_supplier_type = partner_type_mapping.get(supplier_type, supplier_type)
 
-        payload.update({
-            "customer_tax_pin": data.get("tax_id"),
-            "partner_name": data.get("supplier_name"),
-            "is_supplier": True,
-            "supplier_type": mapped_supplier_type,
-        })
+        payload.update(
+            {
+                "customer_tax_pin": data.get("tax_id"),
+                "partner_name": data.get("supplier_name"),
+                "is_supplier": True,
+                "supplier_type": mapped_supplier_type,
+            }
+        )
 
     phone_number = (data.get("phone_number") or "").replace(" ", "").strip()
     payload["phone_number"] = (
@@ -1510,14 +1656,25 @@ def build_partner_payload(data, settings_name: str, is_customer: bool = True, ex
         payload.get("currency"),
         settings_name,
     )
-    
+
     if currency_name:
-        payload["currency"] = currency_name[0] if isinstance(currency_name, (list, tuple)) else currency_name
-    
-    id = existing_id or next((row.slade360_id for row in data.etims_setup_mapping if row.etims_setup == settings_name), None)
+        payload["currency"] = (
+            currency_name[0]
+            if isinstance(currency_name, (list, tuple))
+            else currency_name
+        )
+
+    id = existing_id or next(
+        (
+            row.slade360_id
+            for row in data.etims_setup_mapping
+            if row.etims_setup == settings_name
+        ),
+        None,
+    )
     if id:
         payload["id"] = id
-        
+
     return payload
 
 
@@ -1526,7 +1683,7 @@ def get_invoice_reference_number(invoice: Document) -> str:
     Generate a unique reference number for the invoice submission.
 
     - If the invoice has no revisions, the reference is simply the document name.
-    - If the invoice has revisions (revision_count > 0), append `-REV{revision_count}` 
+    - If the invoice has revisions (revision_count > 0), append `-REV{revision_count}`
       to make it unique and traceable (e.g., SINV-0001-REV1).
 
     Args:
@@ -1536,22 +1693,28 @@ def get_invoice_reference_number(invoice: Document) -> str:
         str: The generated reference number for submission.
     """
     reference_number = invoice.name
-    if hasattr(invoice, "revision_count") and invoice.revision_count is not None and int(invoice.revision_count) > 0:
+    if (
+        hasattr(invoice, "revision_count")
+        and invoice.revision_count is not None
+        and int(invoice.revision_count) > 0
+    ):
         reference_number = f"{invoice.name}-REV{int(invoice.revision_count)}"
     return reference_number
 
 
-def build_return_invoice_payload(invoice: Document, kra_invoice_data: Dict[str, Any]) -> Dict[str, Any]:
+def build_return_invoice_payload(
+    invoice: Document, kra_invoice_data: Dict[str, Any]
+) -> Dict[str, Any]:
     """
     Build a return invoice payload for eTims.
-    
+
     - For full returns: Use original KRA invoice lines with actual prices/quantities from KRA.
     - For partial returns: Use ERPNext return invoice data only.
-    
+
     Args:
         invoice (Document): The ERPNext Sales Invoice document (return type).
         kra_invoice_data (dict): The original KRA invoice response.
-    
+
     Returns:
         dict: The payload to submit to eTims for a return invoice.
     """
@@ -1571,7 +1734,7 @@ def build_return_invoice_payload(invoice: Document, kra_invoice_data: Dict[str, 
         amount=amount,
         invoice=invoice,
         kra_invoice_data=kra_invoice_data,
-        is_full_return=is_full_return
+        is_full_return=is_full_return,
     )
 
 
@@ -1581,26 +1744,30 @@ def prepare_return_invoice_payload(
     amount: float,
     invoice: Document,
     kra_invoice_data: Dict[str, Any],
-    is_full_return: bool
+    is_full_return: bool,
 ) -> Dict[str, Any]:
     items = []
     if is_full_return:
         for line in kra_invoice_data.get("sales_invoice_lines", []):
-            items.append({
-                "item_name": line.get("product_name"),
-                "quantity": abs(line.get("quantity", 0)),
-                "amount": round(abs(line.get("price_inclusive_tax", 0)), 4),
-            })
+            items.append(
+                {
+                    "item_name": line.get("product_name"),
+                    "quantity": abs(line.get("quantity", 0)),
+                    "amount": round(abs(line.get("price_inclusive_tax", 0)), 4),
+                }
+            )
     else:
         for item in invoice.items:
             tax_amount = item.get("custom_tax_amount", 0) or 0
             qty = abs(item.get("qty"))
             base_amount = round(abs(item.get("base_amount")) or 0, 4)
-            items.append({
-                "item_name": item.item_code,
-                "quantity": 1,
-                "amount": round(base_amount + tax_amount, 4) * qty,
-            })
+            items.append(
+                {
+                    "item_name": item.item_code,
+                    "quantity": 1,
+                    "amount": round(base_amount + tax_amount, 4) * qty,
+                }
+            )
 
     return {
         "document_name": document_name,
@@ -1609,8 +1776,8 @@ def prepare_return_invoice_payload(
         # "amount": amount,
         "items": items,
     }
-    
-    
+
+
 def prepare_credit_note_payload(
     document_name: str,
     data: Dict[str, Any],
@@ -1627,7 +1794,8 @@ def prepare_credit_note_payload(
     }
 
     return credit_note_details
-    
+
+
 def prepare_credit_note_items_payload(
     credit_note: str,
     data: Dict[str, Any],
@@ -1636,15 +1804,17 @@ def prepare_credit_note_items_payload(
     items = data.get("sales_invoice_lines", [])
     credit_note_items = []
     for item in items:
-        credit_note_items.append({
-            "product": get_slade360_id(
-                "Item",
-                item.get("product_name"),
-                settings_name,
-            ),
-            "credit_note": credit_note,
-            "quantity": abs(item.get("quantity", 0)),
-            "new_price": round(abs(item.get("price_inclusive_tax", 0)), 4),
-            "organisation": data.get("organisation"),
-        })
+        credit_note_items.append(
+            {
+                "product": get_slade360_id(
+                    "Item",
+                    item.get("product_name"),
+                    settings_name,
+                ),
+                "credit_note": credit_note,
+                "quantity": abs(item.get("quantity", 0)),
+                "new_price": round(abs(item.get("price_inclusive_tax", 0)), 4),
+                "organisation": data.get("organisation"),
+            }
+        )
     return credit_note_items

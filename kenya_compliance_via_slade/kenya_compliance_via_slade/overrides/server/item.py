@@ -4,24 +4,27 @@ from frappe import _
 from frappe.model.document import Document
 
 from ...apis.apis import perform_item_registration
-from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME, SLADE_ID_MAPPING_DOCTYPE_NAME
+from ...doctype.doctype_names_mapping import (
+    SETTINGS_DOCTYPE_NAME,
+    SLADE_ID_MAPPING_DOCTYPE_NAME,
+)
 from ...utils import generate_custom_item_code_etims, get_active_settings
 
 
 def on_update(doc: Document, method: str = None) -> None:
     """Item doctype before insertion hook"""
     active_settings = get_active_settings()
-    
+
     if not active_settings:
         return
-    
+
     for setting in active_settings:
         setup_mapping = frappe.db.get_value(
             SLADE_ID_MAPPING_DOCTYPE_NAME,
             {"parent": doc.name, "etims_setup": setting.name},
-            "name"
+            "name",
         )
-        
+
         if not setup_mapping:
             perform_item_registration(doc.name, setting.name)
 
@@ -56,7 +59,11 @@ def validate(doc: Document, method: str = None) -> None:
             missing_fields.append("Taxation Type")
 
         if missing_fields:
-            frappe.throw(_("Please fill in the following required fields: {0}").format(", ".join(missing_fields)))
+            frappe.throw(
+                _("Please fill in the following required fields: {0}").format(
+                    ", ".join(missing_fields)
+                )
+            )
 
     if not doc.custom_item_code_etims:
         doc.custom_item_code_etims = generate_custom_item_code_etims(doc)
@@ -69,3 +76,54 @@ def prevent_item_deletion(doc: dict) -> None:
     if doc.custom_item_registered == 1:  # Assuming 1 means registered, adjust as needed
         frappe.throw(_("Cannot delete registered items"))
     pass
+
+
+@frappe.whitelist()
+def autofill_item_etims_fields(item_group=None, settings_name=None):
+    """
+    Auto-fill Item eTIMS fields from:
+    1. Item Group (priority)
+    2. Settings doctype (secondary)
+    3. None (fallback)
+    """
+
+    FIELD_LIST = [
+        "custom_prevent_etims_registration",
+        "custom_taxation_type",
+        "custom_item_classification",
+        "custom_etims_country_of_origin",
+        "custom_packaging_unit",
+        "custom_unit_of_quantity",
+        "custom_product_type",
+        "custom_item_type",
+    ]
+
+    item_group_doc = None
+    settings_doc = None
+
+    if item_group:
+        item_group_doc = frappe.get_doc("Item Group", item_group)
+
+    if settings_name:
+        settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
+
+    results = {}
+
+    for field in FIELD_LIST:
+        value = None
+
+        if item_group_doc and hasattr(item_group_doc, field):
+            val = item_group_doc.get(field)
+            if val not in ("", None):
+                value = val
+
+        if value is None and settings_doc:
+            setting_field = field.replace("custom_", "")
+            if hasattr(settings_doc, setting_field):
+                val = settings_doc.get(setting_field)
+                if val not in ("", None):
+                    value = val
+
+        results[field] = value
+
+    return results

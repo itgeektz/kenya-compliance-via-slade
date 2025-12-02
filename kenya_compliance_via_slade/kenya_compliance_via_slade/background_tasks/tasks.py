@@ -13,16 +13,11 @@ from ..apis.remote_response_status_handlers import notices_search_on_success
 from ..doctype.doctype_names_mapping import (
     OPERATION_TYPE_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
-    UOM_CATEGORY_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_settings, get_max_submission_attempts
+from ..utils import get_max_submission_attempts
 from .task_response_handlers import (
-    itemprice_search_on_success,
     operation_types_search_on_success,
-    pricelist_search_on_success,
-    uom_category_search_on_success,
-    uom_search_on_success,
     update_branches,
     update_clusters,
     update_countries,
@@ -43,6 +38,7 @@ def run_background_task(method_path, settings_name=None, request_data=None):
     frappe.flags.ignore_permissions = True
     func = frappe.get_attr(method_path)
     return func(settings_name=settings_name, request_data=request_data)
+
 
 @frappe.whitelist()
 def refresh_notices(settings_name: str = None) -> None:
@@ -70,7 +66,7 @@ def refresh_notices(settings_name: str = None) -> None:
                 continue
 
 
-def get_timeframe(settings_name:str) -> timedelta:
+def get_timeframe(settings_name: str) -> timedelta:
     settings = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
     if not settings:
         return timedelta(seconds=86400)
@@ -222,10 +218,13 @@ def fetch_scu_data(invoices: list) -> None:
 
 
 @frappe.whitelist()
-def perform_notice_search(request_data: str | dict, settings_name: str)  -> str:
+def perform_notice_search(request_data: str | dict, settings_name: str) -> str:
     """Function to perform notice search."""
     message = process_request(
-        request_data, "NoticeSearchReq", notices_search_on_success, settings_name=settings_name
+        request_data,
+        "NoticeSearchReq",
+        notices_search_on_success,
+        settings_name=settings_name,
     )
     return message
 
@@ -241,7 +240,10 @@ def refresh_code_lists(request_data: str | dict, settings_name: str) -> str:
         ("TaxSearchReq", update_taxation_type),
     ]
 
-    messages = [process_request(request_data, task[0], task[1], settings_name=settings_name) for task in tasks]
+    messages = [
+        process_request(request_data, task[0], task[1], settings_name=settings_name)
+        for task in tasks
+    ]
 
     return messages
 
@@ -250,15 +252,15 @@ def refresh_code_lists(request_data: str | dict, settings_name: str) -> str:
 def search_organisations_request(request_data: str | dict, settings_name: str) -> str:
     """Refresh code lists based on request data."""
     tasks = [
-        # ("OrgSearchReq", update_organisations), # Shift to the auth API 
-        # ("ClusterSearchReq", update_clusters),
         ("BhfSearchReq", update_branches),
-        # ("DeptSearchReq", update_departments),  # Shift to the auth API
         ("WorkstationSearchReq", update_workstations),
     ]
 
-    messages = [process_request(request_data, task[0], task[1], settings_name=settings_name) for task in tasks]
-    
+    messages = [
+        process_request(request_data, task[0], task[1], settings_name=settings_name)
+        for task in tasks
+    ]
+
     process_request(
         {"location_type": "internal"},
         "LocationsSearchReq",
@@ -268,6 +270,7 @@ def search_organisations_request(request_data: str | dict, settings_name: str) -
     )
 
     return messages
+
 
 @frappe.whitelist()
 def search_clusters(request_data: str | dict, settings_name: str) -> str:
@@ -285,11 +288,15 @@ def search_clusters(request_data: str | dict, settings_name: str) -> str:
         settings_name=settings_name,
         doctype=SETTINGS_DOCTYPE_NAME,
     )
-    
-    return get_cluster_company_matches(response if isinstance(response, list) else response.get("results", [response]))
+
+    return get_cluster_company_matches(
+        response if isinstance(response, list) else response.get("results", [response]),
+        settings_name,
+    )
+
 
 @frappe.whitelist()
-def get_cluster_company_matches(cluster_data):
+def get_cluster_company_matches(cluster_data, settings_name: str) -> list:
     """Process cluster data and attempt to match with companies"""
     try:
         if isinstance(cluster_data, str):
@@ -298,18 +305,27 @@ def get_cluster_company_matches(cluster_data):
         companies = frappe.get_all("Company", pluck="name")
 
         matched_data = []
-        
+
         for cluster in cluster_data:
             if not isinstance(cluster, dict):
                 continue
+
+            cluster_id = cluster.get("id")
+
+            mapped_company = get_company_from_existing_cluster_mapping(
+                cluster_id, settings_name
+            )
+
+            if not mapped_company:
+                mapped_company = find_best_company_match(cluster.get("name"), companies)
 
             match_info = {
                 "cluster_id": cluster.get("id"),
                 "cluster_name": cluster.get("name"),
                 "organisation": cluster.get("organisation"),
-                "company": find_best_company_match(cluster.get("name"), companies)
+                "company": mapped_company,
             }
-            
+
             matched_data.append(match_info)
 
         return matched_data
@@ -318,90 +334,74 @@ def get_cluster_company_matches(cluster_data):
         frappe.log_error(f"Cluster matching failed: {str(e)}")
         return {"error": str(e)}
 
+
+def get_company_from_existing_cluster_mapping(
+    cluster_id: str, settings_name: str
+) -> str | None:
+    """
+    Check Company → eTims Setup Mapping child table for an existing cluster mapping.
+    Returns Company name if found, otherwise None.
+    """
+    return frappe.db.get_value(
+        "eTims Company Setup Mapping",
+        {"cluster": cluster_id, "etims_setup": settings_name, "is_active": 1},
+        "parent",
+    )
+
+
 def find_best_company_match(cluster_name, companies):
     """Simple company matching using string comparison"""
     if not cluster_name or not companies:
         return ""
-    
+
     cluster_lower = cluster_name.lower()
-    
+
     for company in companies:
         if company.lower() == cluster_lower:
             return company
-    
+
     for company in companies:
         company_lower = company.lower()
         if cluster_lower in company_lower or company_lower in cluster_lower:
             return company
-    
+
     cluster_words = get_significant_words(cluster_lower)
     if cluster_words:
         for company in companies:
             company_words = get_significant_words(company.lower())
             if any(word in company_words for word in cluster_words):
                 return company
-    
+
     return ""
+
 
 def get_significant_words(text):
     """Extract meaningful words for matching"""
-    common_words = {'the', 'and', 'of', 'for', 'in', 'with', 'company', 'co', 'ltd', 'pty'}
-    return [
-        word for word in text.split() 
-        if len(word) > 3 and word not in common_words
-    ]
+    common_words = {
+        "the",
+        "and",
+        "of",
+        "for",
+        "in",
+        "with",
+        "company",
+        "co",
+        "ltd",
+        "pty",
+    }
+    return [word for word in text.split() if len(word) > 3 and word not in common_words]
+
 
 @frappe.whitelist()
 def get_item_classification_codes(request_data: str | dict, settings_name: str) -> str:
     """Function to get item classification codes."""
     message = process_request(
-        request_data, "ItemClsSearchReq", update_item_classification_codes, settings_name=settings_name
+        request_data,
+        "ItemClsSearchReq",
+        update_item_classification_codes,
+        settings_name=settings_name,
     )
     return message
-
-
-@frappe.whitelist()
-def fetch_etims_uom_categories(request_data: str) -> None:
-    message = process_request(
-        request_data,
-        "UOMCategoriesSearchReq",
-        uom_category_search_on_success,
-        doctype=UOM_CATEGORY_DOCTYPE_NAME,
-    )
-    return message
-
-
-@frappe.whitelist()
-def fetch_etims_uom_list(request_data: str) -> None:
-    message = process_request(
-        request_data,
-        "UOMListSearchReq",
-        uom_search_on_success,
-        doctype="UOM",
-    )
-    return message
-
-
-@frappe.whitelist()
-def fetch_etims_pricelists(request_data: str) -> None:
-    pricelists = process_request(
-        request_data,
-        "PriceListsSearchReq",
-        pricelist_search_on_success,
-        doctype="Price List",
-    )
-    return pricelists
-
-
-@frappe.whitelist()
-def fetch_etims_item_prices(request_data: str) -> None:
-    itemprices = process_request(
-        request_data,
-        "ItemPricesSearchReq",
-        itemprice_search_on_success,
-        doctype="Item Price",
-    )
-    return itemprices
 
 
 @frappe.whitelist()
@@ -417,6 +417,7 @@ def fetch_etims_operation_types(request_data: str) -> None:
 
 def send_stock_information(settings_name: str) -> None:
     from ..overrides.server.stock_ledger_entry import fetch_current_stock_balance
+
     if not settings_name:
         return
     settings = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
@@ -426,16 +427,20 @@ def send_stock_information(settings_name: str) -> None:
     timeframe = settings.get("stock_information_submission_timeframe", 86400) or 86400
     duration = timedelta(seconds=timeframe)
     timeframe_ago = datetime.now() - duration
-    entries = fetch_stock_ledgers(timeframe_ago)  
-    max_tries = get_max_submission_attempts("Stock Ledger Entry", company=settings.company)
+    entries = fetch_stock_ledgers(timeframe_ago)
+    max_tries = get_max_submission_attempts(
+        "Stock Ledger Entry", company=settings.company
+    )
     for entry in entries:
         if int(entry.custom_submission_tries) >= max_tries:
             continue
-        fetch_current_stock_balance(entry) 
-         
+        fetch_current_stock_balance(entry)
+
 
 def fetch_stock_ledgers(timeframe_ago: datetime) -> List[Document]:
-    company = frappe.defaults.get_user_default("Company") or frappe.get_value("Company", {}, "name")
+    company = frappe.defaults.get_user_default("Company") or frappe.get_value(
+        "Company", {}, "name"
+    )
     max_tries = get_max_submission_attempts("Stock Ledger Entry", company=company)
     entries = frappe.get_all(
         "Stock Ledger Entry",
@@ -446,7 +451,7 @@ def fetch_stock_ledgers(timeframe_ago: datetime) -> List[Document]:
             "custom_submission_tries": ["<", max_tries],
         },
         fields=["name", "item_code"],
-        order_by="creation asc",  
+        order_by="creation asc",
     )
 
     seen_items = set()
@@ -456,7 +461,9 @@ def fetch_stock_ledgers(timeframe_ago: datetime) -> List[Document]:
             seen_items.add(entry["item_code"])
             oldest_entries.append(entry)
 
-    return [frappe.get_doc("Stock Ledger Entry", entry["name"]) for entry in oldest_entries]
+    return [
+        frappe.get_doc("Stock Ledger Entry", entry["name"]) for entry in oldest_entries
+    ]
 
 
 def send_purchase_information(settings_name: str = None) -> None:
@@ -464,7 +471,7 @@ def send_purchase_information(settings_name: str = None) -> None:
 
     if not settings_name:
         return
-    
+
     settings = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
 
     if not settings.get("purchase_auto_submission_enabled"):
@@ -485,23 +492,21 @@ def send_purchase_information(settings_name: str = None) -> None:
     )
 
     for invoice in all_submitted_purchase_invoices:
-        doc = frappe.get_doc(
-            "Purchase Invoice", invoice.name, for_update=False
-        ) 
+        doc = frappe.get_doc("Purchase Invoice", invoice.name, for_update=False)
 
         try:
             frappe.enqueue(on_submit, doc=doc)
 
         except TypeError:
             continue
-      
-        
-@frappe.whitelist() 
+
+
+@frappe.whitelist()
 def update_setting_passwords() -> None:
     settings_list = frappe.get_all(
         "Navari KRA ETIMS Settings",
         filters={"is_active": 1, "sandbox": 0},
-        fields=["name"]
+        fields=["name"],
     )
     for setting in settings_list:
         doc = frappe.get_doc("Navari KRA ETIMS Settings", setting.name)
@@ -523,5 +528,9 @@ def fetch_workstations(settings_name: str) -> None:
 @frappe.whitelist()
 def search_branch_request(request_data: str | dict, settings_name: str) -> None:
     return process_request(
-        request_data, "BhfSearchReq", update_branches, doctype="Branch", settings_name=settings_name
+        request_data,
+        "BhfSearchReq",
+        update_branches,
+        doctype="Branch",
+        settings_name=settings_name,
     )

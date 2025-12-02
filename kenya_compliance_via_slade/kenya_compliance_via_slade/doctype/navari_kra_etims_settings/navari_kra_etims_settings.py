@@ -12,10 +12,15 @@ from ...background_tasks.tasks import (
     send_stock_information,
 )
 from ...utils import reset_auth_password, update_navari_settings_with_token
-from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME, ORGANISATION_MAPPING_DOCTYPE_NAME
+from ...doctype.doctype_names_mapping import (
+    SETTINGS_DOCTYPE_NAME,
+    ORGANISATION_MAPPING_DOCTYPE_NAME,
+)
+
 
 class NavariKRAeTimsSettings(Document):
     """ETims Integration Settings doctype"""
+
     def validate(self) -> None:
         if self.is_active == 1:
             seen_pairs = set()
@@ -43,7 +48,9 @@ class NavariKRAeTimsSettings(Document):
                     order_by=None,
                 )
                 if existing:
-                    parent_doc = frappe.get_value(SETTINGS_DOCTYPE_NAME, existing[0].parent, "is_active")
+                    parent_doc = frappe.get_value(
+                        SETTINGS_DOCTYPE_NAME, existing[0].parent, "is_active"
+                    )
                     if parent_doc:
                         frappe.throw(
                             f"Active mapping for company '{row.company}' and branch '{row.branch}' "
@@ -52,7 +59,13 @@ class NavariKRAeTimsSettings(Document):
                         )
 
     def on_update(self) -> None:
-        def get_or_create_scheduled_job(name: str, method: str, freq: Optional[str], cron: Optional[str], job_args: dict) -> None:
+        def get_or_create_scheduled_job(
+            name: str,
+            method: str,
+            freq: Optional[str],
+            cron: Optional[str],
+            job_args: dict,
+        ) -> None:
             task_name = frappe.db.exists("Scheduled Job Type", {"job_name": name})
             if task_name:
                 task = frappe.get_doc("Scheduled Job Type", task_name)
@@ -65,17 +78,28 @@ class NavariKRAeTimsSettings(Document):
             task.frequency = freq or task.frequency
             if freq == "Cron" and cron:
                 task.cron_format = cron
-            task.stopped = 0 
+            task.stopped = 0
             task.job_args = frappe.as_json(job_args)
             task.save(ignore_permissions=True)
             task.enqueue()
 
         def disable_scheduled_job(name: str) -> None:
-            task_name = frappe.db.exists("Scheduled Job Type", name)
+            task_name = frappe.db.exists(
+                "Scheduled Job Type", {"job_name": name}
+            ) or frappe.db.exists("Scheduled Job Type", name)
             if task_name:
-                task = frappe.get_doc("Scheduled Job Type", task_name)
-                task.stopped = 1
-                task.save(ignore_permissions=True)
+                try:
+                    frappe.delete_doc(
+                        "Scheduled Job Type",
+                        task_name,
+                        force=True,
+                        ignore_permissions=True,
+                    )
+                except Exception as e:
+                    frappe.log_error(
+                        message=f"Failed to delete Scheduled Job Type '{task_name}': {e}",
+                        title="Scheduled Job Deletion Error",
+                    )
 
         task_configs = [
             {
@@ -129,40 +153,49 @@ class NavariKRAeTimsSettings(Document):
             if config.get("with_request_data"):
                 job_args["request_data"] = {}
             if config["enabled"]:
-                get_or_create_scheduled_job(config["name"], config["method"], config["frequency"], config["cron"], job_args)
+                get_or_create_scheduled_job(
+                    config["name"],
+                    config["method"],
+                    config["frequency"],
+                    config["cron"],
+                    job_args,
+                )
             else:
                 disable_scheduled_job(config["name"])
 
-            
     def update_password(self) -> None:
         """Update the password for the settings document."""
         reset_auth_password(self.name)
-        
+
     def update_token(self) -> None:
         """Update the password for the settings document."""
         update_navari_settings_with_token(self.name, True)
-    
-    
+
+
 @frappe.whitelist()
 def update_companies_with_cluster_info(matched_data, settings_name):
     """Update company documents with cluster information using setup_mapping table"""
     try:
         if isinstance(matched_data, str):
             matched_data = json.loads(matched_data)
-        
+
         for match in matched_data:
-            if not isinstance(match, dict) or not match.get("company") or not match.get("cluster_id"):
+            if (
+                not isinstance(match, dict)
+                or not match.get("company")
+                or not match.get("cluster_id")
+            ):
                 continue
-            
+
             company_name = match["company"]
             if not frappe.db.exists("Company", company_name):
                 continue
-                
+
             company = frappe.get_doc("Company", company_name)
-            
+
             existing_mapping = None
             duplicate_mappings = []
-            
+
             for mapping in company.setup_mapping:
                 if mapping.etims_setup == settings_name:
                     if existing_mapping:
@@ -171,23 +204,28 @@ def update_companies_with_cluster_info(matched_data, settings_name):
                         existing_mapping = mapping
             for duplicate in duplicate_mappings:
                 company.setup_mapping.remove(duplicate)
-            
+
             if existing_mapping:
                 existing_mapping.organisation = match.get("organisation", "")
                 existing_mapping.cluster = match["cluster_id"]
                 existing_mapping.is_active = 1
             else:
-                company.append("setup_mapping", {
-                    "etims_setup": settings_name,
-                    "organisation": match.get("organisation", ""),
-                    "cluster": match["cluster_id"],
-                    "is_active": 1,
-                })
-            
+                company.append(
+                    "setup_mapping",
+                    {
+                        "etims_setup": settings_name,
+                        "organisation": match.get("organisation", ""),
+                        "cluster": match["cluster_id"],
+                        "is_active": 1,
+                    },
+                )
+
             company.save(ignore_permissions=True)
-                
+
         frappe.db.commit()
         return {"success": True, "message": "Companies updated successfully"}
     except Exception as e:
-        frappe.log_error(f"Company update failed: {str(e)}")
+        frappe.log_error(
+            message=f"Company update failed: {str(e)}", title="Company Update Error"
+        )
         return {"success": False, "message": str(e)}
