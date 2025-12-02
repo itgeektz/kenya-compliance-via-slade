@@ -954,7 +954,7 @@ def purchase_invoice_submission_on_success(
     )
 
 
-def purchase_search_on_success(response: dict, **kwargs) -> None:
+def purchase_search_on_success(response: dict, settings_name: str, **kwargs) -> None:
     sales_list = (
         response.get("results", [])
         if isinstance(response, dict)
@@ -965,11 +965,12 @@ def purchase_search_on_success(response: dict, **kwargs) -> None:
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.fetch_purchase_items",
             registered_purchase=registered_purchase,
+            settings_name=settings_name,
             queue="long",
         )
 
 
-def fetch_purchase_items(registered_purchase: str) -> None:
+def fetch_purchase_items(registered_purchase: str, settings_name: str) -> None:
     from .process_request import process_request
 
     payload = {
@@ -983,6 +984,7 @@ def fetch_purchase_items(registered_purchase: str) -> None:
         create_and_link_purchase_item,
         request_method="GET",
         doctype=REGISTERED_PURCHASES_DOCTYPE_NAME,
+        settings_name=settings_name,
     )
 
 

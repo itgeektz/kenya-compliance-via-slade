@@ -532,7 +532,7 @@ def perform_item_search(request_data: str, settings_name: str) -> None:
 
 
 @frappe.whitelist()
-def perform_import_item_search(request_data: str, settings_name: str) -> None:
+def perform_import_item_search(request_data: str | dict, settings_name: str) -> None:
     process_request(
         request_data,
         "ImportItemSearchReq",
@@ -546,34 +546,33 @@ def perform_import_item_search(request_data: str, settings_name: str) -> None:
 def perform_import_item_search_all_branches() -> None:
     all_credentials = frappe.get_all(
         SETTINGS_DOCTYPE_NAME,
-        ["name", "bhfid", "company"],
+        filters={"is_active": 1},
+        fields=["name"],
     )
 
     for credential in all_credentials:
-        request_data = json.dumps(
-            {"company_name": credential.company, "branch_code": credential.bhfid}
-        )
-
-        perform_import_item_search(request_data, settings_name=credential.name)
+        perform_import_item_search({}, settings_name=credential.name)
 
 
 @frappe.whitelist()
-def perform_purchases_search(request_data: str) -> None:
+def perform_purchases_search(request_data: str | dict, settings_name: str) -> None:
     process_request(
         request_data,
         "TrnsPurchaseSalesReq",
         purchase_search_on_success,
         doctype=REGISTERED_PURCHASES_DOCTYPE_NAME,
+        settings_name=settings_name,
     )
 
 
 @frappe.whitelist()
-def perform_purchase_search(request_data: str) -> None:
+def perform_purchase_search(request_data: str, settings_name: str) -> None:
     process_request(
         request_data,
         "TrnsPurchaseSearchReq",
         purchase_search_on_success,
         doctype=REGISTERED_PURCHASES_DOCTYPE_NAME,
+        settings_name=settings_name,
     )
 
 
