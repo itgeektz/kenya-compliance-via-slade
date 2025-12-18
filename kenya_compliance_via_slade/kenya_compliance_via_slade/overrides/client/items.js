@@ -40,6 +40,7 @@ async function getEtimsSettings(frm) {
 }
 
 async function applyEtimsAutofillFields(frm) {
+  if (frm.doc.custom_prevent_etims_registration == 1) return;
   const fallbackSetting = frm.etims?.allSettings?.length
     ? frm.etims.allSettings[0].name
     : null;
