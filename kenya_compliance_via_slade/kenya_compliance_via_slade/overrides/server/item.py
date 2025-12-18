@@ -65,8 +65,9 @@ def validate(doc: Document, method: str = None) -> None:
                 )
             )
 
-    if not doc.custom_item_code_etims:
-        doc.custom_item_code_etims = generate_custom_item_code_etims(doc)
+
+        if not doc.custom_item_code_etims:
+            doc.custom_item_code_etims = generate_custom_item_code_etims(doc)
 
 
 @frappe.whitelist()
@@ -88,7 +89,6 @@ def autofill_item_etims_fields(item_group=None, settings_name=None):
     """
 
     FIELD_LIST = [
-        "custom_prevent_etims_registration",
         "custom_taxation_type",
         "custom_item_classification",
         "custom_etims_country_of_origin",

@@ -2509,7 +2509,7 @@
       "columns": 0,
       "creation": "2025-11-30 11:34:18.465919",
       "default": null,
-      "depends_on": null,
+      "depends_on": "eval: doc.custom_prevent_etims_registration != 1",
       "description": null,
       "docstatus": 0,
       "dt": "Item",
