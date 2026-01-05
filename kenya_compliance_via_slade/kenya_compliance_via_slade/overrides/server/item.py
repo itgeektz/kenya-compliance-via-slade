@@ -71,7 +71,7 @@ def validate(doc: Document, method: str = None) -> None:
 
 
 @frappe.whitelist()
-def prevent_item_deletion(doc: dict) -> None:
+def prevent_item_deletion(doc: Document, method=None) -> None:
     if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
         return
     if doc.custom_item_registered == 1:  # Assuming 1 means registered, adjust as needed
