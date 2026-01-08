@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"Sdc1m9AyDb\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">eTims Integration</span>\",\"col\":12}},{\"id\":\"dPft27k0bT\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"eTims Notice\",\"col\":3}},{\"id\":\"IJhA6ryFMf\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Integration Request\",\"col\":3}},{\"id\":\"P-6Iw_P1zg\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Error Log\",\"col\":3}},{\"id\":\"btwAd12hX1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"eTims Settings\",\"col\":3}},{\"id\":\"n0_etvXkCr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"eTims Dashboard\",\"col\":3}},{\"id\":\"2mBJcIyECW\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Detailed Documentation\",\"col\":3}},{\"id\":\"UEeD0TQZ1M\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"wDRcmffW60\",\"type\":\"card\",\"data\":{\"card_name\":\"Masters\",\"col\":4}},{\"id\":\"BWUEC2YYZG\",\"type\":\"card\",\"data\":{\"card_name\":\"Setup and Configurations\",\"col\":4}},{\"id\":\"1uTnc5NfCF\",\"type\":\"card\",\"data\":{\"card_name\":\"Codes\",\"col\":4}},{\"id\":\"vct65zYsQ1\",\"type\":\"card\",\"data\":{\"card_name\":\"Item Information\",\"col\":4}},{\"id\":\"RClRPl22Jw\",\"type\":\"card\",\"data\":{\"card_name\":\"Logs and Troubleshooting\",\"col\":4}},{\"id\":\"-1FtcpP1Od\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}},{\"id\":\"uCoSow52Yf\",\"type\":\"card\",\"data\":{\"card_name\":\"Purchases\",\"col\":4}}]",
+ "content": "[{\"id\":\"Sdc1m9AyDb\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">eTims Integration</span>\",\"col\":12}},{\"id\":\"dPft27k0bT\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"eTims Notice\",\"col\":3}},{\"id\":\"IJhA6ryFMf\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Integration Request\",\"col\":3}},{\"id\":\"P-6Iw_P1zg\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Error Log\",\"col\":3}},{\"id\":\"btwAd12hX1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"eTims Settings\",\"col\":3}},{\"id\":\"n0_etvXkCr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"eTims Dashboard\",\"col\":3}},{\"id\":\"2mBJcIyECW\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Detailed Documentation\",\"col\":3}},{\"id\":\"8VW4m5a_rw\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sales Invoice\",\"col\":3}},{\"id\":\"nQQia9sBFf\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Purchase Invoice\",\"col\":3}},{\"id\":\"W_7hPGfdGh\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Item\",\"col\":3}},{\"id\":\"O7NSXIKhaj\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Customer\",\"col\":3}},{\"id\":\"oeu_qG6_An\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Supplier\",\"col\":3}},{\"id\":\"UEeD0TQZ1M\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"wDRcmffW60\",\"type\":\"card\",\"data\":{\"card_name\":\"Masters\",\"col\":4}},{\"id\":\"BWUEC2YYZG\",\"type\":\"card\",\"data\":{\"card_name\":\"Setup and Configurations\",\"col\":4}},{\"id\":\"1uTnc5NfCF\",\"type\":\"card\",\"data\":{\"card_name\":\"Codes\",\"col\":4}},{\"id\":\"vct65zYsQ1\",\"type\":\"card\",\"data\":{\"card_name\":\"Item Information\",\"col\":4}},{\"id\":\"RClRPl22Jw\",\"type\":\"card\",\"data\":{\"card_name\":\"Logs and Troubleshooting\",\"col\":4}},{\"id\":\"-1FtcpP1Od\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}},{\"id\":\"uCoSow52Yf\",\"type\":\"card\",\"data\":{\"card_name\":\"Purchases\",\"col\":4}}]",
  "creation": "2024-04-03 10:47:58.925837",
  "custom_blocks": [],
  "docstatus": 0,
@@ -152,6 +152,65 @@
    "type": "Link"
   },
   {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Item Information",
+   "link_count": 5,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "eTims Item Classification",
+   "link_count": 0,
+   "link_to": "Navari KRA eTims Item Classification",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Item Tax Template",
+   "link_count": 0,
+   "link_to": "Item Tax Template",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "eTims Imported Item",
+   "link_count": 0,
+   "link_to": "Navari eTims Registered Imported Item",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "eTims Item Type",
+   "link_count": 0,
+   "link_to": "Navari eTims Item Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "eTims Product Type",
+   "link_count": 0,
+   "link_to": "Navari eTims Product Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
    "description": "DocTypes required to setup and configure the integration",
    "hidden": 0,
    "is_query_report": 0,
@@ -225,7 +284,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Masters",
-   "link_count": 8,
+   "link_count": 7,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -293,78 +352,9 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Mode of Payment",
-   "link_count": 0,
-   "link_to": "Mode of Payment",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Stock Ledger Entry",
    "link_count": 0,
    "link_to": "Stock Ledger Entry",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Item Information",
-   "link_count": 5,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "eTims Item Classification",
-   "link_count": 0,
-   "link_to": "Navari KRA eTims Item Classification",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Item Tax Template",
-   "link_count": 0,
-   "link_to": "Item Tax Template",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "eTims Imported Item",
-   "link_count": 0,
-   "link_to": "Navari eTims Registered Imported Item",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "eTims Item Type",
-   "link_count": 0,
-   "link_to": "Navari eTims Item Type",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "eTims Product Type",
-   "link_count": 0,
-   "link_to": "Navari eTims Product Type",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -374,20 +364,10 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Codes",
-   "link_count": 6,
+   "link_count": 5,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Mode of Payment",
-   "link_count": 0,
-   "link_to": "Mode of Payment",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
   },
   {
    "hidden": 0,
@@ -440,7 +420,7 @@
    "type": "Link"
   }
  ],
- "modified": "2025-07-02 18:36:10.215959",
+ "modified": "2026-01-08 08:33:25.056693",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "eTims Integration",
@@ -462,16 +442,40 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "eTims Dashboard",
-   "link_to": "eTims",
-   "type": "Dashboard"
+   "label": "Sales Invoice",
+   "link_to": "Sales Invoice",
+   "stats_filter": "[]",
+   "type": "DocType"
   },
   {
    "color": "Blue",
    "doc_view": "List",
    "label": "eTims Settings",
    "link_to": "Navari KRA eTims Settings",
-   "stats_filter": "[[\"Navari KRA eTims Settings\",\"is_active\",\"=\",1,false]]",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "eTims Dashboard",
+   "link_to": "eTims",
+   "type": "Dashboard"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Purchase Invoice",
+   "link_to": "Purchase Invoice",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Item",
+   "link_to": "Item",
+   "stats_filter": "[]",
    "type": "DocType"
   },
   {
@@ -483,10 +487,26 @@
    "type": "DocType"
   },
   {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Customer",
+   "link_to": "Customer",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
    "color": "Green",
    "doc_view": "List",
    "label": "Integration Request",
    "link_to": "Integration Request",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Supplier",
+   "link_to": "Supplier",
    "stats_filter": "[]",
    "type": "DocType"
   },
