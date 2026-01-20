@@ -1,0 +1,21 @@
+{
+  "app": "kenya_compliance_via_slade",
+  "docstatus": 0,
+  "doctype": "Desktop Icon",
+  "hidden": 0,
+  "icon": "square-star",
+  "icon_image": null,
+  "icon_type": "Link",
+  "label": "eTims",
+  "link": null,
+  "link_to": "eTims",
+  "link_type": "Workspace Sidebar",
+  "logo_url": "/assets/kenya_compliance_via_slade/icon-etims.png",
+  "modified": "2026-01-20 22:14:29.663189",
+  "name": "eTims",
+  "parent_icon": null,
+  "restrict_removal": 0,
+  "roles": [],
+  "sidebar": null,
+  "standard": 1
+}
