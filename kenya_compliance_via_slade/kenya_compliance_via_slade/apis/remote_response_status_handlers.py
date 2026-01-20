@@ -325,7 +325,10 @@ def sales_information_submission_on_error(
 
     doc = frappe.get_doc(doctype, document_name)
     error_message = response if isinstance(response, str) else str(response)
-    if "get() returned more than one Product -- it returned 2!" in error_message:
+    if (
+        "get() returned more than one Product -- it returned 2!"
+        or "A product with this name already exists"
+    ) in error_message:
         for item in doc.items:
             perform_item_registration(item.item_code, settings_name)
 
