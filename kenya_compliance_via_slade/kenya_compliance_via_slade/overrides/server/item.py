@@ -44,19 +44,26 @@ def validate(doc: Document, method: str = None) -> None:
                 doc.append("taxes", {"item_tax_template": template.name})
 
     if doc.custom_prevent_etims_registration != 1:
+        defaults = autofill_item_etims_fields(item_group=doc.item_group)
+
+        required_fields = {
+            "custom_etims_country_of_origin": "Country of Origin Code",
+            "custom_product_type": "Product Type",
+            "custom_item_type": "Item Type",
+            "custom_packaging_unit": "Packaging Unit Code",
+            "custom_unit_of_quantity": "Unit of Quantity Code",
+            "custom_item_classification": "Item Classification",
+            "custom_taxation_type": "Taxation Type",
+        }
+
         missing_fields = []
-        if not doc.custom_etims_country_of_origin_code:
-            missing_fields.append("Country of Origin Code")
-        if not doc.custom_product_type:
-            missing_fields.append("Product Type")
-        if not doc.custom_packaging_unit_code:
-            missing_fields.append("Packaging Unit Code")
-        if not doc.custom_unit_of_quantity_code:
-            missing_fields.append("Unit of Quantity Code")
-        if not doc.custom_item_classification:
-            missing_fields.append("Item Classification")
-        if not doc.custom_taxation_type:
-            missing_fields.append("Taxation Type")
+
+        for field, label in required_fields.items():
+            if not doc.get(field):
+                if defaults.get(field):
+                    doc.set(field, defaults.get(field))
+                else:
+                    missing_fields.append(label)
 
         if missing_fields:
             frappe.throw(
@@ -65,16 +72,15 @@ def validate(doc: Document, method: str = None) -> None:
                 )
             )
 
-
         if not doc.custom_item_code_etims:
             doc.custom_item_code_etims = generate_custom_item_code_etims(doc)
-
+            
 
 @frappe.whitelist()
 def prevent_item_deletion(doc: Document, method=None) -> None:
     if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
         return
-    if doc.custom_item_registered == 1:  # Assuming 1 means registered, adjust as needed
+    if doc.custom_item_registered == 1:  
         frappe.throw(_("Cannot delete registered items"))
     pass
 
