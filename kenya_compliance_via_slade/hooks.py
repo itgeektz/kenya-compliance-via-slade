@@ -17,14 +17,14 @@ required_apps = ["erpnext"]
 # Fixtures
 # --------
 fixtures = [
-    {"dt": IMPORTED_ITEMS_STATUS_DOCTYPE_NAME},
-    {"dt": ROUTES_TABLE_DOCTYPE_NAME},
-    {"dt": ITEM_TYPE_DOCTYPE_NAME},
-    {"dt": PRODUCT_TYPE_DOCTYPE_NAME},
+    # {"dt": IMPORTED_ITEMS_STATUS_DOCTYPE_NAME},
+    # {"dt": ROUTES_TABLE_DOCTYPE_NAME},
+    # {"dt": ITEM_TYPE_DOCTYPE_NAME},
+    # {"dt": PRODUCT_TYPE_DOCTYPE_NAME},
     # {
-    #     "dt": "Custom Field",
+    #     "dt": "Workspace Sidebar",
     #     "filters": [
-    #         ["module", "=", "Kenya Compliance Via Slade"]
+    #         ["app", "=", "kenya_compliance_via_slade"]
     #     ],
     # },
 ]
