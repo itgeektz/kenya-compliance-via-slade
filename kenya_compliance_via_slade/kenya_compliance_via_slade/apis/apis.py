@@ -4,6 +4,7 @@ import json
 import aiohttp
 import frappe
 import frappe.defaults
+from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder import DocType
 
@@ -226,17 +227,42 @@ def perform_customer_search(request_data: str) -> None:
 @frappe.whitelist()
 def perform_item_registration(item_name: str, settings_name: str) -> dict | None:
     """Main function to handle item registration with SLADE"""
+    from ..overrides.server.item import autofill_item_etims_fields
+
     item = frappe.get_doc("Item", item_name)
 
     if not is_item_eligible_for_registration(item):
         return None
 
+    defaults = autofill_item_etims_fields(
+        item_group=item.item_group,
+        settings_name=settings_name,
+    )
+
+    updates = {}
+
+    for field in validate_required_fields(item):
+        if defaults.get(field):
+            updates[field] = defaults.get(field)
+
+    if updates:
+        frappe.db.set_value("Item", item.name, updates, update_modified=True)
+        for k, v in updates.items():
+            item.set(k, v)
+
     missing_fields = validate_required_fields(item)
     if missing_fields:
-        return None
+        frappe.throw(
+            _("Missing required ETIMS fields: {0}").format(
+                ", ".join(
+                    frappe.bold(field.replace("_", " ").title())
+                    for field in missing_fields
+                )
+            )
+        )
 
     if not item.custom_item_code_etims:
-        generate_and_set_etims_code(item)
+        generate_and_set_etims_code(item)  
 
     frappe.enqueue(
         process_request,
@@ -262,7 +288,7 @@ def validate_required_fields(item) -> list:
         "custom_item_classification",
         "custom_product_type",
         "custom_item_type",
-        "custom_etims_country_of_origin_code",
+        "custom_etims_country_of_origin",
         "custom_packaging_unit",
         "custom_unit_of_quantity",
         "custom_taxation_type",
