@@ -42,10 +42,10 @@ frappe.ui.form.on(parentDoctype, {
                   settings_name: settings_name,
                 },
                 success_msg: "Invoice submission queued",
-              })
+              }),
             );
           },
-          __("eTims Actions")
+          __("eTims Actions"),
         );
       }
 
@@ -66,10 +66,10 @@ frappe.ui.form.on(parentDoctype, {
                   company: frm.doc.company,
                 },
                 success_msg: "Invoice sync queued",
-              })
+              }),
             );
           },
-          __("eTims Actions")
+          __("eTims Actions"),
         );
       }
 
@@ -89,10 +89,10 @@ frappe.ui.form.on(parentDoctype, {
                 company: frm.doc.company,
               },
               success_msg: "Verification and correction queued",
-            })
+            }),
           );
         },
-        __("eTims Actions")
+        __("eTims Actions"),
       );
     }
   },
@@ -164,7 +164,7 @@ frappe.ui.form.on(childDoctype, {
           locals[cdt][cdn].custom_taxation_type = response.custom_taxation_type;
           locals[cdt][cdn].custom_taxation_type_code =
             response.custom_taxation_type;
-        }
+        },
       );
     }
   },
@@ -182,7 +182,7 @@ frappe.ui.form.on(childDoctype, {
           const code = response.code;
           locals[cdt][cdn].custom_packaging_unit_code = code;
           frm.refresh_field("custom_packaging_unit_code");
-        }
+        },
       );
     }
   },
@@ -200,7 +200,7 @@ frappe.ui.form.on(childDoctype, {
           const code = response.code;
           locals[cdt][cdn].custom_unit_of_quantity_code = code;
           frm.refresh_field("custom_unit_of_quantity_code");
-        }
+        },
       );
     }
   },
@@ -214,7 +214,7 @@ async function updateTaxAmountLabel(frm) {
     const { message: companyDoc } = await frappe.db.get_value(
       "Company",
       defaultCompany,
-      "default_currency"
+      "default_currency",
     );
 
     if (companyDoc?.default_currency) {
@@ -223,7 +223,7 @@ async function updateTaxAmountLabel(frm) {
       frm.fields_dict.items.grid.update_docfield_property(
         "custom_tax_amount",
         "label",
-        `Tax Amount (${currency})`
+        `Tax Amount (${currency})`,
       );
     }
   } catch (error) {
