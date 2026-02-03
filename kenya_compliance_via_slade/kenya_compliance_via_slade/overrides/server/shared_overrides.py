@@ -31,16 +31,6 @@ def generic_invoices_on_submit_override(
         # or frappe.get_value("Company", {}, "name")
     )
 
-    company_currency = frappe.get_value("Company", company_name, "default_currency")
-    invoice_currency = doc.currency 
-    if (invoice_currency != "KES") and (company_currency != "KES"):
-        frappe.msgprint(
-            "eTIMS submission only supports invoices in KES currency. "
-            f"Current currency: {invoice_currency}, company currency: {company_currency}. "
-            "Please set KES as the company default currency or use KES for this invoice."
-        )
-        return
-
     settings_doc = get_settings(company_name=company_name)
     if doc.prevent_etims_submission or (hasattr(doc, "etr_invoice_number") and doc.etr_invoice_number) or doc.status == "Credit Note Issued" or not settings_doc:
         return
