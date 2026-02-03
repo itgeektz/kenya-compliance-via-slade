@@ -375,19 +375,65 @@ def extract_document_series_number(document: Document) -> int | None:
         return int(split_invoice_name[-2])
 
 
+def get_kes_conversion_rate(currency, company_currency, posting_date=None):
+    """
+    Resolve conversion to KES.
+
+    Priority:
+    1. currency -> KES
+    2. company_currency -> KES
+
+    Returns:
+        (conversion_rate, used_rate)
+
+    Throws:
+        If no valid rate exists.
+    """
+
+    if not posting_date:
+        posting_date = frappe.utils.nowdate()
+
+    def get_rate(frm, to):
+        return (
+            frappe.db.get_value(
+                "Currency Exchange",
+                {
+                    "from_currency": frm,
+                    "to_currency": to,
+                    "date": ["<=", posting_date],
+                    "for_selling": 1,
+                },
+                "exchange_rate",
+                order_by="date desc",
+            )
+        )
+
+    rate = get_rate(currency, "KES")
+    if rate:
+        return rate, "net"
+
+    rate = get_rate(company_currency, "KES")
+    if rate:
+        return rate, "base"
+    frappe.throw(
+        f"No exchange rate found to KES for {currency} or {company_currency} on {posting_date}"
+    )
+
+
 def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
     currency = invoice.currency
     company_currency = frappe.get_value("Company", invoice.company, "default_currency")
+    convertion_rate = 1
+    used_rate = "net"
     if (currency != "KES") and (company_currency != "KES"):
-        frappe.msgprint(
-            "eTIMS submission only supports invoices in KES currency. "
-            f"Current currency: {currency}, company currency: {company_currency}. "
-            "Please set KES as the company default currency or use KES for this invoice."
+        convertion_rate, used_rate = get_kes_conversion_rate(
+            currency=currency,
+            company_currency=company_currency,
+            posting_date=invoice.posting_date,
         )
-        return {}
-    
-    rate_field = "net_rate" if currency == "KES" else "base_net_rate"
-    tax_field = "custom_tax_amount" if currency == "KES" else "custom_base_tax_amount"
+
+    rate_field = "net_rate" if (currency == "KES" or used_rate == "net") else "base_net_rate"
+    tax_field = "custom_tax_amount" if (currency == "KES" or used_rate == "net") else "custom_base_tax_amount"
     
     reference_number = get_invoice_reference_number(invoice)
     date_str = f"{invoice.posting_date} {invoice.posting_time or '00:00:00'}"
@@ -421,7 +467,7 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
             {
                 "product_name": item.item_code,
                 "unit_price": round(
-                    base_net_rate + (tax_amount / qty if qty else 0), 4
+                   ( base_net_rate + (tax_amount / qty if qty else 0)) * convertion_rate, 4
                 ),
                 "quantity": qty,
                 "uom": item.uom or "Pcs",
@@ -1782,20 +1828,21 @@ def build_return_invoice_payload(
     """
     currency = invoice.currency
     company_currency = frappe.get_value("Company", invoice.company, "default_currency")
+    convertion_rate = 1
+    used_rate = "net"
     if (currency != "KES") and (company_currency != "KES"):
-        frappe.msgprint(
-            "eTIMS submission only supports invoices in KES currency. "
-            f"Current currency: {currency}, company currency: {company_currency}. "
-            "Please set KES as the company default currency or use KES for this invoice."
+        convertion_rate, used_rate = get_kes_conversion_rate(
+            currency=currency,
+            company_currency=company_currency,
+            posting_date=invoice.posting_date,
         )
-        return {}
-    
-    rate_field = "net_rate" if currency == "KES" else "base_net_rate"
-    tax_field = "custom_tax_amount" if currency == "KES" else "custom_base_tax_amount"
-    
+
+    rate_field = "net_rate" if (currency == "KES" or used_rate == "net") else "base_net_rate"
+    tax_field = "custom_tax_amount" if (currency == "KES" or used_rate == "net") else "custom_base_tax_amount"
+     
     original_invoice = frappe.get_doc("Sales Invoice", invoice.return_against)
-    original_invoice_total = abs(float(original_invoice.base_grand_total))
-    return_total = abs(float(invoice.base_grand_total))
+    original_invoice_total = abs(float(original_invoice.base_grand_total)  * convertion_rate)
+    return_total = abs(float(invoice.base_grand_total) * convertion_rate)
     is_full_return = abs(original_invoice_total - return_total) < 0.01
     reference_number = get_invoice_reference_number(original_invoice)
     amount = (
@@ -1812,6 +1859,7 @@ def build_return_invoice_payload(
         is_full_return=is_full_return,
         rate_field=rate_field,
         tax_field=tax_field,
+        convertion_rate=convertion_rate,
     )
 
 
@@ -1824,6 +1872,7 @@ def prepare_return_invoice_payload(
     is_full_return: bool,
     rate_field: str,
     tax_field: str,
+    convertion_rate: float,
 ) -> Dict[str, Any]:
     items = []
     if is_full_return:
@@ -1844,7 +1893,7 @@ def prepare_return_invoice_payload(
                 {
                     "item_name": item.item_code,
                     "quantity": 1,
-                    "amount": round(base_amount - tax_amount, 4) * qty,
+                    "amount": round(base_amount - tax_amount, 4) * qty  * convertion_rate,
                 }
             )
 
