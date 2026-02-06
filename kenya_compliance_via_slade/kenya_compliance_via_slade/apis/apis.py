@@ -1130,8 +1130,8 @@ def _process_invoice_fetch_request(
     if invoice.is_return or is_return:
         route_key = "SalesCreditNoteSaveReq"
 
-    if id:
-        request_data["id"] = id
+    if id or invoice.custom_slade_id:
+        request_data["id"] = id or invoice.custom_slade_id
     else:
         if (invoice.is_return and invoice.return_against) or (
             is_return and original_invoice_id
