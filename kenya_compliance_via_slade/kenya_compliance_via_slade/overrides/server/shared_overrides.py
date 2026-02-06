@@ -10,7 +10,7 @@ from ...apis.remote_response_status_handlers import (
     sales_information_submission_on_error,
 )
 # from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
-from ...utils import build_invoice_payload, get_invoice_reference_number, get_settings, get_slade360_id
+from ...utils import build_invoice_payload, calculate_tax, get_invoice_reference_number, get_settings, get_slade360_id
 
 endpoints_builder = EndpointsBuilder()
 
@@ -32,7 +32,7 @@ def generic_invoices_on_submit_override(
     )
 
     settings_doc = get_settings(company_name=company_name)
-    if doc.prevent_etims_submission or (hasattr(doc, "etr_invoice_number") and doc.etr_invoice_number) or doc.status == "Credit Note Issued":
+    if doc.prevent_etims_submission or (hasattr(doc, "etr_invoice_number") and doc.etr_invoice_number) or doc.status == "Credit Note Issued" or not settings_doc:
         return
 
 
@@ -97,6 +97,7 @@ def generic_invoices_on_submit_override(
 
 
 def validate(doc: Document, method: str) -> None:
+    # calculate_tax(doc)
     pass
     # vendor = ""
     # doc.custom_scu_id = get_curr_env_etims_settings(
