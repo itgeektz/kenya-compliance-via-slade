@@ -514,7 +514,7 @@ def update_invoice_info(
     settings_name: str | None = None,
     **kwargs,
 ) -> None:
-    process_invoice_response(response, document_name, doctype)
+    process_invoice_response(response, document_name, doctype, settings_name)
 
 
 def verify_and_fix_invoice_info(
@@ -547,18 +547,32 @@ def verify_and_fix_invoice_info(
     )
 
     if is_invoice_data_matching(invoice_data, data):
-        process_invoice_response(response, document_name, doctype)
+        process_invoice_response(response, document_name, doctype, settings_name)
     else:
         handle_invoice_mismatch(doc, document_name, doctype, settings_name, data)
 
 
-def process_invoice_response(response: dict, document_name: str, doctype: str) -> None:
+def process_invoice_response(response: dict, document_name: str, doctype: str,  settings_name: str | None = None) -> None:
     """Common function to process invoice response and update document"""
     data = get_response_data(response)
-    if not data or not data.get("scu_data"):
+    if not data:  
         return
-
     custom_slade_id = data.get("id")
+    slade_id = frappe.get_value(doctype, document_name, "custom_slade_id")
+
+    frappe.log_error(title="Invoice Response Data", message=f"{slade_id} {custom_slade_id} {data.get('scu_data')}")
+
+    if not slade_id and custom_slade_id and not data.get("scu_data"):
+        company =  frappe.get_value(doctype, document_name, "company")
+        frappe.enqueue(
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
+            id=custom_slade_id,
+            document_name=document_name,
+            invoice_type=doctype,
+            settings_name=settings_name,
+            company=company,
+        )
+
     updates = {
         "custom_slade_id": custom_slade_id,
         **map_scu_fields(
@@ -569,6 +583,9 @@ def process_invoice_response(response: dict, document_name: str, doctype: str) -
     if document_name:
         frappe.db.set_value(doctype, document_name, updates)
         frappe.publish_realtime("refresh_form", document_name)
+    
+    if not data.get("scu_data"):
+        verify_and_fix_invoice_revisions(doctype, document_name, data)
 
 
 def verify_and_fix_invoice_revisions(
