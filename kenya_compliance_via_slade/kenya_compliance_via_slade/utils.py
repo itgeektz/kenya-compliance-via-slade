@@ -10,6 +10,7 @@ from decimal import ROUND_DOWN, Decimal
 from io import BytesIO
 from typing import Any, Dict, List, Union
 from urllib.parse import urlencode
+from collections import defaultdict
 
 import aiohttp
 import qrcode
@@ -374,7 +375,66 @@ def extract_document_series_number(document: Document) -> int | None:
         return int(split_invoice_name[-2])
 
 
+def get_kes_conversion_rate(currency, company_currency, posting_date=None):
+    """
+    Resolve conversion to KES.
+
+    Priority:
+    1. currency -> KES
+    2. company_currency -> KES
+
+    Returns:
+        (conversion_rate, used_rate)
+
+    Throws:
+        If no valid rate exists.
+    """
+
+    if not posting_date:
+        posting_date = frappe.utils.nowdate()
+
+    def get_rate(frm, to):
+        return (
+            frappe.db.get_value(
+                "Currency Exchange",
+                {
+                    "from_currency": frm,
+                    "to_currency": to,
+                    "date": ["<=", posting_date],
+                    "for_selling": 1,
+                },
+                "exchange_rate",
+                order_by="date desc",
+            )
+        )
+
+    rate = get_rate(currency, "KES")
+    if rate:
+        return rate, "net"
+
+    rate = get_rate(company_currency, "KES")
+    if rate:
+        return rate, "base"
+    frappe.throw(
+        f"No exchange rate found to KES for {currency} or {company_currency} on {posting_date}"
+    )
+
+
 def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
+    currency = invoice.currency
+    company_currency = frappe.get_value("Company", invoice.company, "default_currency")
+    convertion_rate = 1
+    used_rate = "net"
+    if (currency != "KES") and (company_currency != "KES"):
+        convertion_rate, used_rate = get_kes_conversion_rate(
+            currency=currency,
+            company_currency=company_currency,
+            posting_date=invoice.posting_date,
+        )
+
+    rate_field = "net_rate" if (currency == "KES" or used_rate == "net") else "base_net_rate"
+    tax_field = "custom_tax_amount" if (currency == "KES" or used_rate == "net") else "custom_base_tax_amount"
+    
     reference_number = get_invoice_reference_number(invoice)
     date_str = f"{invoice.posting_date} {invoice.posting_time or '00:00:00'}"
     fmt = "%Y-%m-%d %H:%M:%S.%f" if "." in date_str else "%Y-%m-%d %H:%M:%S"
@@ -399,15 +459,15 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
     calculate_tax(invoice)
 
     for item in invoice.items:
-        tax_amount = item.get("custom_tax_amount", 0) or 0
+        tax_amount = item.get(tax_field, 0) or 0
         qty = abs(item.get("qty"))
-        base_net_rate = round(item.get("base_net_rate") or 0, 4)
+        base_net_rate = round(item.get(rate_field) or 0, 4)
         tax_code = item.get("taxation_type_code", "A") or "A"
         payload["itemDetails"].append(
             {
                 "product_name": item.item_code,
                 "unit_price": round(
-                    base_net_rate + (tax_amount / qty if qty else 0), 4
+                   ( base_net_rate + (tax_amount / qty if qty else 0)) * convertion_rate, 4
                 ),
                 "quantity": qty,
                 "uom": item.uom or "Pcs",
@@ -549,31 +609,96 @@ def calculate_tax(doc: "Document") -> None:
     - Item-level tax templates (if any item has one), or
     - Document-level taxes (if no items have tax templates)
     Then set taxation type codes for all items.
-    """
-    taxes = doc.get("taxes", [])
-    has_item_level_tax = any(item.item_tax_template for item in doc.items)
+    """        
+    tax_table = doc.get("item_wise_tax_details", [])
+    if tax_table:
+        _aggregate_item_wise_taxes(doc, tax_table)
+    else:
+        taxes = doc.get("taxes", [])
+        has_item_level_tax = any(item.item_tax_template for item in doc.items)
 
-    if has_item_level_tax:
-        _calculate_item_level_taxes(doc)
-    elif taxes:
-        _calculate_document_level_taxes(doc, taxes)
+        if has_item_level_tax:
+            _calculate_item_level_taxes(doc)
+        elif taxes:
+            _calculate_document_level_taxes(doc, taxes)
 
     _set_taxation_type_codes(doc)
 
 
+def _aggregate_item_wise_taxes(doc: "Document", tax_table: list) -> None:
+    """
+    Group item_wise_tax_details by item_row and calculate
+    total tax amount and effective rate per item.
+    """
+    grouped = defaultdict(lambda: {
+        "tax_amount": 0.0,
+        "taxable_amount": 0.0,
+        "rates": []
+    })
+
+    currency = doc.currency
+    company_currency = frappe.get_value("Company", doc.company, "default_currency")
+
+    for row in tax_table:
+        grouped[row.item_row]["tax_amount"] += float(row.amount or 0.0)
+        grouped[row.item_row]["taxable_amount"] = float(row.taxable_amount or 0.0)
+        grouped[row.item_row]["rates"].append(float(row.rate or 0.0))
+
+    for item in doc.items:
+        data = grouped.get(item.name)
+        if not data:
+            continue
+
+        taxable = data["taxable_amount"]
+        total_tax = data["tax_amount"]
+
+        effective_rate = (
+            (total_tax / taxable) * 100
+            if taxable else 0.0
+        )
+
+        net_total_tax = total_tax
+
+        if currency != company_currency:
+            net_total_tax = float(net_total_tax / doc.get("conversion_rate", 1.0))  
+
+
+        frappe.db.set_value("Sales Invoice Item", item.name, {
+            "custom_tax_amount": round(net_total_tax, 2),
+            "custom_base_tax_amount": round(total_tax, 2),
+            "custom_tax_rate": round(effective_rate, 2),
+        }, update_modified=False)
+
+
 def _calculate_item_level_taxes(doc: "Document") -> None:
     """Calculate taxes using each item's individual tax template"""
+    currency = doc.currency
+    company_currency = frappe.get_value("Company", doc.company, "default_currency")
+
     for item in doc.items:
         tax_rate = (
             float(get_item_tax_rate(item.item_tax_template))
             if item.item_tax_template
             else 0.0
         )
-        base_net_amount = float(item.base_net_amount or 0.0)
-        tax_amount = base_net_amount * tax_rate / 100.0
 
-        item.custom_tax_amount = float(tax_amount)
-        item.custom_tax_rate = float(tax_rate)
+        base_net_amount = float(item.base_net_amount or 0.0)
+        total_tax = base_net_amount * tax_rate / 100.0
+
+        net_total_tax = total_tax
+        if currency != company_currency:
+            net_total_tax = float(net_total_tax / doc.get("conversion_rate", 1.0))
+
+        frappe.db.set_value(
+            "Sales Invoice Item",
+            item.name,
+            {
+                "custom_tax_amount": round(net_total_tax, 2),
+                "custom_base_tax_amount": round(total_tax, 2),
+                "custom_tax_rate": round(tax_rate, 2),
+            },
+            update_modified=False,
+        )
 
 
 def _calculate_document_level_taxes(doc: "Document", taxes: list) -> None:
@@ -587,16 +712,33 @@ def _calculate_document_level_taxes(doc: "Document", taxes: list) -> None:
 
     total_tax_amount = sum(float(tax.tax_amount or 0) for tax in taxes)
 
-    for item in doc.items:
-        item_ratio = float(item.base_net_amount) / total_net_amount
-        item.custom_tax_amount = float(total_tax_amount * item_ratio)
+    currency = doc.currency
+    company_currency = frappe.get_value("Company", doc.company, "default_currency")
 
-        if float(item.base_net_amount) > 0:
-            item.custom_tax_rate = (
-                float(item.custom_tax_amount) / float(item.base_net_amount)
-            ) * 100
-        else:
-            item.custom_tax_rate = 0
+    for item in doc.items:
+        base_net_amount = float(item.base_net_amount or 0.0)
+
+        item_ratio = base_net_amount / total_net_amount
+        total_tax = float(total_tax_amount * item_ratio)
+
+        effective_rate = (
+            (total_tax / base_net_amount) * 100 if base_net_amount else 0.0
+        )
+
+        net_total_tax = total_tax
+        if currency != company_currency:
+            net_total_tax = float(net_total_tax / doc.get("conversion_rate", 1.0))
+
+        frappe.db.set_value(
+            "Sales Invoice Item",
+            item.name,
+            {
+                "custom_tax_amount": round(net_total_tax, 2),
+                "custom_base_tax_amount": round(total_tax, 2),
+                "custom_tax_rate": round(effective_rate, 2),
+            },
+            update_modified=False,
+        )
 
 
 def get_item_tax_rate(item_tax_template: str) -> float:
@@ -667,7 +809,7 @@ A classic example usecase is Apex tevin typecase where the tax rate is fetched f
 #     return None
 
 
-def before_save_(doc: "Document", method: str | None = None) -> None:
+def after_save_(doc: "Document", method: str | None = None) -> None:
     if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
         return
     calculate_tax(doc)
@@ -1367,8 +1509,7 @@ def get_active_settings(
                 distinct=True,
                 ignore_permissions=True,
             )
-            if mapped_settings:
-                return mapped_settings
+            return mapped_settings
 
         return (
             frappe.get_all(
@@ -1718,9 +1859,23 @@ def build_return_invoice_payload(
     Returns:
         dict: The payload to submit to eTims for a return invoice.
     """
+    currency = invoice.currency
+    company_currency = frappe.get_value("Company", invoice.company, "default_currency")
+    convertion_rate = 1
+    used_rate = "net"
+    if (currency != "KES") and (company_currency != "KES"):
+        convertion_rate, used_rate = get_kes_conversion_rate(
+            currency=currency,
+            company_currency=company_currency,
+            posting_date=invoice.posting_date,
+        )
+
+    rate_field = "net_rate" if (currency == "KES" or used_rate == "net") else "base_net_rate"
+    tax_field = "custom_tax_amount" if (currency == "KES" or used_rate == "net") else "custom_base_tax_amount"
+     
     original_invoice = frappe.get_doc("Sales Invoice", invoice.return_against)
-    original_invoice_total = abs(float(original_invoice.base_grand_total))
-    return_total = abs(float(invoice.base_grand_total))
+    original_invoice_total = abs(float(original_invoice.base_grand_total)  * convertion_rate)
+    return_total = abs(float(invoice.base_grand_total) * convertion_rate)
     is_full_return = abs(original_invoice_total - return_total) < 0.01
     reference_number = get_invoice_reference_number(original_invoice)
     amount = (
@@ -1735,6 +1890,9 @@ def build_return_invoice_payload(
         invoice=invoice,
         kra_invoice_data=kra_invoice_data,
         is_full_return=is_full_return,
+        rate_field=rate_field,
+        tax_field=tax_field,
+        convertion_rate=convertion_rate,
     )
 
 
@@ -1745,6 +1903,9 @@ def prepare_return_invoice_payload(
     invoice: Document,
     kra_invoice_data: Dict[str, Any],
     is_full_return: bool,
+    rate_field: str,
+    tax_field: str,
+    convertion_rate: float,
 ) -> Dict[str, Any]:
     items = []
     if is_full_return:
@@ -1758,14 +1919,14 @@ def prepare_return_invoice_payload(
             )
     else:
         for item in invoice.items:
-            tax_amount = item.get("custom_tax_amount", 0) or 0
-            qty = abs(item.get("qty"))
-            base_amount = round(abs(item.get("base_amount")) or 0, 4)
+            tax_amount = item.get(tax_field, 0) or 0
+            qty = abs(item.get("qty")) 
+            base_amount = round(abs(item.get(rate_field)) or 0, 4)
             items.append(
                 {
                     "item_name": item.item_code,
                     "quantity": 1,
-                    "amount": round(base_amount + tax_amount, 4) * qty,
+                    "amount": round(base_amount - tax_amount, 4) * qty  * convertion_rate,
                 }
             )
 
