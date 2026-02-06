@@ -576,7 +576,7 @@ def process_invoice_response(response: dict, document_name: str, doctype: str,  
     updates = {
         "custom_slade_id": custom_slade_id,
         **map_scu_fields(
-            data.get("scu_data"), custom_slade_id, doctype, qr_key="qr_code_url"
+            data, custom_slade_id, doctype, qr_key="qr_code_url"
         ),
     }
 
@@ -584,8 +584,6 @@ def process_invoice_response(response: dict, document_name: str, doctype: str,  
         frappe.db.set_value(doctype, document_name, updates)
         frappe.publish_realtime("refresh_form", document_name)
     
-    if not data.get("scu_data"):
-        verify_and_fix_invoice_revisions(doctype, document_name, data)
 
 
 def verify_and_fix_invoice_revisions(
@@ -878,6 +876,9 @@ def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:
 
 
 def map_scu_fields(data: dict, docname: str, doctype: str, qr_key: str) -> dict:
+    if not data.get("scu_data"):
+        return {}
+    data = data.get("scu_data", {})
     qr_url = data.get(qr_key)
     image_url = (
         generate_and_attach_qr_code(qr_url, docname, doctype) if qr_url else None
