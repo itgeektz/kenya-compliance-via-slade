@@ -394,18 +394,16 @@ def get_kes_conversion_rate(currency, company_currency, posting_date=None):
         posting_date = frappe.utils.nowdate()
 
     def get_rate(frm, to):
-        return (
-            frappe.db.get_value(
-                "Currency Exchange",
-                {
-                    "from_currency": frm,
-                    "to_currency": to,
-                    "date": ["<=", posting_date],
-                    "for_selling": 1,
-                },
-                "exchange_rate",
-                order_by="date desc",
-            )
+        return frappe.db.get_value(
+            "Currency Exchange",
+            {
+                "from_currency": frm,
+                "to_currency": to,
+                "date": ["<=", posting_date],
+                "for_selling": 1,
+            },
+            "exchange_rate",
+            order_by="date desc",
         )
 
     rate = get_rate(currency, "KES")
@@ -432,9 +430,15 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
             posting_date=invoice.posting_date,
         )
 
-    rate_field = "net_rate" if (currency == "KES" or used_rate == "net") else "base_net_rate"
-    tax_field = "custom_tax_amount" if (currency == "KES" or used_rate == "net") else "custom_base_tax_amount"
-    
+    rate_field = (
+        "net_rate" if (currency == "KES" or used_rate == "net") else "base_net_rate"
+    )
+    tax_field = (
+        "custom_tax_amount"
+        if (currency == "KES" or used_rate == "net")
+        else "custom_base_tax_amount"
+    )
+
     reference_number = get_invoice_reference_number(invoice)
     date_str = f"{invoice.posting_date} {invoice.posting_time or '00:00:00'}"
     fmt = "%Y-%m-%d %H:%M:%S.%f" if "." in date_str else "%Y-%m-%d %H:%M:%S"
@@ -467,7 +471,9 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
             {
                 "product_name": item.item_code,
                 "unit_price": round(
-                   ( base_net_rate + (tax_amount / qty if qty else 0)) * convertion_rate, 4
+                    (base_net_rate + (tax_amount / qty if qty else 0))
+                    * convertion_rate,
+                    4,
                 ),
                 "quantity": qty,
                 "uom": item.uom or "Pcs",
@@ -523,11 +529,13 @@ def update_last_request_date(
     if len(route) < 5:
         return
 
-    doc = frappe.get_doc(routes_table, {"url_path": route})
-
-    doc.last_request_date = response_datetime
-
-    doc.save(ignore_permissions=True)
+    frappe.db.set_value(
+        routes_table,
+        {"url_path": route},
+        "last_request_date",
+        response_datetime,
+        update_modified=False,
+    )
     frappe.db.commit()
 
 
@@ -609,7 +617,7 @@ def calculate_tax(doc: "Document") -> None:
     - Item-level tax templates (if any item has one), or
     - Document-level taxes (if no items have tax templates)
     Then set taxation type codes for all items.
-    """        
+    """
     tax_table = doc.get("item_wise_tax_details", [])
     if tax_table:
         _aggregate_item_wise_taxes(doc, tax_table)
@@ -630,11 +638,9 @@ def _aggregate_item_wise_taxes(doc: "Document", tax_table: list) -> None:
     Group item_wise_tax_details by item_row and calculate
     total tax amount and effective rate per item.
     """
-    grouped = defaultdict(lambda: {
-        "tax_amount": 0.0,
-        "taxable_amount": 0.0,
-        "rates": []
-    })
+    grouped = defaultdict(
+        lambda: {"tax_amount": 0.0, "taxable_amount": 0.0, "rates": []}
+    )
 
     currency = doc.currency
     company_currency = frappe.get_value("Company", doc.company, "default_currency")
@@ -652,22 +658,23 @@ def _aggregate_item_wise_taxes(doc: "Document", tax_table: list) -> None:
         taxable = data["taxable_amount"]
         total_tax = data["tax_amount"]
 
-        effective_rate = (
-            (total_tax / taxable) * 100
-            if taxable else 0.0
-        )
+        effective_rate = (total_tax / taxable) * 100 if taxable else 0.0
 
         net_total_tax = total_tax
 
         if currency != company_currency:
-            net_total_tax = float(net_total_tax / doc.get("conversion_rate", 1.0))  
+            net_total_tax = float(net_total_tax / doc.get("conversion_rate", 1.0))
 
-
-        frappe.db.set_value("Sales Invoice Item", item.name, {
-            "custom_tax_amount": round(net_total_tax, 2),
-            "custom_base_tax_amount": round(total_tax, 2),
-            "custom_tax_rate": round(effective_rate, 2),
-        }, update_modified=False)
+        frappe.db.set_value(
+            "Sales Invoice Item",
+            item.name,
+            {
+                "custom_tax_amount": round(net_total_tax, 2),
+                "custom_base_tax_amount": round(total_tax, 2),
+                "custom_tax_rate": round(effective_rate, 2),
+            },
+            update_modified=False,
+        )
 
 
 def _calculate_item_level_taxes(doc: "Document") -> None:
@@ -721,9 +728,7 @@ def _calculate_document_level_taxes(doc: "Document", taxes: list) -> None:
         item_ratio = base_net_amount / total_net_amount
         total_tax = float(total_tax_amount * item_ratio)
 
-        effective_rate = (
-            (total_tax / base_net_amount) * 100 if base_net_amount else 0.0
-        )
+        effective_rate = (total_tax / base_net_amount) * 100 if base_net_amount else 0.0
 
         net_total_tax = total_tax
         if currency != company_currency:
@@ -1243,7 +1248,7 @@ def get_link_value(
             title=f"Error Fetching Link for {doctype}",
             message=f"Error while fetching link for {doctype} with {field_name}={value}: {str(e)}",
         )
-        return None 
+        return None
 
 
 def get_or_create_link(doctype: str, field_name: str, value: str) -> str:
@@ -1870,11 +1875,19 @@ def build_return_invoice_payload(
             posting_date=invoice.posting_date,
         )
 
-    rate_field = "net_rate" if (currency == "KES" or used_rate == "net") else "base_net_rate"
-    tax_field = "custom_tax_amount" if (currency == "KES" or used_rate == "net") else "custom_base_tax_amount"
-     
+    rate_field = (
+        "net_rate" if (currency == "KES" or used_rate == "net") else "base_net_rate"
+    )
+    tax_field = (
+        "custom_tax_amount"
+        if (currency == "KES" or used_rate == "net")
+        else "custom_base_tax_amount"
+    )
+
     original_invoice = frappe.get_doc("Sales Invoice", invoice.return_against)
-    original_invoice_total = abs(float(original_invoice.base_grand_total)  * convertion_rate)
+    original_invoice_total = abs(
+        float(original_invoice.base_grand_total) * convertion_rate
+    )
     return_total = abs(float(invoice.base_grand_total) * convertion_rate)
     is_full_return = abs(original_invoice_total - return_total) < 0.01
     reference_number = get_invoice_reference_number(original_invoice)
@@ -1920,13 +1933,15 @@ def prepare_return_invoice_payload(
     else:
         for item in invoice.items:
             tax_amount = item.get(tax_field, 0) or 0
-            qty = abs(item.get("qty")) 
+            qty = abs(item.get("qty"))
             base_amount = round(abs(item.get(rate_field)) or 0, 4)
             items.append(
                 {
                     "item_name": item.item_code,
                     "quantity": 1,
-                    "amount": round(base_amount - tax_amount, 4) * qty  * convertion_rate,
+                    "amount": round(base_amount - tax_amount, 4)
+                    * qty
+                    * convertion_rate,
                 }
             )
 
