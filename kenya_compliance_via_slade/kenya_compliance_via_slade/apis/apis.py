@@ -262,7 +262,7 @@ def perform_item_registration(item_name: str, settings_name: str) -> dict | None
         )
 
     if not item.custom_item_code_etims:
-        generate_and_set_etims_code(item)  
+        generate_and_set_etims_code(item)
 
     frappe.enqueue(
         process_request,
@@ -1130,8 +1130,8 @@ def _process_invoice_fetch_request(
     if invoice.is_return or is_return:
         route_key = "SalesCreditNoteSaveReq"
 
-    if id or invoice.custom_slade_id:
-        request_data["id"] = id or invoice.custom_slade_id
+    if id:
+        request_data["id"] = id
     else:
         if (invoice.is_return and invoice.return_against) or (
             is_return and original_invoice_id
@@ -1170,7 +1170,7 @@ def get_invoice_details(
     invoice = frappe.get_doc(invoice_type, document_name)
     reference_number = get_invoice_reference_number(invoice)
     _process_invoice_fetch_request(
-        id=id,
+        id=None,
         document_name=document_name,
         invoice_type=invoice_type,
         settings_name=settings_name,
