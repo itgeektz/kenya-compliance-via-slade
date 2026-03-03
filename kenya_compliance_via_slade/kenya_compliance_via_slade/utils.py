@@ -422,22 +422,23 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
     currency = invoice.currency
     company_currency = frappe.get_value("Company", invoice.company, "default_currency")
     convertion_rate = 1
-    used_rate = "net"
-    if (currency != "KES") and (company_currency != "KES"):
+    rate_field, tax_field = "net_rate", "custom_tax_amount"
+
+    if currency == "KES":
+        rate_field = "net_rate"
+        tax_field = "custom_tax_amount"
+    elif company_currency == "KES":
+        rate_field = "base_net_rate"
+        tax_field = "custom_base_tax_amount"
+    else:
         convertion_rate, used_rate = get_kes_conversion_rate(
             currency=currency,
             company_currency=company_currency,
             posting_date=invoice.posting_date,
         )
-
-    rate_field = (
-        "net_rate" if (currency == "KES" or used_rate == "net") else "base_net_rate"
-    )
-    tax_field = (
-        "custom_tax_amount"
-        if (currency == "KES" or used_rate == "net")
-        else "custom_base_tax_amount"
-    )
+        if used_rate != "net":
+            rate_field = "base_net_rate"
+            tax_field = "custom_base_tax_amount"
 
     reference_number = get_invoice_reference_number(invoice)
     date_str = f"{invoice.posting_date} {invoice.posting_time or '00:00:00'}"
@@ -1867,22 +1868,23 @@ def build_return_invoice_payload(
     currency = invoice.currency
     company_currency = frappe.get_value("Company", invoice.company, "default_currency")
     convertion_rate = 1
-    used_rate = "net"
-    if (currency != "KES") and (company_currency != "KES"):
+    rate_field, tax_field = "net_rate", "custom_tax_amount"
+
+    if currency == "KES":
+        rate_field = "net_rate"
+        tax_field = "custom_tax_amount"
+    elif company_currency == "KES":
+        rate_field = "base_net_rate"
+        tax_field = "custom_base_tax_amount"
+    else:
         convertion_rate, used_rate = get_kes_conversion_rate(
             currency=currency,
             company_currency=company_currency,
             posting_date=invoice.posting_date,
         )
-
-    rate_field = (
-        "net_rate" if (currency == "KES" or used_rate == "net") else "base_net_rate"
-    )
-    tax_field = (
-        "custom_tax_amount"
-        if (currency == "KES" or used_rate == "net")
-        else "custom_base_tax_amount"
-    )
+        if used_rate != "net":
+            rate_field = "base_net_rate"
+            tax_field = "custom_base_tax_amount"
 
     original_invoice = frappe.get_doc("Sales Invoice", invoice.return_against)
     original_invoice_total = abs(
