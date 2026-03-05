@@ -355,6 +355,15 @@ def sales_information_submission_on_error(
         #     at_front=False, job_name=f"retry_invoice_{doc.name}_{int(time.time())}",
         # )
 
+    elif "duplicate key value violates unique constraint" in error_message:
+        frappe.enqueue(
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
+            document_name=document_name,
+            invoice_type=doctype,
+            settings_name=settings_name,
+            queue="long",
+        )
+
 
 # def sales_information_submission_on_success(
 #     response: dict, document_name: str, doctype: str, **kwargs
