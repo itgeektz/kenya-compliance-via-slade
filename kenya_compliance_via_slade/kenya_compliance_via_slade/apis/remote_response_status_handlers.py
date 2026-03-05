@@ -302,8 +302,25 @@ def sales_information_submission_on_success(
     """
     Callback after successful submission. Maps SCU data and signature_link.
     """
+    qr_url = response.get("signature_link")
+    image_url = (
+        generate_and_attach_qr_code(qr_url, document_name, doctype) if qr_url else None
+    )
+
     updates = {
         "custom_successfully_submitted": 1,
+        "custom_qr_code_url": response.get("signature_link") or None,
+        "custom_qr_code": image_url,
+        "custom_scu_invoice_number": response.get("scu_invoice_number") or None,
+        "custom_control_unit_date_time": parse_datetime(
+            response.get("scu_receipt_timestamp")
+        )
+        or None,
+        "custom_scu_id": response.get("scu_id") or None,
+        "custom_scu_mrc_no": response.get("scu_mrc_number") or None,
+        "custom_current_receipt_number": response.get("scu_receipt_number") or None,
+        "custom_receipt_signature": response.get("scu_receipt_signature") or None,
+        "custom_internal_data": response.get("scu_internal_data") or None,
     }
 
     frappe.db.set_value(doctype, document_name, updates)
@@ -561,18 +578,23 @@ def verify_and_fix_invoice_info(
         handle_invoice_mismatch(doc, document_name, doctype, settings_name, data)
 
 
-def process_invoice_response(response: dict, document_name: str, doctype: str,  settings_name: str | None = None) -> None:
+def process_invoice_response(
+    response: dict, document_name: str, doctype: str, settings_name: str | None = None
+) -> None:
     """Common function to process invoice response and update document"""
     data = get_response_data(response)
-    if not data:  
+    if not data:
         return
     custom_slade_id = data.get("id")
     slade_id = frappe.get_value(doctype, document_name, "custom_slade_id")
 
-    frappe.log_error(title="Invoice Response Data", message=f"{slade_id} {custom_slade_id} {data.get('scu_data')}")
+    frappe.log_error(
+        title="Invoice Response Data",
+        message=f"{slade_id} {custom_slade_id} {data.get('scu_data')}",
+    )
 
     if not slade_id and custom_slade_id and not data.get("scu_data"):
-        company =  frappe.get_value(doctype, document_name, "company")
+        company = frappe.get_value(doctype, document_name, "company")
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
             id=custom_slade_id,
@@ -584,15 +606,12 @@ def process_invoice_response(response: dict, document_name: str, doctype: str,  
 
     updates = {
         "custom_slade_id": custom_slade_id,
-        **map_scu_fields(
-            data, custom_slade_id, doctype, qr_key="qr_code_url"
-        ),
+        **map_scu_fields(data, custom_slade_id, doctype, qr_key="qr_code_url"),
     }
 
     if document_name:
         frappe.db.set_value(doctype, document_name, updates)
         frappe.publish_realtime("refresh_form", document_name)
-    
 
 
 def verify_and_fix_invoice_revisions(
