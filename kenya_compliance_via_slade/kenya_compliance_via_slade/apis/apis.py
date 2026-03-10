@@ -7,7 +7,6 @@ import frappe.defaults
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder import DocType
-from frappe.utils import chunked
 
 from ..background_tasks.task_response_handlers import (
     operation_types_search_on_success,
@@ -22,6 +21,7 @@ from ..doctype.doctype_names_mapping import (
 )
 from ..utils import (
     build_return_invoice_payload,
+    chunked,
     generate_custom_item_code_etims,
     get_active_settings,
     get_invoice_reference_number,
