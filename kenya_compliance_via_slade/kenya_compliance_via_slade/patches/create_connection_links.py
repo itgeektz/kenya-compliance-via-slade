@@ -14,7 +14,6 @@ def update_links_for_doctypes() -> None:
         try:
             doc = frappe.get_doc("DocType", doctype)
 
-            # Filter out existing links to Integration Request
             doc.links = [
             link for link in doc.get("links", [])
             if link.link_doctype != "Integration Request"

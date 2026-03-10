@@ -74,13 +74,13 @@ def validate(doc: Document, method: str = None) -> None:
 
         if not doc.custom_item_code_etims:
             doc.custom_item_code_etims = generate_custom_item_code_etims(doc)
-            
+
 
 @frappe.whitelist()
 def prevent_item_deletion(doc: Document, method=None) -> None:
     if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
         return
-    if doc.custom_item_registered == 1:  
+    if doc.custom_item_registered == 1:
         frappe.throw(_("Cannot delete registered items"))
     pass
 
