@@ -1996,3 +1996,17 @@ def prepare_credit_note_items_payload(
             }
         )
     return credit_note_items
+
+
+def validate_kra_pin(pin: str):
+    if not pin:
+        return
+
+    pattern = r"^[A-Z]\d{9}[A-Z]$"
+
+    if not re.match(pattern, pin):
+        frappe.throw(
+            _(
+                "Invalid KRA PIN format. Expected format like P123456789H or A123456789B."
+            )
+        )

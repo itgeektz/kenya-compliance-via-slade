@@ -3,13 +3,13 @@ from frappe import _
 from frappe.model.document import Document
 
 from ...apis.apis import send_branch_customer_details
-from ...utils import get_active_settings
+from ...utils import get_active_settings, validate_kra_pin
 
 
-def before_save(doc: Document, method: str = None) -> None:
-    if not doc.has_value_changed("tax_id") or doc.is_new():
+def after_save(doc: Document, method: str = None) -> None:
+    if doc.is_new():
         return
-    # submit_details(doc)
+    submit_details(doc)
 
 
 def after_insert(doc: Document, method: str = None) -> None:
@@ -23,6 +23,8 @@ def validate(doc: Document, method: str = None) -> None:
     tax_id = (getattr(doc, "tax_id", None) or "").strip()
     if not tax_id:
         return
+
+    validate_kra_pin(tax_id)
 
     tax_id_lower = tax_id.lower()
 
@@ -52,6 +54,9 @@ def validate(doc: Document, method: str = None) -> None:
 
 
 def submit_details(doc: Document) -> None:
+    if doc.tax_id:
+        validate_kra_pin(doc.tax_id)
+
     active_settings = get_active_settings()
     if not active_settings:
         return
