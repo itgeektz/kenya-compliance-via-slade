@@ -2010,3 +2010,8 @@ def validate_kra_pin(pin: str):
                 "Invalid KRA PIN format. Expected format like P123456789H or A123456789B."
             )
         )
+
+
+def chunked(iterable, size):
+    for i in range(0, len(iterable), size):
+        yield iterable[i : i + size]
