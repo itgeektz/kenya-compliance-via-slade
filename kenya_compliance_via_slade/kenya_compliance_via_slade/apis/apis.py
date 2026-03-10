@@ -129,11 +129,13 @@ def bulk_register_items(docs_list: str, settings_name: str = None) -> None:
         return
 
     for setting in settings:
-        for item_name in item_names:
+        for batch in chunked(item_names, 100):
             frappe.enqueue(
-                perform_item_registration,
-                item_name=item_name,
+                process_item_batch,
+                queue="long",
                 settings_name=setting.name,
+                items=batch,
+                job_name=f"Item Register Batch ({len(batch)})",
             )
 
 
@@ -165,11 +167,15 @@ def update_all_items(settings_name: str = None) -> None:
             .run(as_dict=True)
         )
 
-        for item in items:
+        item_names = [i.name for i in items]
+
+        for batch in chunked(item_names, 100):
             frappe.enqueue(
-                perform_item_registration,
-                item_name=item.name,
+                process_item_batch,
+                queue="long",
                 settings_name=setting.name,
+                items=batch,
+                job_name=f"Item Update Batch ({len(batch)})",
             )
 
 
@@ -201,12 +207,24 @@ def register_all_items(settings_name: str = None) -> None:
             .run(as_dict=True)
         )
 
-        for item in items:
+        item_names = [i.name for i in items]
+
+        for batch in chunked(item_names, 100):
             frappe.enqueue(
-                perform_item_registration,
-                item_name=item.name,
+                process_item_batch,
+                queue="long",
                 settings_name=setting.name,
+                items=batch,
+                job_name=f"Item Register Batch ({len(batch)})",
             )
+
+
+def process_item_batch(settings_name: str, items: list):
+    for item_name in items:
+        perform_item_registration(
+            item_name=item_name,
+            settings_name=settings_name,
+        )
 
 
 @frappe.whitelist()
@@ -461,7 +479,7 @@ def send_branch_customer_details(
 
     request_data = (
         {"customer_tax_pin": data.tax_id, "document_name": name}
-        if hasattr(data, "tax_id") and data.tax_id is not None
+        if hasattr(data, "tax_id") and data.tax_id not in (None, "")
         else {"partner_name": name, "document_name": name}
     )
 
