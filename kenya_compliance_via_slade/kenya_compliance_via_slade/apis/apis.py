@@ -405,9 +405,7 @@ def bulk_submit_customers(docs_list: str, settings_name: str = None) -> None:
         return
 
     for setting in settings:
-        customer_names = [c.name for c in customers]
-
-        for batch in chunked(customer_names, 100):
+        for batch in chunked(customers, 100):
             frappe.enqueue(
                 process_customer_batch,
                 queue="long",
