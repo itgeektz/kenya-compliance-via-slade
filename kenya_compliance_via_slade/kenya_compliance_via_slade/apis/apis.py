@@ -405,10 +405,11 @@ def submit_all_customers(settings_name: str = None) -> None:
         if settings_name
         else get_active_settings()
     )
+
     if not active_settings:
         return
-    for setting in active_settings:
 
+    for setting in active_settings:
         Customer = DocType("Customer")
         Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
 
