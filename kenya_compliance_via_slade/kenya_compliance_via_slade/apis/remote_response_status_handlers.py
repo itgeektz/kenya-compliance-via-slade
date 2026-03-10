@@ -134,7 +134,9 @@ def item_registration_on_success(
         "Item", document_name, settings_name, response.get("id")
     )
 
-    if item.is_stock_item:
+    settings = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
+
+    if item.is_stock_item and settings.stock_auto_submission_enabled:
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.submit_inventory",
             name=document_name,
