@@ -7,6 +7,7 @@ import frappe.defaults
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder import DocType
+from frappe.utils import chunked
 
 from ..background_tasks.task_response_handlers import (
     operation_types_search_on_success,
@@ -386,12 +387,14 @@ def bulk_submit_customers(docs_list: str, settings_name: str = None) -> None:
         return
 
     for setting in settings:
-        for customer in customers:
+        customer_names = [c.name for c in customers]
+
+        for batch in chunked(customer_names, 100):
             frappe.enqueue(
-                send_branch_customer_details,
-                name=customer,
-                is_customer=True,
+                process_customer_batch,
+                queue="long",
                 settings_name=setting.name,
+                customers=batch,
             )
 
 
@@ -418,17 +421,28 @@ def submit_all_customers(settings_name: str = None) -> None:
                 & (Mapping.etims_setup == setting.name)
             )
             .select(Customer.name)
-            .where((Mapping.name.isnull()))
+            .where(Mapping.name.isnull())
         )
 
         customers = query.run(as_dict=True)
 
-        for customer in customers:
+        customer_names = [c.name for c in customers]
+
+        for batch in chunked(customer_names, 100):
             frappe.enqueue(
-                send_branch_customer_details,
+                process_customer_batch,
+                queue="long",
                 settings_name=setting.name,
-                name=customer.name,
+                customers=batch,
             )
+
+
+def process_customer_batch(settings_name: str, customers: list):
+    for customer in customers:
+        send_branch_customer_details(
+            settings_name=settings_name,
+            name=customer,
+        )
 
 
 @frappe.whitelist()
@@ -450,11 +464,8 @@ def send_branch_customer_details(
         else {"partner_name": name, "document_name": name}
     )
 
-    frappe.enqueue(
-        process_request,
-        queue="default",
-        is_async=True,
-        request_data=request_data,
+    process_request(
+        request_data,
         route_key="BhfCustSaveReq",
         handler_function=fetch_matching_partner_on_success,
         request_method="GET",
