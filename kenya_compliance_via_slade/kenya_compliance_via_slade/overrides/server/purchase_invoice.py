@@ -17,7 +17,10 @@ def validate(doc: Document, method: str = None) -> None:
     get_itemised_tax_breakup_data(doc)
     if not doc.taxes:
         vat_acct = frappe.get_value(
-            "Account", {"account_type": "Tax", "tax_rate": "16", "company": doc.company}, ["name"], as_dict=True
+            "Account",
+            {"account_type": "Tax", "tax_rate": "16", "company": doc.company},
+            ["name"],
+            as_dict=True,
         )
         doc.set(
             "taxes",
@@ -61,7 +64,7 @@ def submit_purchase_invoice(doc: Document) -> None:
         #     # or frappe.defaults.get_user_default("Company")
         #     # or frappe.get_value("Company", {}, "name")
         # )
-        
+
         if settings_doc:
             payload = build_purchase_invoice_payload(doc, company_name)
             process_request(
@@ -72,7 +75,6 @@ def submit_purchase_invoice(doc: Document) -> None:
                 doctype="Purchase Invoice",
                 settings_name=settings_doc.name,
             )
-  
 
 
 @frappe.whitelist()
