@@ -259,7 +259,7 @@ scheduler_events = {
 }
 
 after_migrate = [
-    "kenya_compliance_via_slade.kenya_compliance_via_slade.patches.migrate_to_multi_company.execute"
+    "kenya_compliance_via_slade.kenya_compliance_via_slade.migrate.after_migrate"
 ]
 
 # Testing
