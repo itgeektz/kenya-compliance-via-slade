@@ -98,7 +98,7 @@ def update_document_mapping(
         slade_id (str): The Slade ID to set
     """
     doc = frappe.get_doc(doc_type, document_name)
-    if doc.require_tax_id and not doc.tax_id:
+    if doc_type in ["Customer", "Supplier"] and doc.require_tax_id and not doc.tax_id:
         doc.require_tax_id = 0
 
     found = False
