@@ -1552,11 +1552,49 @@ def get_slade360_id(doctype: str, name: str, setting: str) -> str:
             _("Document {0} with name {1} does not exist.").format(doctype, name)
         )
 
+    if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"name": setting, "is_active": 1}):
+        frappe.throw(_("eTims Setup {0} is not active.").format(setting))
+
+    base_filters = {
+        "etims_setup": setting,
+        "parenttype": doctype,
+        "parent": name,
+    }
+
+    filters = base_filters.copy()
+    mapping_meta = frappe.get_meta(SLADE_ID_MAPPING_DOCTYPE_NAME)
+
+    if mapping_meta.has_field("is_active"):
+        filters["is_active"] = 1
+
     slade_id = frappe.db.get_value(
         SLADE_ID_MAPPING_DOCTYPE_NAME,
-        filters={"etims_setup": setting, "parenttype": doctype, "parent": name},
+        filters=filters,
         fieldname="slade360_id",
     )
+
+    if (
+        mapping_meta.has_field("is_active")
+        and not slade_id
+        and frappe.db.exists(SLADE_ID_MAPPING_DOCTYPE_NAME, base_filters)
+    ):
+        doc_link = frappe.utils.get_url_to_form(doctype, name)
+        settings_link = frappe.utils.get_url_to_form(SETTINGS_DOCTYPE_NAME, setting)
+
+        frappe.throw(
+            _(
+                '<a href="{0}" style="font-weight: bold; color: var(--text-color); text-decoration: none;">{1} "{2}"</a> '
+                "is not enabled for eTIMS submission in "
+                '<a href="{3}" style="font-weight: bold; color: var(--text-color); text-decoration: none;">{4} "{5}"</a>.'
+            ).format(
+                doc_link,
+                _(doctype),
+                name,
+                settings_link,
+                _(SETTINGS_DOCTYPE_NAME),
+                setting,
+            )
+        )
 
     return slade_id
 

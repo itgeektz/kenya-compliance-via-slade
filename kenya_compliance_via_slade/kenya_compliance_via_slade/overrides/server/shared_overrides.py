@@ -51,6 +51,13 @@ def generic_invoices_on_submit_override(
     ):
         return
 
+    customer_slade_id = get_slade360_id("Customer", doc.customer, settings_doc.name)
+    if not customer_slade_id:
+        frappe.msgprint(
+            f"Customer {doc.customer} is not registered. Cannot send invoice to eTims."
+        )
+        return
+
     for item in doc.items:
         item_doc = frappe.get_doc("Item", item.item_code)
         slade_id = get_slade360_id("Item", item_doc.get("name"), settings_doc.name)
