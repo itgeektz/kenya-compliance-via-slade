@@ -120,6 +120,7 @@ def update_document_mapping(
             {
                 "etims_setup": settings_name,
                 "slade360_id": slade_id,
+                "is_active": 1,
             },
         )
 
