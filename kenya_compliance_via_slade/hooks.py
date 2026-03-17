@@ -246,15 +246,13 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
-    "daily": [
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.refresh_notices",
-    ],
+    "cron": {
+        "0/5 * * * *": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_autosubmission_scheduler"
+        ],
+    },
     "weekly": [
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.update_setting_passwords",
-    ],
-    "monthly": [
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.refresh_code_lists",
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.get_item_classification_codes",
     ],
 }
 
