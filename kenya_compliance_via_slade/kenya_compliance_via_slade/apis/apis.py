@@ -477,15 +477,12 @@ def send_branch_customer_details(
 
     request_data = (
         {"customer_tax_pin": data.tax_id, "document_name": name}
-        if hasattr(data, "tax_id") and data.tax_id is not None
+        if hasattr(data, "tax_id") and data.tax_id not in (None, "")
         else {"partner_name": name, "document_name": name}
     )
 
-    frappe.enqueue(
-        process_request,
-        queue="default",
-        is_async=True,
-        request_data=request_data,
+    process_request(
+        request_data,
         route_key="BhfCustSaveReq",
         handler_function=fetch_matching_partner_on_success,
         request_method="GET",

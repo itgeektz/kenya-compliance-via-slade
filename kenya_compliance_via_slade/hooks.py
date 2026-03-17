@@ -225,8 +225,8 @@ doc_events = {
         ],
     },
     "Customer": {
-        "before_save": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.before_save"
+        "after_save": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.after_save"
         ],
         "validate": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.validate"
