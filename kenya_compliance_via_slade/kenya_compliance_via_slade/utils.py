@@ -22,6 +22,7 @@ from frappe import _
 from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
 from frappe.query_builder import DocType
+from frappe.utils import now_datetime, add_to_date
 
 from .doctype.doctype_names_mapping import (
     ENVIRONMENT_SPECIFICATION_DOCTYPE_NAME,
@@ -1519,11 +1520,49 @@ def get_slade360_id(doctype: str, name: str, setting: str) -> str:
             _("Document {0} with name {1} does not exist.").format(doctype, name)
         )
 
+    if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"name": setting, "is_active": 1}):
+        frappe.throw(_("eTims Setup {0} is not active.").format(setting))
+
+    base_filters = {
+        "etims_setup": setting,
+        "parenttype": doctype,
+        "parent": name,
+    }
+
+    filters = base_filters.copy()
+    mapping_meta = frappe.get_meta(SLADE_ID_MAPPING_DOCTYPE_NAME)
+
+    if mapping_meta.has_field("is_active"):
+        filters["is_active"] = 1
+
     slade_id = frappe.db.get_value(
         SLADE_ID_MAPPING_DOCTYPE_NAME,
-        filters={"etims_setup": setting, "parenttype": doctype, "parent": name},
+        filters=filters,
         fieldname="slade360_id",
     )
+
+    if (
+        mapping_meta.has_field("is_active")
+        and not slade_id
+        and frappe.db.exists(SLADE_ID_MAPPING_DOCTYPE_NAME, base_filters)
+    ):
+        doc_link = frappe.utils.get_url_to_form(doctype, name)
+        settings_link = frappe.utils.get_url_to_form(SETTINGS_DOCTYPE_NAME, setting)
+
+        frappe.throw(
+            _(
+                '<a href="{0}" style="font-weight: bold; color: var(--text-color); text-decoration: none;">{1} "{2}"</a> '
+                "is not enabled for eTIMS submission in "
+                '<a href="{3}" style="font-weight: bold; color: var(--text-color); text-decoration: none;">{4} "{5}"</a>.'
+            ).format(
+                doc_link,
+                _(doctype),
+                name,
+                settings_link,
+                _(SETTINGS_DOCTYPE_NAME),
+                setting,
+            )
+        )
 
     return slade_id
 
@@ -1963,3 +2002,50 @@ def prepare_credit_note_items_payload(
             }
         )
     return credit_note_items
+
+
+def validate_kra_pin(pin: str):
+    if not pin:
+        return
+
+    pattern = r"^[A-Z]\d{9}[A-Z]$"
+
+    if not re.match(pattern, pin):
+        frappe.throw(
+            _(
+                "Invalid KRA PIN format. Expected format like P123456789H or A123456789B."
+            )
+        )
+
+
+def chunked(iterable, size):
+    for i in range(0, len(iterable), size):
+        yield iterable[i : i + size]
+
+
+def get_next_run(frequency, cron=None):
+    now = now_datetime()
+
+    if not frequency:
+        return None
+
+    if frequency == "Hourly":
+        return add_to_date(now, hours=1)
+    elif frequency == "Daily":
+        return add_to_date(now, days=1)
+    elif frequency == "Weekly":
+        return add_to_date(now, weeks=1)
+    elif frequency == "Monthly":
+        return add_to_date(now, months=1)
+    elif frequency == "Cron" and cron:
+        try:
+            from croniter import croniter
+
+            return croniter(cron, now).get_next(datetime)
+        except ImportError:
+            frappe.log_error(
+                message="cron utility is not available", title="Missing Dependency"
+            )
+            return None
+
+    return None
