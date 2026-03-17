@@ -17,7 +17,10 @@ def validate(doc: Document, method: str = None) -> None:
     get_itemised_tax_breakup_data(doc)
     if not doc.taxes:
         vat_acct = frappe.get_value(
-            "Account", {"account_type": "Tax", "tax_rate": "16", "company": doc.company}, ["name"], as_dict=True
+            "Account",
+            {"account_type": "Tax", "tax_rate": "16", "company": doc.company},
+            ["name"],
+            as_dict=True,
         )
         doc.set(
             "taxes",
@@ -47,7 +50,12 @@ def submit_purchase_invoice(doc: Document) -> None:
             # or frappe.get_value("Company", {}, "name")
         )
         settings_doc = get_settings(company_name=company_name)
-        if doc.prevent_etims_submission or (hasattr(doc, "etr_invoice_number") and doc.etr_invoice_number):
+        if (
+            doc.prevent_etims_submission
+            or (hasattr(doc, "etr_invoice_number") and doc.etr_invoice_number)
+            or not settings_doc
+            or not settings_doc.purchase_auto_submission_enabled
+        ):
             # If the submission is prevented or if the invoice number is already set, skip submission
             return
 
