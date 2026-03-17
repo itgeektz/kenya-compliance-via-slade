@@ -477,7 +477,7 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
                     * convertion_rate,
                     4,
                 ),
-                "quantity": qty,
+                "quantity": round(qty, 2),
                 "uom": item.uom or "Pcs",
                 "tax_code": tax_code,
                 # "product_id": get_slade360_id(
@@ -516,7 +516,7 @@ def get_invoice_items_list(invoice: Document) -> list[dict[str, str | int | None
         items_list.append(
             {
                 "product": item.item_code,
-                "quantity": abs(item.qty),
+                "quantity": round(abs(item.qty), 2),
             }
         )
 
@@ -1967,7 +1967,7 @@ def prepare_return_invoice_payload(
             items.append(
                 {
                     "item_name": line.get("product_name"),
-                    "quantity": abs(line.get("quantity", 0)),
+                    "quantity": round(abs(line.get("quantity", 0)), 2),
                     "amount": round(abs(line.get("price_inclusive_tax", 0)), 4),
                 }
             )
