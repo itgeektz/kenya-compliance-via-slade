@@ -580,11 +580,6 @@ def process_invoice_response(
     custom_slade_id = data.get("id")
     slade_id = frappe.get_value(doctype, document_name, "custom_slade_id")
 
-    frappe.log_error(
-        title="Invoice Response Data",
-        message=f"{slade_id} {custom_slade_id} {data.get('scu_data')}",
-    )
-
     if not slade_id and custom_slade_id and not data.get("scu_data"):
         company = frappe.get_value(doctype, document_name, "company")
         frappe.enqueue(

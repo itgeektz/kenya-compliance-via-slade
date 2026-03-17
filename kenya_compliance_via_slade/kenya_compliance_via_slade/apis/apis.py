@@ -54,36 +54,44 @@ endpoints_builder = EndpointsBuilder()
 
 
 @frappe.whitelist()
-def bulk_submit_sales_invoices(
-    docs_list: str = None, settings_name: str = None
-) -> None:
-    from ..overrides.server.sales_invoice import on_submit
-
-    invoices_to_process = []
+def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None) -> str:
+    filters = {"docstatus": 1, "custom_successfully_submitted": 0}
 
     if docs_list:
-        data = json.loads(docs_list)
-        all_sales_invoices = frappe.db.get_all(
-            "Sales Invoice",
-            {"docstatus": 1, "custom_successfully_submitted": 0},
-            ["name"],
-        )
-
-        for record in data:
-            for invoice in all_sales_invoices:
-                if record == invoice.name:
-                    invoices_to_process.append(record)
+        provided_names = json.loads(docs_list)
+        valid_invoices = frappe.get_all("Sales Invoice", filters=filters, pluck="name")
+        invoices_to_process = [n for n in provided_names if n in valid_invoices]
     else:
-        all_invoices = frappe.db.get_all(
-            "Sales Invoice",
-            {"docstatus": 1, "custom_successfully_submitted": 0},
-            ["name"],
+        invoices_to_process = frappe.get_all(
+            "Sales Invoice", filters=filters, pluck="name"
         )
-        invoices_to_process = [invoice.name for invoice in all_invoices]
 
-    for invoice_name in invoices_to_process:
-        doc = frappe.get_doc("Sales Invoice", invoice_name, for_update=False)
-        frappe.enqueue(on_submit, doc=doc)
+    if not invoices_to_process:
+        return "No invoices to process."
+
+    frappe.enqueue(
+        process_invoices_sequentially,
+        invoice_list=invoices_to_process,
+        queue="long",
+        timeout=3600,
+        enqueue_after_commit=True,
+    )
+
+    return "Processing started."
+
+
+def process_invoices_sequentially(invoice_list):
+    from ..overrides.server.sales_invoice import on_submit
+
+    for name in invoice_list:
+        try:
+            doc = frappe.get_doc("Sales Invoice", name)
+            on_submit(doc)
+            frappe.db.commit()
+        except Exception:
+            frappe.db.rollback()
+            frappe.log_error(f"Bulk Submit Error: {name}", frappe.get_traceback())
+            continue
 
 
 @frappe.whitelist()
