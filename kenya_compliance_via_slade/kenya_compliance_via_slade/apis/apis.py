@@ -21,6 +21,7 @@ from ..doctype.doctype_names_mapping import (
 )
 from ..utils import (
     build_return_invoice_payload,
+    chunked,
     generate_custom_item_code_etims,
     get_active_settings,
     get_invoice_reference_number,
@@ -128,11 +129,13 @@ def bulk_register_items(docs_list: str, settings_name: str = None) -> None:
         return
 
     for setting in settings:
-        for item_name in item_names:
+        for batch in chunked(item_names, 100):
             frappe.enqueue(
-                perform_item_registration,
-                item_name=item_name,
+                process_item_batch,
+                queue="long",
                 settings_name=setting.name,
+                items=batch,
+                job_name=f"Item Register Batch ({len(batch)})",
             )
 
 
@@ -164,11 +167,15 @@ def update_all_items(settings_name: str = None) -> None:
             .run(as_dict=True)
         )
 
-        for item in items:
+        item_names = [i.name for i in items]
+
+        for batch in chunked(item_names, 100):
             frappe.enqueue(
-                perform_item_registration,
-                item_name=item.name,
+                process_item_batch,
+                queue="long",
                 settings_name=setting.name,
+                items=batch,
+                job_name=f"Item Update Batch ({len(batch)})",
             )
 
 
@@ -200,12 +207,24 @@ def register_all_items(settings_name: str = None) -> None:
             .run(as_dict=True)
         )
 
-        for item in items:
+        item_names = [i.name for i in items]
+
+        for batch in chunked(item_names, 100):
             frappe.enqueue(
-                perform_item_registration,
-                item_name=item.name,
+                process_item_batch,
+                queue="long",
                 settings_name=setting.name,
+                items=batch,
+                job_name=f"Item Register Batch ({len(batch)})",
             )
+
+
+def process_item_batch(settings_name: str, items: list):
+    for item_name in items:
+        perform_item_registration(
+            item_name=item_name,
+            settings_name=settings_name,
+        )
 
 
 @frappe.whitelist()
@@ -386,12 +405,12 @@ def bulk_submit_customers(docs_list: str, settings_name: str = None) -> None:
         return
 
     for setting in settings:
-        for customer in customers:
+        for batch in chunked(customers, 100):
             frappe.enqueue(
-                send_branch_customer_details,
-                name=customer,
-                is_customer=True,
+                process_customer_batch,
+                queue="long",
                 settings_name=setting.name,
+                customers=batch,
             )
 
 
@@ -402,10 +421,11 @@ def submit_all_customers(settings_name: str = None) -> None:
         if settings_name
         else get_active_settings()
     )
+
     if not active_settings:
         return
-    for setting in active_settings:
 
+    for setting in active_settings:
         Customer = DocType("Customer")
         Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
 
@@ -418,17 +438,28 @@ def submit_all_customers(settings_name: str = None) -> None:
                 & (Mapping.etims_setup == setting.name)
             )
             .select(Customer.name)
-            .where((Mapping.name.isnull()))
+            .where(Mapping.name.isnull())
         )
 
         customers = query.run(as_dict=True)
 
-        for customer in customers:
+        customer_names = [c.name for c in customers]
+
+        for batch in chunked(customer_names, 100):
             frappe.enqueue(
-                send_branch_customer_details,
+                process_customer_batch,
+                queue="long",
                 settings_name=setting.name,
-                name=customer.name,
+                customers=batch,
             )
+
+
+def process_customer_batch(settings_name: str, customers: list):
+    for customer in customers:
+        send_branch_customer_details(
+            settings_name=settings_name,
+            name=customer,
+        )
 
 
 @frappe.whitelist()
