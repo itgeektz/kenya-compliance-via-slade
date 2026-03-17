@@ -22,6 +22,7 @@ from frappe import _
 from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
 from frappe.query_builder import DocType
+from frappe.utils import now_datetime, add_to_date
 
 from .doctype.doctype_names_mapping import (
     ENVIRONMENT_SPECIFICATION_DOCTYPE_NAME,
@@ -1963,3 +1964,50 @@ def prepare_credit_note_items_payload(
             }
         )
     return credit_note_items
+
+
+def validate_kra_pin(pin: str):
+    if not pin:
+        return
+
+    pattern = r"^[A-Z]\d{9}[A-Z]$"
+
+    if not re.match(pattern, pin):
+        frappe.throw(
+            _(
+                "Invalid KRA PIN format. Expected format like P123456789H or A123456789B."
+            )
+        )
+
+
+def chunked(iterable, size):
+    for i in range(0, len(iterable), size):
+        yield iterable[i : i + size]
+
+
+def get_next_run(frequency, cron=None):
+    now = now_datetime()
+
+    if not frequency:
+        return None
+
+    if frequency == "Hourly":
+        return add_to_date(now, hours=1)
+    elif frequency == "Daily":
+        return add_to_date(now, days=1)
+    elif frequency == "Weekly":
+        return add_to_date(now, weeks=1)
+    elif frequency == "Monthly":
+        return add_to_date(now, months=1)
+    elif frequency == "Cron" and cron:
+        try:
+            from croniter import croniter
+
+            return croniter(cron, now).get_next(datetime)
+        except ImportError:
+            frappe.log_error(
+                message="cron utility is not available", title="Missing Dependency"
+            )
+            return None
+
+    return None
