@@ -3,15 +3,11 @@ import json
 import frappe
 from frappe.model.document import Document
 
-from ...background_tasks.tasks import (
-    get_item_classification_codes,
-    refresh_code_lists,
-    refresh_notices,
-    send_purchase_information,
-    send_sales_invoices_information,
-    send_stock_information,
+from ...utils import (
+    reset_auth_password,
+    update_navari_settings_with_token,
+    get_next_run,
 )
-from ...utils import reset_auth_password, update_navari_settings_with_token
 from ...doctype.doctype_names_mapping import (
     SETTINGS_DOCTYPE_NAME,
     ORGANISATION_MAPPING_DOCTYPE_NAME,
@@ -59,109 +55,8 @@ class NavariKRAeTimsSettings(Document):
                         )
 
     def on_update(self) -> None:
-        def get_or_create_scheduled_job(
-            name: str,
-            method: str,
-            freq: Optional[str],
-            cron: Optional[str],
-            job_args: dict,
-        ) -> None:
-            task_name = frappe.db.exists("Scheduled Job Type", {"job_name": name})
-            if task_name:
-                task = frappe.get_doc("Scheduled Job Type", task_name)
-            else:
-                task = frappe.new_doc("Scheduled Job Type")
-                task.job_name = name
-                task.name = name
-
-            task.method = method
-            task.frequency = freq or task.frequency
-            if freq == "Cron" and cron:
-                task.cron_format = cron
-            task.stopped = 0
-            task.job_args = frappe.as_json(job_args)
-            task.save(ignore_permissions=True)
-            task.enqueue()
-
-        def disable_scheduled_job(name: str) -> None:
-            task_name = frappe.db.exists(
-                "Scheduled Job Type", {"job_name": name}
-            ) or frappe.db.exists("Scheduled Job Type", name)
-            if task_name:
-                try:
-                    frappe.delete_doc(
-                        "Scheduled Job Type",
-                        task_name,
-                        force=True,
-                        ignore_permissions=True,
-                    )
-                except Exception as e:
-                    frappe.log_error(
-                        message=f"Failed to delete Scheduled Job Type '{task_name}': {e}",
-                        title="Scheduled Job Deletion Error",
-                    )
-
-        task_configs = [
-            {
-                "enabled": self.sales_auto_submission_enabled == 1,
-                "name": f"{self.name}-send_sales_invoices_information",
-                "method": f"{send_sales_invoices_information.__module__}.{send_sales_invoices_information.__name__}",
-                "frequency": self.sales_information_submission,
-                "cron": self.sales_info_cron_format,
-            },
-            {
-                "enabled": self.stock_auto_submission_enabled == 1,
-                "name": f"{self.name}-send_stock_information",
-                "method": f"{send_stock_information.__module__}.{send_stock_information.__name__}",
-                "frequency": self.stock_information_submission,
-                "cron": self.stock_info_cron_format,
-            },
-            {
-                "enabled": self.purchase_auto_submission_enabled == 1,
-                "name": f"{self.name}-send_purchase_information",
-                "method": f"{send_purchase_information.__module__}.{send_purchase_information.__name__}",
-                "frequency": self.purchase_information_submission,
-                "cron": self.purchase_info_cron_format,
-            },
-            {
-                "enabled": bool(self.notices_refresh_frequency),
-                "name": f"{self.name}-refresh_notices",
-                "method": f"{refresh_notices.__module__}.{refresh_notices.__name__}",
-                "frequency": self.notices_refresh_frequency,
-                "cron": self.notices_refresh_freq_cron_format,
-            },
-            {
-                "enabled": bool(self.codes_refresh_frequency),
-                "name": f"{self.name}-refresh_code_lists",
-                "method": f"{refresh_code_lists.__module__}.{refresh_code_lists.__name__}",
-                "frequency": self.codes_refresh_frequency,
-                "cron": self.codes_refresh_freq_cron_format,
-                "with_request_data": True,
-            },
-            {
-                "enabled": bool(self.codes_refresh_frequency),
-                "name": f"{self.name}-get_item_classification_codes",
-                "method": f"{get_item_classification_codes.__module__}.{get_item_classification_codes.__name__}",
-                "frequency": self.codes_refresh_frequency,
-                "cron": self.codes_refresh_freq_cron_format,
-                "with_request_data": True,
-            },
-        ]
-
-        for config in task_configs:
-            job_args = {"settings_name": self.name}
-            if config.get("with_request_data"):
-                job_args["request_data"] = {}
-            if config["enabled"]:
-                get_or_create_scheduled_job(
-                    config["name"],
-                    config["method"],
-                    config["frequency"],
-                    config["cron"],
-                    job_args,
-                )
-            else:
-                disable_scheduled_job(config["name"])
+        self.initialize_next_runs()
+        self.cleanup_legacy_scheduled_jobs()
 
     def update_password(self) -> None:
         """Update the password for the settings document."""
@@ -170,6 +65,62 @@ class NavariKRAeTimsSettings(Document):
     def update_token(self) -> None:
         """Update the password for the settings document."""
         update_navari_settings_with_token(self.name, True)
+
+    def initialize_next_runs(self):
+        if self.sales_auto_submission_enabled and not self.sales_next_run:
+            self.sales_next_run = get_next_run(
+                self.sales_information_submission,
+                self.sales_info_cron_format,
+            )
+
+        if self.purchase_auto_submission_enabled and not self.purchases_next_run:
+            self.purchases_next_run = get_next_run(
+                self.purchase_information_submission,
+                self.purchase_info_cron_format,
+            )
+
+        if self.stock_auto_submission_enabled and not self.stock_next_run:
+            self.stock_next_run = get_next_run(
+                self.stock_information_submission,
+                self.stock_info_cron_format,
+            )
+
+        if self.notices_refresh_frequency and not self.notices_next_run:
+            self.notices_next_run = get_next_run(
+                self.notices_refresh_frequency,
+                self.notices_refresh_freq_cron_format,
+            )
+
+        if self.codes_refresh_frequency and not self.codes_next_run:
+            self.codes_next_run = get_next_run(
+                self.codes_refresh_frequency,
+                self.codes_refresh_freq_cron_format,
+            )
+
+    def cleanup_legacy_scheduled_jobs(self):
+        """Remove old Scheduled Job Types created by this settings doc"""
+
+        job_prefix = f"{self.name}-"
+
+        jobs = frappe.get_all(
+            "Scheduled Job Type",
+            filters={"job_name": ["like", f"{job_prefix}%"]},
+            pluck="name",
+        )
+
+        for job in jobs:
+            try:
+                frappe.delete_doc(
+                    "Scheduled Job Type",
+                    job,
+                    force=True,
+                    ignore_permissions=True,
+                )
+            except Exception:
+                frappe.log_error(
+                    frappe.get_traceback(),
+                    f"Failed to delete Scheduled Job Type {job}",
+                )
 
 
 @frappe.whitelist()
