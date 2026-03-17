@@ -27,23 +27,33 @@
   "frequency_of_communication_with_etims_servers_section",
   "column_break_fsjl",
   "notices_refresh_frequency",
+  "notices_last_run",
+  "notices_next_run",
   "notices_refresh_freq_cron_format",
   "column_break_fudf",
   "codes_refresh_frequency",
+  "codes_last_run",
+  "codes_next_run",
   "codes_refresh_freq_cron_format",
   "section_break_kkbe",
   "sales_auto_submission_enabled",
   "sales_information_submission",
   "sales_info_cron_format",
   "max_allowed_revisions",
+  "sales_last_run",
+  "sales_next_run",
   "column_break_ifui",
   "purchase_auto_submission_enabled",
   "purchase_information_submission",
   "purchase_info_cron_format",
+  "purchases_last_run",
+  "purchases_next_run",
   "column_break_ukgx",
   "stock_auto_submission_enabled",
   "stock_information_submission",
   "stock_info_cron_format",
+  "stock_last_run",
+  "stock_next_run",
   "submission_timeframe_section",
   "sales_information_submission_timeframe",
   "maximum_sales_information_submission_attempts",
@@ -610,6 +620,72 @@
    "fieldtype": "Link",
    "label": "Product Type Code",
    "options": "Navari eTims Product Type"
+  },
+  {
+   "depends_on": "eval: doc.sales_auto_submission_enabled == 1",
+   "fieldname": "sales_last_run",
+   "fieldtype": "Datetime",
+   "label": "Sales Last Run",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval: doc.sales_auto_submission_enabled == 1",
+   "fieldname": "sales_next_run",
+   "fieldtype": "Datetime",
+   "label": "Sales Next Run",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval: doc.purchase_auto_submission_enabled == 1",
+   "fieldname": "purchases_last_run",
+   "fieldtype": "Datetime",
+   "label": "Purchases Last Run",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval: doc.purchase_auto_submission_enabled == 1",
+   "fieldname": "purchases_next_run",
+   "fieldtype": "Datetime",
+   "label": "Purchases Next Run",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval: doc.stock_auto_submission_enabled == 1",
+   "fieldname": "stock_last_run",
+   "fieldtype": "Datetime",
+   "label": "Stock Last Run",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval: doc.stock_auto_submission_enabled == 1",
+   "fieldname": "stock_next_run",
+   "fieldtype": "Datetime",
+   "label": "Stock Next Run",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notices_last_run",
+   "fieldtype": "Datetime",
+   "label": "Notices Last Run",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notices_next_run",
+   "fieldtype": "Datetime",
+   "label": "Notices next Run",
+   "read_only": 1
+  },
+  {
+   "fieldname": "codes_last_run",
+   "fieldtype": "Datetime",
+   "label": "Codes Last Run",
+   "read_only": 1
+  },
+  {
+   "fieldname": "codes_next_run",
+   "fieldtype": "Datetime",
+   "label": "Codes Next Run",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -621,7 +697,7 @@
    "link_fieldname": "reference_docname"
   }
  ],
- "modified": "2025-12-02 14:43:22.329617",
+ "modified": "2026-03-17 08:39:40.131286",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari KRA eTims Settings",

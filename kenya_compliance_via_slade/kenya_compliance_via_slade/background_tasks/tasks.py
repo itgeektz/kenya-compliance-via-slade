@@ -5,6 +5,7 @@ import frappe
 import frappe.defaults
 from frappe.model.document import Document
 from frappe import _
+from frappe.utils import now_datetime
 from typing import List
 
 from ..apis.api_builder import EndpointsBuilder
@@ -15,7 +16,7 @@ from ..doctype.doctype_names_mapping import (
     SETTINGS_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_max_submission_attempts
+from ..utils import get_max_submission_attempts, get_next_run
 from .task_response_handlers import (
     operation_types_search_on_success,
     update_branches,
@@ -534,3 +535,113 @@ def search_branch_request(request_data: str | dict, settings_name: str) -> None:
         doctype="Branch",
         settings_name=settings_name,
     )
+
+
+def run_etims_autosubmission_scheduler():
+    settings_list = frappe.get_all(
+        SETTINGS_DOCTYPE_NAME,
+        filters={"is_active": 1},
+        fields=["name"],
+    )
+
+    for s in settings_list:
+        try:
+            doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, s.name)
+            process_etims_autosubmission(doc)
+        except Exception:
+            frappe.log_error(
+                f"eTims Autosubmission Scheduler Failed for {s.name}",
+                frappe.get_traceback(),
+            )
+
+
+def process_etims_autosubmission(doc):
+    now = now_datetime()
+    updated = False
+
+    if (
+        doc.sales_auto_submission_enabled
+        and doc.sales_next_run
+        and doc.sales_next_run <= now
+    ):
+        frappe.enqueue(
+            send_sales_invoices_information,
+            queue="long",
+            settings_name=doc.name,
+        )
+        doc.sales_last_run = now
+        doc.sales_next_run = get_next_run(
+            doc.sales_information_submission,
+            doc.sales_info_cron_format,
+        )
+        updated = True
+
+    if (
+        doc.purchase_auto_submission_enabled
+        and doc.purchases_next_run
+        and doc.purchases_next_run <= now
+    ):
+        frappe.enqueue(
+            send_purchase_information,
+            queue="long",
+            settings_name=doc.name,
+        )
+        doc.purchases_last_run = now
+        doc.purchases_next_run = get_next_run(
+            doc.purchase_information_submission,
+            doc.purchase_info_cron_format,
+        )
+        updated = True
+
+    if (
+        doc.stock_auto_submission_enabled
+        and doc.stock_next_run
+        and doc.stock_next_run <= now
+    ):
+        frappe.enqueue(
+            send_stock_information,
+            queue="long",
+            settings_name=doc.name,
+        )
+        doc.stock_last_run = now
+        doc.stock_next_run = get_next_run(
+            doc.stock_information_submission,
+            doc.stock_info_cron_format,
+        )
+        updated = True
+
+    if doc.notices_next_run and doc.notices_next_run <= now:
+        frappe.enqueue(
+            refresh_notices,
+            queue="long",
+            settings_name=doc.name,
+        )
+        doc.notices_last_run = now
+        doc.notices_next_run = get_next_run(
+            doc.notices_refresh_frequency,
+            doc.notices_refresh_freq_cron_format,
+        )
+        updated = True
+
+    if doc.codes_next_run and doc.codes_next_run <= now:
+        frappe.enqueue(
+            refresh_code_lists,
+            queue="long",
+            settings_name=doc.name,
+            request_data={},
+        )
+        frappe.enqueue(
+            get_item_classification_codes,
+            queue="long",
+            settings_name=doc.name,
+            request_data={},
+        )
+        doc.codes_last_run = now
+        doc.codes_next_run = get_next_run(
+            doc.codes_refresh_frequency,
+            doc.codes_refresh_freq_cron_format,
+        )
+        updated = True
+
+    if updated:
+        doc.save(ignore_permissions=True)
