@@ -64,7 +64,7 @@ def submit_purchase_invoice(doc: Document) -> None:
         #     # or frappe.defaults.get_user_default("Company")
         #     # or frappe.get_value("Company", {}, "name")
         # )
-        
+
         if settings_doc:
             payload = build_purchase_invoice_payload(doc, company_name)
             process_request(
@@ -75,7 +75,6 @@ def submit_purchase_invoice(doc: Document) -> None:
                 doctype="Purchase Invoice",
                 settings_name=settings_doc.name,
             )
-  
 
 
 @frappe.whitelist()
