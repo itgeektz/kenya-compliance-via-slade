@@ -225,8 +225,8 @@ doc_events = {
         ],
     },
     "Customer": {
-        "before_save": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.before_save"
+        "after_save": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.after_save"
         ],
         "validate": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.validate"
@@ -246,20 +246,18 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
-    "daily": [
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.refresh_notices",
-    ],
+    "cron": {
+        "0/5 * * * *": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_autosubmission_scheduler"
+        ],
+    },
     "weekly": [
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.update_setting_passwords",
-    ],
-    "monthly": [
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.refresh_code_lists",
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.get_item_classification_codes",
     ],
 }
 
 after_migrate = [
-    "kenya_compliance_via_slade.kenya_compliance_via_slade.patches.migrate_to_multi_company.execute"
+    "kenya_compliance_via_slade.kenya_compliance_via_slade.migrate.after_migrate"
 ]
 
 # Testing
