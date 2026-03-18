@@ -115,7 +115,7 @@ def bulk_verify_and_resend_invoices(docs_list: str, settings_name: str = None) -
     for invoice_name in invoices_to_process:
         doc = frappe.get_doc("Sales Invoice", invoice_name, for_update=False)
         frappe.enqueue(
-            get_invoice_details,
+            verify_invoice_details,
             id=None,
             document_name=doc.name,
             invoice_type="Sales Invoice",
