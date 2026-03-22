@@ -98,6 +98,9 @@ def update_document_mapping(
         slade_id (str): The Slade ID to set
     """
     doc = frappe.get_doc(doc_type, document_name)
+    if doc_type in ["Customer", "Supplier"] and doc.require_tax_id and not doc.tax_id:
+        doc.require_tax_id = 0
+
     found = False
     for row in doc.get("etims_setup_mapping", []):
         if row.etims_setup == settings_name:
@@ -117,10 +120,11 @@ def update_document_mapping(
             {
                 "etims_setup": settings_name,
                 "slade360_id": slade_id,
+                "is_active": 1,
             },
         )
-        doc.save(ignore_permissions=True)
 
+    doc.save(ignore_permissions=True)
     return doc
 
 
@@ -131,7 +135,9 @@ def item_registration_on_success(
         "Item", document_name, settings_name, response.get("id")
     )
 
-    if item.is_stock_item:
+    settings = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
+
+    if item.is_stock_item and settings.stock_auto_submission_enabled:
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.submit_inventory",
             name=document_name,
@@ -325,7 +331,10 @@ def sales_information_submission_on_error(
 
     doc = frappe.get_doc(doctype, document_name)
     error_message = response if isinstance(response, str) else str(response)
-    if "get() returned more than one Product -- it returned 2!" in error_message:
+    if (
+        "get() returned more than one Product -- it returned 2!"
+        or "A product with this name already exists"
+    ) in error_message:
         for item in doc.items:
             perform_item_registration(item.item_code, settings_name)
 
@@ -561,18 +570,18 @@ def verify_and_fix_invoice_info(
         handle_invoice_mismatch(doc, document_name, doctype, settings_name, data)
 
 
-def process_invoice_response(response: dict, document_name: str, doctype: str,  settings_name: str | None = None) -> None:
+def process_invoice_response(
+    response: dict, document_name: str, doctype: str, settings_name: str | None = None
+) -> None:
     """Common function to process invoice response and update document"""
     data = get_response_data(response)
-    if not data:  
+    if not data:
         return
     custom_slade_id = data.get("id")
     slade_id = frappe.get_value(doctype, document_name, "custom_slade_id")
 
-    frappe.log_error(title="Invoice Response Data", message=f"{slade_id} {custom_slade_id} {data.get('scu_data')}")
-
     if not slade_id and custom_slade_id and not data.get("scu_data"):
-        company =  frappe.get_value(doctype, document_name, "company")
+        company = frappe.get_value(doctype, document_name, "company")
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
             id=custom_slade_id,
@@ -584,15 +593,12 @@ def process_invoice_response(response: dict, document_name: str, doctype: str,  
 
     updates = {
         "custom_slade_id": custom_slade_id,
-        **map_scu_fields(
-            data, custom_slade_id, doctype, qr_key="qr_code_url"
-        ),
+        **map_scu_fields(data, custom_slade_id, doctype, qr_key="qr_code_url"),
     }
 
     if document_name:
         frappe.db.set_value(doctype, document_name, updates)
         frappe.publish_realtime("refresh_form", document_name)
-    
 
 
 def verify_and_fix_invoice_revisions(
