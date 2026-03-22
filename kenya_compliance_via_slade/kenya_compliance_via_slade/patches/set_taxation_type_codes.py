@@ -17,6 +17,10 @@ def update_item_tax_templates():
 
     for t in templates:
         doc = frappe.get_doc("Item Tax Template", t.name)
+
+        if doc.custom_etims_taxation_type:
+            continue
+
         total_rate = sum(float(tax.tax_rate or 0) for tax in doc.taxes)
 
         taxation_code = _determine_logic_based_code(total_rate)
@@ -41,6 +45,10 @@ def update_sales_taxes_templates():
 
     for t in templates:
         doc = frappe.get_doc("Sales Taxes and Charges Template", t.name)
+
+        if doc.custom_etims_taxation_type:
+            continue
+
         total_rate = sum(float(tax.rate or 0) for tax in doc.taxes)
 
         taxation_code = _determine_logic_based_code(total_rate)
