@@ -5,3 +5,4 @@ kenya_compliance_via_slade.kenya_compliance_via_slade.patches.drop_custom_fields
 # kenya_compliance_via_slade.kenya_compliance_via_slade.patches.create_connection_links # 23/07/25 
 kenya_compliance_via_slade.kenya_compliance_via_slade.patches.migrate_to_multi_company # 153/07/25 
 kenya_compliance_via_slade.kenya_compliance_via_slade.patches.set_etims_mappings_active # 13/03/26
+kenya_compliance_via_slade.kenya_compliance_via_slade.patches.set_taxation_type_codes # 22/03/26
