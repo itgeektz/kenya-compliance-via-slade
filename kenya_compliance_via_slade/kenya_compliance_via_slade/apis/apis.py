@@ -1,5 +1,6 @@
 import asyncio
 import json
+from typing import List, Dict
 
 import aiohttp
 import frappe
@@ -69,18 +70,21 @@ def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None)
     if not invoices_to_process:
         return "No invoices to process."
 
-    frappe.enqueue(
-        process_invoices_sequentially,
-        invoice_list=invoices_to_process,
-        queue="long",
-        timeout=3600,
-        enqueue_after_commit=True,
-    )
+    for batch in chunked(invoices_to_process, 100):
+        frappe.enqueue(
+            process_invoices_sequentially,
+            invoice_list=batch,
+            queue="long",
+            timeout=3600,
+            enqueue_after_commit=True,
+            job_name=f"Bulk Submit Invoices Batch ({len(batch)})",
+        )
 
     return "Processing started."
 
 
-def process_invoices_sequentially(invoice_list):
+def process_invoices_sequentially(invoice_list: List[str]) -> None:
+    """Process a batch of invoices sequentially"""
     from ..overrides.server.sales_invoice import on_submit
 
     for name in invoice_list:
@@ -112,7 +116,21 @@ def bulk_verify_and_resend_invoices(docs_list: str, settings_name: str = None) -
         all_invoices = frappe.db.get_all("Sales Invoice", {"docstatus": 1}, ["name"])
         invoices_to_process = [invoice.name for invoice in all_invoices]
 
-    for invoice_name in invoices_to_process:
+    for batch in chunked(invoices_to_process, 100):
+        frappe.enqueue(
+            process_verify_invoice_batch,
+            invoice_names=batch,
+            settings_name=settings_name,
+            queue="long",
+            job_name=f"Verify Invoices Batch ({len(batch)})",
+        )
+
+
+def process_verify_invoice_batch(
+    invoice_names: List[str], settings_name: str = None
+) -> None:
+    """Process a batch of invoice verifications"""
+    for invoice_name in invoice_names:
         doc = frappe.get_doc("Sales Invoice", invoice_name, for_update=False)
         frappe.enqueue(
             verify_invoice_details,
@@ -352,8 +370,8 @@ def submit_all_suppliers(settings_name: str = None) -> None:
     )
     if not active_settings:
         return
-    for setting in active_settings:
 
+    for setting in active_settings:
         Supplier = DocType("Supplier")
         Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
 
@@ -370,18 +388,31 @@ def submit_all_suppliers(settings_name: str = None) -> None:
         )
 
         suppliers = query.run(as_dict=True)
+        supplier_names = [s.name for s in suppliers]
 
-        for supplier in suppliers:
+        for batch in chunked(supplier_names, 100):
             frappe.enqueue(
-                send_branch_customer_details,
+                process_supplier_batch,
+                queue="long",
                 settings_name=setting.name,
-                name=supplier.name,
-                is_customer=False,
+                suppliers=batch,
+                job_name=f"Supplier Submit Batch ({len(batch)})",
             )
+
+
+def process_supplier_batch(settings_name: str, suppliers: List[str]) -> None:
+    """Process a batch of suppliers"""
+    for supplier in suppliers:
+        send_branch_customer_details(
+            settings_name=settings_name,
+            name=supplier,
+            is_customer=False,
+        )
 
 
 @frappe.whitelist()
 def bulk_submit_suppliers(docs_list: str, settings_name: str = None) -> None:
+    """Bulk submit suppliers in chunks"""
     suppliers = json.loads(docs_list)
     settings = (
         [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
@@ -392,17 +423,19 @@ def bulk_submit_suppliers(docs_list: str, settings_name: str = None) -> None:
         return
 
     for setting in settings:
-        for supplier in suppliers:
+        for batch in chunked(suppliers, 100):
             frappe.enqueue(
-                send_branch_customer_details,
-                name=supplier,
-                is_customer=False,
+                process_supplier_batch,
+                queue="long",
                 settings_name=setting.name,
+                suppliers=batch,
+                job_name=f"Bulk Submit Suppliers Batch ({len(batch)})",
             )
 
 
 @frappe.whitelist()
 def bulk_submit_customers(docs_list: str, settings_name: str = None) -> None:
+    """Bulk submit customers in chunks"""
     customers = json.loads(docs_list)
     settings = (
         [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
@@ -419,11 +452,13 @@ def bulk_submit_customers(docs_list: str, settings_name: str = None) -> None:
                 queue="long",
                 settings_name=setting.name,
                 customers=batch,
+                job_name=f"Bulk Submit Customers Batch ({len(batch)})",
             )
 
 
 @frappe.whitelist()
 def submit_all_customers(settings_name: str = None) -> None:
+    """Submit all customers in chunks"""
     active_settings = (
         [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
         if settings_name
@@ -450,7 +485,6 @@ def submit_all_customers(settings_name: str = None) -> None:
         )
 
         customers = query.run(as_dict=True)
-
         customer_names = [c.name for c in customers]
 
         for batch in chunked(customer_names, 100):
@@ -459,10 +493,12 @@ def submit_all_customers(settings_name: str = None) -> None:
                 queue="long",
                 settings_name=setting.name,
                 customers=batch,
+                job_name=f"Customer Submit Batch ({len(batch)})",
             )
 
 
-def process_customer_batch(settings_name: str, customers: list):
+def process_customer_batch(settings_name: str, customers: List[str]) -> None:
+    """Process a batch of customers"""
     for customer in customers:
         send_branch_customer_details(
             settings_name=settings_name,
@@ -658,15 +694,27 @@ def send_entire_stock_balance(settings_name: str) -> None:
     )
 
     items = query.run(as_dict=True)
+    item_names = [item.name for item in items]
 
-    for item in items:
-        frappe.enqueue(submit_inventory, name=item.name, settings_name=settings_name)
+    for batch in chunked(item_names, 100):
+        frappe.enqueue(
+            process_inventory_batch,
+            queue="long",
+            items=batch,
+            settings_name=settings_name,
+            job_name=f"Inventory Submit Batch ({len(batch)})",
+        )
+
+
+def process_inventory_batch(items: List[str], settings_name: str) -> None:
+    """Process a batch of inventory items"""
+    for item_name in items:
+        submit_inventory(name=item_name, settings_name=settings_name)
 
 
 @frappe.whitelist()
 def submit_inventory(name: str, settings_name: str) -> None:
-    # TODO: Redesign this function to work with the new structure for Stock Submission
-    # pass
+    """Submit inventory for an item"""
     if not name:
         frappe.throw("Item name is required.")
 
