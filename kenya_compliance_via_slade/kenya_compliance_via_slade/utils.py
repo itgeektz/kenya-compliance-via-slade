@@ -524,11 +524,13 @@ def update_last_request_date(
     if len(route) < 5:
         return
 
-    doc = frappe.get_doc(routes_table, {"url_path": route})
-
-    doc.last_request_date = response_datetime
-
-    doc.save(ignore_permissions=True)
+    frappe.db.set_value(
+        routes_table,
+        {"url_path": route},
+        "last_request_date",
+        response_datetime,
+        update_modified=False,
+    )
     frappe.db.commit()
 
 
