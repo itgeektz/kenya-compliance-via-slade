@@ -1,12 +1,53 @@
 import frappe
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 
 def execute():
     """
     Updates custom_etims_taxation_type for all tax templates based on their total rates.
     """
+    ensure_custom_fields_exist()
     update_item_tax_templates()
     update_sales_taxes_templates()
+
+
+def ensure_custom_fields_exist():
+    """
+    Ensure required custom fields exist before running logic.
+    """
+
+    custom_fields = {
+        "Sales Taxes and Charges Template": [
+            {
+                "fieldname": "custom_etims_taxation_type",
+                "label": "eTims Taxation Type",
+                "fieldtype": "Link",
+                "options": "Navari KRA eTims Taxation Type",
+                "insert_after": "tax_category",
+            }
+        ],
+        "Item Tax Template": [
+            {
+                "fieldname": "custom_etims_taxation_type",
+                "label": "eTims Taxation Type",
+                "fieldtype": "Link",
+                "options": "Navari KRA eTims Taxation Type",
+                "insert_after": "taxes",
+            }
+        ],
+    }
+
+    filtered = {}
+    for doctype, fields in custom_fields.items():
+        for df in fields:
+            if not frappe.db.exists(
+                "Custom Field", {"dt": doctype, "fieldname": df["fieldname"]}
+            ):
+                filtered.setdefault(doctype, []).append(df)
+
+    if filtered:
+        create_custom_fields(filtered)
+        frappe.db.commit()
 
 
 def update_item_tax_templates():
