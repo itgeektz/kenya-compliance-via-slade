@@ -454,37 +454,30 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
         "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name")
         or None,
         "invoice_date": formatted_date,
-        # "customer_id": get_slade360_id(
-        #     "Customer",
-        #     invoice.customer,
-        #     settings_name,
-        # ),
         "itemDetails": [],
     }
 
-    calculate_tax(invoice)
+    tax_map = calculate_tax(invoice)
 
     for item in invoice.items:
-        tax_amount = item.get(tax_field, 0) or 0
-        qty = abs(item.get("qty"))
+        item_tax_data = tax_map.get(item.name, {})
+
+        tax_amount = item_tax_data.get(tax_field, 0)
+        tax_code = item_tax_data.get("taxation_type_code", "A")
+
+        qty = abs(item.get("qty") or 0)
         base_net_rate = round(item.get(rate_field) or 0, 4)
-        tax_code = item.get("taxation_type_code", "A") or "A"
+
+        unit_tax = tax_amount / qty
+        total_unit_price = (base_net_rate + unit_tax) * convertion_rate
+
         payload["itemDetails"].append(
             {
                 "product_name": item.item_code,
-                "unit_price": round(
-                    (base_net_rate + (tax_amount / qty if qty else 0))
-                    * convertion_rate,
-                    4,
-                ),
-                "quantity": qty,
+                "unit_price": round(total_unit_price, 4),
+                "quantity": round(qty, 2),
                 "uom": item.uom or "Pcs",
                 "tax_code": tax_code,
-                # "product_id": get_slade360_id(
-                #     "Item",
-                #     item.item_code,
-                #     settings_name,
-                # ),
             }
         )
 
@@ -516,7 +509,7 @@ def get_invoice_items_list(invoice: Document) -> list[dict[str, str | int | None
         items_list.append(
             {
                 "product": item.item_code,
-                "quantity": abs(item.qty),
+                "quantity": round(abs(item.qty), 2),
             }
         )
 
@@ -531,11 +524,13 @@ def update_last_request_date(
     if len(route) < 5:
         return
 
-    doc = frappe.get_doc(routes_table, {"url_path": route})
-
-    doc.last_request_date = response_datetime
-
-    doc.save(ignore_permissions=True)
+    frappe.db.set_value(
+        routes_table,
+        {"url_path": route},
+        "last_request_date",
+        response_datetime,
+        update_modified=False,
+    )
     frappe.db.commit()
 
 
@@ -611,182 +606,173 @@ def split_user_email(email_string: str) -> str:
     return email_string.split("@")[0]
 
 
-def calculate_tax(doc: "Document") -> None:
+def calculate_tax(doc: Document) -> dict:
     """
-    Calculate tax for each item in the document using either:
-    - Item-level tax templates (if any item has one), or
-    - Document-level taxes (if no items have tax templates)
-    Then set taxation type codes for all items.
+    Orchestrates the tax calculation process by deciding between ERPNext's
+    internal tax table or the custom hierarchical resolution engine.
     """
     tax_table = doc.get("item_wise_tax_details", [])
+
     if tax_table:
-        _aggregate_item_wise_taxes(doc, tax_table)
-    else:
-        taxes = doc.get("taxes", [])
-        has_item_level_tax = any(item.item_tax_template for item in doc.items)
+        return _calculate_from_item_wise_tax_table(doc, tax_table)
 
-        if has_item_level_tax:
-            _calculate_item_level_taxes(doc)
-        elif taxes:
-            _calculate_document_level_taxes(doc, taxes)
-
-    _set_taxation_type_codes(doc)
+    return _calculate_taxes_by_hierarchy(doc)
 
 
-def _aggregate_item_wise_taxes(doc: "Document", tax_table: list) -> None:
+def _calculate_taxes_by_hierarchy(doc: "Document") -> dict:
     """
-    Group item_wise_tax_details by item_row and calculate
-    total tax amount and effective rate per item.
+    Resolves tax rates for each item using a hierarchical priority:
+    1. Item Tax Template
+    2. Document-level Sales Taxes and Charges Template
+    3. Proportional distribution of manual tax entries
     """
-    grouped = defaultdict(
-        lambda: {"tax_amount": 0.0, "taxable_amount": 0.0, "rates": []}
-    )
+    results = {}
+    total_net = sum(float(i.base_net_amount or 0) for i in doc.items)
+    template_rate = _get_sales_taxes_template_rate(doc.taxes_and_charges)
+    has_item_templates = any(i.item_tax_template for i in doc.items)
 
-    currency = doc.currency
-    company_currency = frappe.get_value("Company", doc.company, "default_currency")
+    for item in doc.items:
+        rate = 0.0
+        base_net = float(item.base_net_amount or 0.0)
+
+        if item.item_tax_template:
+            rate = _get_item_tax_template_rate(item.item_tax_template)
+        elif template_rate > 0:
+            rate = template_rate
+        elif not has_item_templates and doc.get("taxes") and total_net > 0:
+            total_doc_tax = sum(float(t.tax_amount or 0) for t in doc.taxes)
+            item_tax = total_doc_tax * (base_net / total_net)
+            rate = (item_tax / base_net) * 100 if base_net else 0.0
+
+        base_tax = (base_net * rate) / 100.0
+        results[item.name] = _prepare_tax_entry(doc, item, base_tax, rate)
+
+    return results
+
+
+def _calculate_from_item_wise_tax_table(doc: "Document", tax_table: list) -> dict:
+    """
+    Aggregates tax data from the internal 'item_wise_tax_details' table
+    to determine effective rates and amounts per item row.
+    """
+    results = {}
+    grouped = defaultdict(lambda: {"tax": 0.0, "taxable": 0.0})
 
     for row in tax_table:
-        grouped[row.item_row]["tax_amount"] += float(row.amount or 0.0)
-        grouped[row.item_row]["taxable_amount"] = float(row.taxable_amount or 0.0)
-        grouped[row.item_row]["rates"].append(float(row.rate or 0.0))
+        grouped[row.item_row]["tax"] += float(row.amount or 0.0)
+        grouped[row.item_row]["taxable"] = float(row.taxable_amount or 0.0)
 
     for item in doc.items:
         data = grouped.get(item.name)
         if not data:
             continue
 
-        taxable = data["taxable_amount"]
-        total_tax = data["tax_amount"]
+        rate = (data["tax"] / data["taxable"]) * 100 if data["taxable"] else 0.0
+        results[item.name] = _prepare_tax_entry(doc, item, data["tax"], rate)
 
-        effective_rate = (total_tax / taxable) * 100 if taxable else 0.0
+    return results
 
-        net_total_tax = total_tax
 
-        if currency != company_currency:
-            net_total_tax = float(net_total_tax / doc.get("conversion_rate", 1.0))
+def _prepare_tax_entry(
+    doc: "Document", item: object, base_tax: float, rate: float
+) -> dict:
+    """
+    Normalizes tax data by handling currency conversion logic and
+    assigning the appropriate taxation type codes.
+    """
+    conv_rate = float(doc.get("conversion_rate", 1.0))
+    is_foreign = doc.currency != frappe.get_cached_value(
+        "Company", doc.company, "default_currency"
+    )
+
+    tax_amount = base_tax / conv_rate if is_foreign else base_tax
+
+    return {
+        "custom_tax_amount": round(tax_amount, 2),
+        "custom_base_tax_amount": round(base_tax, 2),
+        "custom_tax_rate": round(rate, 2),
+        "taxation_type_code": _determine_taxation_code(item, rate),
+    }
+
+
+def _get_sales_taxes_template_rate(template_name: str) -> float:
+    """
+    Fetches the total combined tax rate from a Sales Taxes and Charges Template.
+    """
+    if not template_name:
+        return 0.0
+    rates = frappe.get_all(
+        "Sales Taxes and Charges", filters={"parent": template_name}, fields=["rate"]
+    )
+    return sum(float(r.rate or 0.0) for r in rates)
+
+
+def _get_item_tax_template_rate(template_name: str) -> float:
+    """
+    Fetches the total combined tax rate from an Item Tax Template.
+    """
+    tax_template = frappe.get_doc("Item Tax Template", template_name)
+    return (
+        sum(float(tax.tax_rate or 0) for tax in tax_template.taxes)
+        if tax_template.taxes
+        else 0.0
+    )
+
+
+def _determine_taxation_code(item: object, rate: float) -> str:
+    """
+    Determines the taxation type code based on the Item Tax Template
+    metadata or the calculated tax rate.
+    """
+    if item.item_tax_template:
+        code = frappe.get_value(
+            "Item Tax Template", item.item_tax_template, "custom_etims_taxation_type"
+        )
+        if code:
+            return code
+
+    r = round(rate)
+    if r >= 16:
+        return "B"
+    if r >= 8:
+        return "E"
+    if r == 0:
+        return "A"
+    return "A"
+
+
+def apply_item_taxes_and_codes(doc: "Document") -> None:
+    """
+    Applies calculated tax data to the document items and persists
+    the changes to the database.
+    """
+    tax_data_map = calculate_tax(doc)
+
+    for item in doc.items:
+        data = tax_data_map.get(item.name)
+        if not data:
+            continue
+
+        item.custom_tax_amount = data["custom_tax_amount"]
+        item.custom_base_tax_amount = data["custom_base_tax_amount"]
+        item.custom_tax_rate = data["custom_tax_rate"]
+        item.taxation_type_code = data["taxation_type_code"]
 
         frappe.db.set_value(
             "Sales Invoice Item",
             item.name,
             {
-                "custom_tax_amount": round(net_total_tax, 2),
-                "custom_base_tax_amount": round(total_tax, 2),
-                "custom_tax_rate": round(effective_rate, 2),
+                "custom_tax_amount": data["custom_tax_amount"],
+                "custom_base_tax_amount": data["custom_base_tax_amount"],
+                "custom_tax_rate": data["custom_tax_rate"],
+                "taxation_type_code": data["taxation_type_code"],
             },
             update_modified=False,
         )
 
 
-def _calculate_item_level_taxes(doc: "Document") -> None:
-    """Calculate taxes using each item's individual tax template"""
-    for item in doc.items:
-        tax_rate = (
-            float(get_item_tax_rate(item.item_tax_template))
-            if item.item_tax_template
-            else 0.0
-        )
-        base_net_amount = float(item.base_net_amount or 0.0)
-        tax_amount = base_net_amount * tax_rate / 100.0
-
-        item.custom_tax_amount = float(tax_amount)
-        item.custom_tax_rate = float(tax_rate)
-
-
-def _calculate_document_level_taxes(doc: "Document", taxes: list) -> None:
-    """
-    Distribute document-level taxes proportionally across all items.
-    Tax rates are calculated from the distributed tax amount and item net amount.
-    """
-    total_net_amount = sum(float(item.base_net_amount or 0) for item in doc.items)
-    if total_net_amount == 0:
-        return
-
-    total_tax_amount = sum(float(tax.tax_amount or 0) for tax in taxes)
-
-    for item in doc.items:
-        item_ratio = float(item.base_net_amount) / total_net_amount
-        item.custom_tax_amount = float(total_tax_amount * item_ratio)
-
-        if float(item.base_net_amount) > 0:
-            item.custom_tax_rate = (
-                float(item.custom_tax_amount) / float(item.base_net_amount)
-            ) * 100
-        else:
-            item.custom_tax_rate = 0
-
-
-def get_item_tax_rate(item_tax_template: str) -> float:
-    """Return the sum of all tax rates in the given Item Tax Template"""
-    tax_template = frappe.get_doc("Item Tax Template", item_tax_template)
-    """Return the sum of all tax rates in the given Item Tax Template"""
-    tax_template = frappe.get_doc("Item Tax Template", item_tax_template)
-    return float(
-        sum(float(tax.tax_rate or 0) for tax in tax_template.taxes)
-        if tax_template.taxes
-        else 0
-    )
-
-
-def _set_taxation_type_codes(doc: "Document") -> None:
-    """
-    Determine taxation type code for each item using this priority:
-    1. From item's tax template (if exists)
-    2. From item master data
-    3. Based on tax rate (B for ≥16%, E for ≥8%, A for 0%)
-    4. Default to B if none of the above apply
-    """
-    for item in doc.items:
-        item.taxation_type_code = (
-            _get_taxation_type_from_template(item)
-            or _get_taxation_type_from_rate(item)
-            or
-            # _get_taxation_type_from_item(item) or
-            "A"
-        )
-
-
-def _get_taxation_type_from_template(item) -> str:
-    """Get taxation type from item's tax template if available"""
-    if item.item_tax_template:
-        return frappe.get_value(
-            "Item Tax Template", item.item_tax_template, "custom_etims_taxation_type"
-        )
-    return ""
-
-
-def _get_taxation_type_from_item(item) -> str:
-    """Get taxation type from item master data if available"""
-    return frappe.get_value("Item", item.item_code, "custom_taxation_type") or ""
-
-
-def _get_taxation_type_from_rate(item) -> str:
-    """Determine taxation type based on item's tax rate"""
-    if not hasattr(item, "custom_tax_rate"):
-        return ""
-    if round(item.custom_tax_rate) >= 16:
-        return "B"
-    elif round(item.custom_tax_rate) >= 8:
-        return "E"
-    elif item.custom_tax_rate == 0:
-        return "A"
-    return ""
-
-
-"""Uncomment this function if you need document-level tax rate calculation in the future
-A classic example usecase is Apex tevin typecase where the tax rate is fetched from the document's Sales Taxes and Charges Template
-"""
-# def get_doc_tax_rate(doc_tax_template: str) -> float | None:
-#     """Fetch the tax rate from the document's Sales Taxes and Charges Template."""
-#     tax_template = frappe.get_doc("Sales Taxes and Charges Template", doc_tax_template)
-#     if tax_template.taxes:
-#         return tax_template.taxes[0].rate
-#     return None
-
-
 def after_save_(doc: "Document", method: str | None = None) -> None:
-    if not frappe.db.exists(SETTINGS_DOCTYPE_NAME, {"is_active": 1}):
-        return
-    calculate_tax(doc)
+    apply_item_taxes_and_codes(doc)
 
 
 def get_invoice_number(invoice_name: str) -> int:
@@ -1934,7 +1920,7 @@ def prepare_return_invoice_payload(
             items.append(
                 {
                     "item_name": line.get("product_name"),
-                    "quantity": abs(line.get("quantity", 0)),
+                    "quantity": round(abs(line.get("quantity", 0)), 2),
                     "amount": round(abs(line.get("price_inclusive_tax", 0)), 4),
                 }
             )

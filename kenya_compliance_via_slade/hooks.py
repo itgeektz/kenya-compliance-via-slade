@@ -256,9 +256,9 @@ scheduler_events = {
     ],
 }
 
-after_migrate = [
+after_migrate = (
     "kenya_compliance_via_slade.kenya_compliance_via_slade.migrate.after_migrate"
-]
+)
 
 # Testing
 # -------
