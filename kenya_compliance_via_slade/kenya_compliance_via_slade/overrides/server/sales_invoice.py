@@ -2,7 +2,7 @@ import frappe
 from frappe.model.document import Document
 
 from .shared_overrides import generic_invoices_on_submit_override
-from ...utils import calculate_tax, get_settings
+from ...utils import apply_item_taxes_and_codes, get_settings
 
 
 def on_submit(doc: Document, method: str = None) -> None:
@@ -14,9 +14,9 @@ def on_submit(doc: Document, method: str = None) -> None:
     settings_doc = get_settings(company_name=company_name)
     if not settings_doc:
         return
-        
-    calculate_tax(doc)
-    
+
+    apply_item_taxes_and_codes(doc)
+
     if (
         doc.custom_successfully_submitted == 0
         and doc.prevent_etims_submission == 0
