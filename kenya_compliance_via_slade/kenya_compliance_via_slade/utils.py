@@ -454,37 +454,30 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
         "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name")
         or None,
         "invoice_date": formatted_date,
-        # "customer_id": get_slade360_id(
-        #     "Customer",
-        #     invoice.customer,
-        #     settings_name,
-        # ),
         "itemDetails": [],
     }
 
-    calculate_tax(invoice)
+    tax_map = calculate_tax(invoice)
 
     for item in invoice.items:
-        tax_amount = item.get(tax_field, 0) or 0
-        qty = abs(item.get("qty"))
+        item_tax_data = tax_map.get(item.name, {})
+
+        tax_amount = item_tax_data.get(tax_field, 0)
+        tax_code = item_tax_data.get("taxation_type_code", "A")
+
+        qty = abs(item.get("qty") or 0)
         base_net_rate = round(item.get(rate_field) or 0, 4)
-        tax_code = item.get("taxation_type_code", "A") or "A"
+
+        unit_tax = tax_amount / qty
+        total_unit_price = (base_net_rate + unit_tax) * convertion_rate
+
         payload["itemDetails"].append(
             {
                 "product_name": item.item_code,
-                "unit_price": round(
-                    (base_net_rate + (tax_amount / qty if qty else 0))
-                    * convertion_rate,
-                    4,
-                ),
+                "unit_price": round(total_unit_price, 4),
                 "quantity": round(qty, 2),
                 "uom": item.uom or "Pcs",
                 "tax_code": tax_code,
-                # "product_id": get_slade360_id(
-                #     "Item",
-                #     item.item_code,
-                #     settings_name,
-                # ),
             }
         )
 

@@ -13,7 +13,6 @@ from ...apis.remote_response_status_handlers import (
 # from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
 from ...utils import (
     build_invoice_payload,
-    calculate_tax,
     get_invoice_reference_number,
     get_settings,
     get_slade360_id,
