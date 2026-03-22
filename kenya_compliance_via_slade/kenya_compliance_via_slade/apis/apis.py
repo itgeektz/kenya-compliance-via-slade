@@ -146,6 +146,7 @@ def process_verify_invoice_batch(
 
 @frappe.whitelist()
 def bulk_register_items(docs_list: str, settings_name: str = None) -> None:
+    """Bulk register items in chunks"""
     item_names = json.loads(docs_list)
     settings = (
         [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
@@ -169,6 +170,7 @@ def bulk_register_items(docs_list: str, settings_name: str = None) -> None:
 
 @frappe.whitelist()
 def update_all_items(settings_name: str = None) -> None:
+    """Update all items in chunks"""
     settings = (
         [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
         if settings_name
@@ -209,6 +211,7 @@ def update_all_items(settings_name: str = None) -> None:
 
 @frappe.whitelist()
 def register_all_items(settings_name: str = None) -> None:
+    """Register all items in chunks"""
     settings = (
         [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
         if settings_name
@@ -330,7 +333,7 @@ def is_item_eligible_for_registration(item) -> bool:
     return not (item.custom_prevent_etims_registration or item.disabled)
 
 
-def validate_required_fields(item) -> list:
+def validate_required_fields(item) -> List[str]:
     """Validate required fields for item registration"""
     required_fields = [
         "custom_item_classification",
@@ -355,6 +358,7 @@ def generate_and_set_etims_code(item) -> None:
 
 @frappe.whitelist()
 def fetch_item_details(request_data: str, settings_name: str) -> None:
+    """Fetch item details"""
     process_request(
         request_data,
         "ItemSearchReq",
@@ -366,6 +370,7 @@ def fetch_item_details(request_data: str, settings_name: str) -> None:
 
 @frappe.whitelist()
 def submit_all_suppliers(settings_name: str = None) -> None:
+    """Submit all suppliers in chunks"""
     active_settings = (
         [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
         if settings_name
@@ -373,8 +378,8 @@ def submit_all_suppliers(settings_name: str = None) -> None:
     )
     if not active_settings:
         return
-    for setting in active_settings:
 
+    for setting in active_settings:
         Supplier = DocType("Supplier")
         Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
 
@@ -513,6 +518,7 @@ def process_customer_batch(settings_name: str, customers: List[str]) -> None:
 def send_branch_customer_details(
     name: str, settings_name: str, is_customer: bool = True
 ) -> None:
+    """Send branch customer details"""
     doctype = "Customer" if is_customer else "Supplier"
     data = frappe.get_doc(doctype, name)
 
@@ -545,6 +551,7 @@ def search_customers_request(
     request_data: str,
     settings_name: str,
 ) -> None:
+    """Search customers request"""
     return process_request(
         request_data,
         "CustomersSearchReq",
@@ -558,6 +565,7 @@ def get_customer_details(
     request_data: str,
     settings_name: str,
 ) -> None:
+    """Get customer details"""
     return process_request(
         request_data,
         "CustomerSearchReq",
@@ -568,6 +576,7 @@ def get_customer_details(
 
 @frappe.whitelist()
 def get_my_user_details(request_data: str) -> None:
+    """Get my user details"""
     return process_request(
         request_data,
         "BhfUserSearchReq",
@@ -579,6 +588,7 @@ def get_my_user_details(request_data: str) -> None:
 
 @frappe.whitelist()
 def get_branch_user_details(request_data: str) -> None:
+    """Get branch user details"""
     return process_request(
         request_data,
         "BhfUserSaveReq",
@@ -590,6 +600,7 @@ def get_branch_user_details(request_data: str) -> None:
 
 @frappe.whitelist()
 def save_branch_user_details(request_data: str) -> None:
+    """Save branch user details"""
     return process_request(
         request_data,
         "BhfUserSaveReq",
@@ -601,7 +612,7 @@ def save_branch_user_details(request_data: str) -> None:
 
 @frappe.whitelist()
 def create_branch_user() -> None:
-    # TODO: Implement auto-creation through background tasks
+    """Create branch user"""
     present_users = frappe.db.get_all(
         "User", {"name": ["not in", ["Administrator", "Guest"]]}, ["name", "email"]
     )
@@ -624,7 +635,7 @@ def create_branch_user() -> None:
 
 @frappe.whitelist()
 def perform_item_search(request_data: str, settings_name: str) -> None:
-
+    """Perform item search"""
     process_request(
         request_data,
         "ItemsSearchReq",
@@ -636,6 +647,7 @@ def perform_item_search(request_data: str, settings_name: str) -> None:
 
 @frappe.whitelist()
 def perform_import_item_search(request_data: str | dict, settings_name: str) -> None:
+    """Perform import item search"""
     process_request(
         request_data,
         "ImportItemSearchReq",
@@ -647,6 +659,7 @@ def perform_import_item_search(request_data: str | dict, settings_name: str) -> 
 
 @frappe.whitelist()
 def perform_import_item_search_all_branches() -> None:
+    """Perform import item search for all branches"""
     all_credentials = frappe.get_all(
         SETTINGS_DOCTYPE_NAME,
         filters={"is_active": 1},
@@ -659,6 +672,7 @@ def perform_import_item_search_all_branches() -> None:
 
 @frappe.whitelist()
 def perform_purchases_search(request_data: str | dict, settings_name: str) -> None:
+    """Perform purchases search"""
     process_request(
         request_data,
         "TrnsPurchaseSalesReq",
@@ -670,6 +684,7 @@ def perform_purchases_search(request_data: str | dict, settings_name: str) -> No
 
 @frappe.whitelist()
 def perform_purchase_search(request_data: str, settings_name: str) -> None:
+    """Perform purchase search"""
     process_request(
         request_data,
         "TrnsPurchaseSearchReq",
@@ -681,6 +696,7 @@ def perform_purchase_search(request_data: str, settings_name: str) -> None:
 
 @frappe.whitelist()
 def send_entire_stock_balance(settings_name: str) -> None:
+    """Send entire stock balance in chunks"""
     Item = frappe.qb.DocType("Item")
     Mapping = frappe.qb.DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
 
@@ -756,6 +772,7 @@ def submit_inventory(name: str, settings_name: str) -> None:
 
 @frappe.whitelist()
 def update_stock_quantity(name: str, id: str) -> None:
+    """Update stock quantity"""
     if not name:
         frappe.throw("Item name is required.")
 
@@ -788,6 +805,7 @@ def update_stock_quantity(name: str, id: str) -> None:
 
 @frappe.whitelist()
 def send_imported_item_request(request_data: str) -> None:
+    """Send imported item request"""
     process_request(
         request_data,
         "ImportItemSearchReq",
@@ -799,6 +817,7 @@ def send_imported_item_request(request_data: str) -> None:
 
 @frappe.whitelist()
 def update_imported_item_request(request_data: str) -> None:
+    """Update imported item request"""
     process_request(
         request_data,
         "ImportItemUpdateReq",
@@ -810,6 +829,7 @@ def update_imported_item_request(request_data: str) -> None:
 
 @frappe.whitelist()
 def submit_item_composition(name: str) -> None:
+    """Submit item composition"""
     item = frappe.get_doc("BOM", name)
     request_data = {
         "final_product": get_link_value("Item", "name", item.item, "custom_slade_id"),
@@ -826,6 +846,7 @@ def submit_item_composition(name: str) -> None:
 
 @frappe.whitelist()
 def create_supplier_from_fetched_registered_purchases(request_data: str) -> Document:
+    """Create supplier from fetched registered purchases"""
     data: dict = json.loads(request_data)
 
     new_supplier = create_supplier(data)
@@ -834,6 +855,7 @@ def create_supplier_from_fetched_registered_purchases(request_data: str) -> Docu
 
 
 def create_supplier(supplier_details: dict) -> Document:
+    """Create a new supplier"""
     new_supplier = frappe.new_doc("Supplier")
 
     new_supplier.supplier_name = supplier_details["supplier_name"]
@@ -853,7 +875,8 @@ def create_supplier(supplier_details: dict) -> Document:
 
 
 @frappe.whitelist()
-def create_items_from_fetched_registered(request_data: str) -> None:
+def create_items_from_fetched_registered(request_data: str) -> Dict[str, List]:
+    """Create items from fetched registered data"""
     data = json.loads(request_data)
 
     if data.get("items"):
@@ -926,6 +949,7 @@ def create_item(item: dict | frappe._dict) -> Document:
 
 @frappe.whitelist()
 def create_purchase_invoice_from_request(request_data: str) -> Document:
+    """Create purchase invoice from request"""
     data = json.loads(request_data)
 
     if not data.get("company_name"):
@@ -1041,6 +1065,7 @@ def create_purchase_invoice_from_request(request_data: str) -> Document:
 def get_or_create_account(
     account_type: str, company: str, currency: str, account_name_template: str = None
 ) -> str:
+    """Get or create an account"""
     if account_name_template:
         account = frappe.db.get_value(
             "Account",
@@ -1113,6 +1138,7 @@ def get_or_create_account(
 
 @frappe.whitelist()
 def ping_server(request_data: str) -> None:
+    """Ping the server"""
     data = json.loads(request_data)
     server_url = data.get("server_url")
     auth_url = data.get("auth_url")
@@ -1140,6 +1166,7 @@ def ping_server(request_data: str) -> None:
 
 @frappe.whitelist()
 def create_stock_entry_from_stock_movement(request_data: str) -> None:
+    """Create stock entry from stock movement"""
     data = json.loads(request_data)
 
     for item in data["items"]:
@@ -1185,6 +1212,7 @@ def create_stock_entry_from_stock_movement(request_data: str) -> None:
 
 @frappe.whitelist()
 def initialize_device(request_data: str) -> None:
+    """Initialize device"""
     return process_request(
         request_data,
         "DeviceVerificationReq",
@@ -1259,6 +1287,7 @@ def get_invoice_details(
     settings_name: str = None,
     company: str = None,
 ) -> None:
+    """Get invoice details"""
     invoice = frappe.get_doc(invoice_type, document_name)
     reference_number = get_invoice_reference_number(invoice)
     _process_invoice_fetch_request(
@@ -1280,6 +1309,7 @@ def verify_invoice_details(
     settings_name: str = None,
     company: str = None,
 ) -> None:
+    """Verify invoice details"""
     invoice = frappe.get_doc(invoice_type, document_name)
     reference_number = get_invoice_reference_number(invoice)
     _process_invoice_fetch_request(
@@ -1295,6 +1325,7 @@ def verify_invoice_details(
 
 @frappe.whitelist()
 def save_operation_type(name: str) -> dict | None:
+    """Save operation type"""
     item = frappe.get_doc(OPERATION_TYPE_DOCTYPE_NAME, name)
     slade_id = item.get("slade_id", None)
 
@@ -1333,6 +1364,7 @@ def save_operation_type(name: str) -> dict | None:
 
 @frappe.whitelist()
 def sync_operation_type(request_data: str) -> None:
+    """Sync operation type"""
     process_request(
         request_data,
         "OperationTypeReq",
@@ -1345,6 +1377,7 @@ def sync_operation_type(request_data: str) -> None:
 def submit_credit_note(
     response: dict, document_name: str, doctype: str, settings_name: str, **kwargs
 ) -> None:
+    """Submit credit note"""
     doc = frappe.get_doc(doctype, document_name)
     data = response.get("results", [])[0] if response.get("results") else response
     scu_data = data.get("scu_data")
