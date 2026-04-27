@@ -1932,8 +1932,8 @@ def prepare_return_invoice_payload(
             items.append(
                 {
                     "item_name": item.item_code,
-                    "quantity": qty,
-                    "amount": round(base_amount, 4) * convertion_rate,
+                    "quantity": round(qty, 2),
+                    "amount": round(base_amount * convertion_rate, 4),
                 }
             )
 
