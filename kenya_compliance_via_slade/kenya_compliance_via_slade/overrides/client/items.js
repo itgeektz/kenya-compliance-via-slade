@@ -4,6 +4,11 @@ frappe.ui.form.on(itemDoctypName, {
   refresh: async function (frm) {
     await getEtimsSettings(frm);
     await applyEtimsAutofillFields(frm);
+    let grid = frm.get_field("etims_setup_mapping").grid;
+    grid.cannot_add_rows = true;
+    grid.cannot_delete_rows = true;
+    grid.only_sortable();
+    frm.refresh_field("etims_setup_mapping");
     toggleImportedLocks(frm);
     if (!frm.is_new()) {
       setupButtons(frm);
@@ -17,7 +22,7 @@ frappe.ui.form.on(itemDoctypName, {
   custom_product_type_name: function (frm) {
     frm.set_value(
       "is_stock_item",
-      frm.doc.custom_product_type_name !== "Service" ? 1 : 0
+      frm.doc.custom_product_type_name !== "Service" ? 1 : 0,
     );
   },
 });
@@ -92,7 +97,7 @@ function setupButtons(frm) {
       __("Register Item"),
       () =>
         showCompanySelectionModal(frm, "register_item", unregisteredSettings),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -106,13 +111,13 @@ function setupButtons(frm) {
       __("Fetch Item Details"),
       () =>
         showCompanySelectionModal(frm, "fetch_item_details", registeredSetups),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
 
     frm.add_custom_button(
       __("Update Item"),
       () => showCompanySelectionModal(frm, "update_item", registeredSetups),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -126,9 +131,9 @@ function setupButtons(frm) {
           registeredMappings.map((r) => ({
             name: r.etims_setup,
             company: getCompanyName(allSettings, r.etims_setup),
-          }))
+          })),
         ),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 }
@@ -137,8 +142,8 @@ function showCompanySelectionModal(frm, actionType, availableSettings) {
   if (!availableSettings.length) {
     frappe.msgprint(
       __(
-        "No available eTIMS settings for this action. Please check configuration."
-      )
+        "No available eTIMS settings for this action. Please check configuration.",
+      ),
     );
     return;
   }
@@ -182,7 +187,7 @@ function executeItemAction(frm, actionType, settingName) {
 
   if (frm.doc.etims_setup_mapping) {
     const row = frm.doc.etims_setup_mapping.find(
-      (r) => r.etims_setup === settingName
+      (r) => r.etims_setup === settingName,
     );
     sladeId = row ? row.slade360_id : "";
   }

@@ -6,6 +6,12 @@ frappe.ui.form.on(doctype, {
 
     if (frm.is_new()) return;
 
+    let grid = frm.get_field("etims_setup_mapping").grid;
+    grid.cannot_add_rows = true;
+    grid.cannot_delete_rows = true;
+    grid.only_sortable();
+    frm.refresh_field("etims_setup_mapping");
+
     const { message: data } = await frappe.call({
       method:
         "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_etims_action_data",
@@ -60,9 +66,9 @@ function addCustomerActionButtons(frm, data) {
           registeredMappings.map((r) => ({
             name: r.etims_setup,
             company: getCompanyName(allSettings, r.etims_setup),
-          }))
+          })),
         ),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -71,7 +77,7 @@ function addCustomerActionButtons(frm, data) {
       __("Send Customer Details"),
       () =>
         showCompanySelectionModal(frm, "send_customer", unregisteredSettings),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -85,9 +91,9 @@ function addCustomerActionButtons(frm, data) {
           registeredMappings.map((r) => ({
             name: r.etims_setup,
             company: getCompanyName(allSettings, r.etims_setup),
-          }))
+          })),
         ),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -156,7 +162,7 @@ function executeCustomerAction(frm, actionType, settingsName) {
   let sladeId = "";
   if (frm.doc.etims_setup_mapping) {
     const mappingRow = frm.doc.etims_setup_mapping.find(
-      (row) => row.etims_setup === settingsName
+      (row) => row.etims_setup === settingsName,
     );
     sladeId = mappingRow ? mappingRow.slade360_id : "";
   }
