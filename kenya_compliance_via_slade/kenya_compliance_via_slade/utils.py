@@ -1926,16 +1926,15 @@ def prepare_return_invoice_payload(
             )
     else:
         for item in invoice.items:
-            tax_amount = item.get(tax_field, 0) or 0
             qty = abs(item.get("qty"))
-            base_amount = round(abs(item.get(rate_field)) or 0, 4)
+            tax_total = item.get(tax_field) or 0
+            tax_amount = abs(tax_total / qty) if qty else 0
+            base_amount = round(abs(item.get(rate_field)) or 0, 4) + tax_amount
             items.append(
                 {
                     "item_name": item.item_code,
-                    "quantity": 1,
-                    "amount": round(base_amount - tax_amount, 4)
-                    * qty
-                    * convertion_rate,
+                    "quantity": round(qty, 2),
+                    "amount": round(base_amount * convertion_rate, 4),
                 }
             )
 
