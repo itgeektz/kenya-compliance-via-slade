@@ -66,9 +66,9 @@ function addCustomerActionButtons(frm, data) {
           registeredMappings.map((r) => ({
             name: r.etims_setup,
             company: getCompanyName(allSettings, r.etims_setup),
-          }))
+          })),
         ),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -77,7 +77,7 @@ function addCustomerActionButtons(frm, data) {
       __("Send Customer Details"),
       () =>
         showCompanySelectionModal(frm, "send_customer", unregisteredSettings),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -91,9 +91,9 @@ function addCustomerActionButtons(frm, data) {
           registeredMappings.map((r) => ({
             name: r.etims_setup,
             company: getCompanyName(allSettings, r.etims_setup),
-          }))
+          })),
         ),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -162,7 +162,7 @@ function executeCustomerAction(frm, actionType, settingsName) {
   let sladeId = "";
   if (frm.doc.etims_setup_mapping) {
     const mappingRow = frm.doc.etims_setup_mapping.find(
-      (row) => row.etims_setup === settingsName
+      (row) => row.etims_setup === settingsName,
     );
     sladeId = mappingRow ? mappingRow.slade360_id : "";
   }
