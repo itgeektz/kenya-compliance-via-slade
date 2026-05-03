@@ -4,6 +4,11 @@ frappe.ui.form.on(itemDoctypName, {
   refresh: async function (frm) {
     await getEtimsSettings(frm);
     await applyEtimsAutofillFields(frm);
+    let grid = frm.get_field("etims_setup_mapping").grid;
+    grid.cannot_add_rows = true;
+    grid.cannot_delete_rows = true;
+    grid.only_sortable();
+    frm.refresh_field("etims_setup_mapping");
     toggleImportedLocks(frm);
     if (!frm.is_new()) {
       setupButtons(frm);

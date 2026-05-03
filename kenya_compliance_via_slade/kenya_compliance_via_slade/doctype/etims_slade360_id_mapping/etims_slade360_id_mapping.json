@@ -18,6 +18,7 @@
    "in_list_view": 1,
    "label": "eTims Setup",
    "options": "Navari KRA eTims Settings",
+   "read_only": 1,
    "reqd": 1
   },
   {
@@ -47,7 +48,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-03-17 09:56:18.851731",
+ "modified": "2026-05-03 22:44:07.484561",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "eTims Slade360 ID Mapping",
