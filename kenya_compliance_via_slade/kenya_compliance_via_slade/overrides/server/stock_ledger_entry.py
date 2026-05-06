@@ -140,9 +140,18 @@ def update_payload_for_stock_reconciliation(doc: dict, payload: dict) -> None:
     settings = get_settings(company_name=doc.company)
 
     org_mapping = next(
-        (m for m in settings.organisation_mapping if m.company == doc.company),
-        settings.organisation_mapping[0],
+        (
+            m
+            for m in settings.organisation_mapping
+            if m.company == doc.company and getattr(m, "is_active", 0)
+        ),
+        None,
     )
+
+    if not org_mapping:
+        frappe.throw(
+            f"No active organisation mapping found for company {doc.company}"
+        )
 
     warehouse_slade_id = get_slade360_id(
         "Warehouse", org_mapping.warehouse, settings.name
