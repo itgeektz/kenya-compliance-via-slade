@@ -369,10 +369,6 @@ def stock_mvt_submission_on_success(
 def submit_stock_mvt_items(name: str) -> None:
     doc = frappe.get_doc("Stock Ledger Entry", name)
     settings = get_settings(company_name=doc.company)
-    org_mapping = next(
-        (m for m in settings.organisation_mapping if m.company == doc.company),
-        settings.organisation_mapping[0],
-    )
     if (
         not doc.custom_slade_id
         or doc.custom_inventory_submitted_successfully
