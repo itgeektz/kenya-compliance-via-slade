@@ -189,9 +189,18 @@ def update_payload_for_sales(doc: dict, record: dict, payload: dict) -> None:
 def handle_operation_type(doc: dict, record: dict, payload: dict) -> None:
     settings = get_settings(company_name=doc.company)
     org_mapping = next(
-        (m for m in settings.organisation_mapping if m.company == doc.company),
-        settings.organisation_mapping[0],
+        (
+            m
+            for m in settings.organisation_mapping
+            if m.company == doc.company and m.is_active == 1
+        ),
+        None,
     )
+
+    if not org_mapping:
+        frappe.throw(
+            f"No active organisation mapping is configured for company '{doc.company}'."
+        )
 
     if doc.voucher_type == "Stock Reconciliation" or (
         doc.voucher_type == "Stock Entry" and record.is_opening == "Yes"
