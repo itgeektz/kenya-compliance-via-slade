@@ -757,7 +757,7 @@ def submit_inventory(name: str, settings_name: str) -> None:
             "Warehouse",
             "name",
             settings.organisation_mapping[0].get("warehouse"),
-            "custom_slade_id",
+            "slade_id",
         ),
     }
     process_request(
@@ -1335,7 +1335,7 @@ def save_operation_type(name: str) -> dict | None:
             "operation_name": item.get("operation_name"),
             "document_name": item.get("name"),
             "operation_type": item.get("operation_type"),
-            "organisation": get_link_value(
+            "organisation": get_sl(
                 "Company",
                 "name",
                 item.get("company"),
