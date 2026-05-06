@@ -244,7 +244,7 @@ def get_operation_type(doc: dict, document_type: str) -> dict:
 
 
 def create_and_enqueue_operation(
-    doc: dict, operation_type: dict, warehouse_name: str, settings: dict
+    doc: dict, operation_type: dict, warehouse_name: str, settings: Document
 ) -> None:
     warehouse_doc = frappe.get_doc("Warehouse", warehouse_name)
     warehouse_slade_id = warehouse_doc.slade_id
