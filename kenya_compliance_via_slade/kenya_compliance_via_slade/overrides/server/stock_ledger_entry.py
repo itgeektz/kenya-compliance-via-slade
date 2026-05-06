@@ -546,10 +546,17 @@ def fetch_current_stock_balance(document_name: str) -> float:
     settings = get_settings(company_name=doc.company)
 
     # Get slade_id for warehouse and item
+    active_organisation_mappings = [
+        m for m in settings.organisation_mapping if getattr(m, "is_active", 0)
+    ]
     org_mapping = next(
-        (m for m in settings.organisation_mapping if m.company == doc.company),
-        settings.organisation_mapping[0],
+        (m for m in active_organisation_mappings if m.company == doc.company),
+        None,
     )
+    if not org_mapping:
+        if not active_organisation_mappings:
+            frappe.throw("No active organisation mapping found.")
+        org_mapping = active_organisation_mappings[0]
 
     warehouse_slade_id = get_slade360_id(
         "Warehouse", org_mapping.warehouse, settings.name
