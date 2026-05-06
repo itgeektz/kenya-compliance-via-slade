@@ -1,3 +1,4 @@
+import traceback
 import uuid
 from hashlib import sha256
 
@@ -57,10 +58,10 @@ def save_ledger_details(name: str) -> None:
         else:
             submit_stock_mvt_transition(name=name)
 
-    except Exception as e:
+    except Exception:
         frappe.log_error(
             title=f"Error Fetching submitting ledger {name}",
-            message=f"Error while submitting: {str(e)}",
+            message=traceback.format_exc(),
         )
 
 
