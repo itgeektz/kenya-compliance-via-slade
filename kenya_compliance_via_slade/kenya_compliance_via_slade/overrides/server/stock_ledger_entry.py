@@ -489,7 +489,6 @@ def stock_balance_on_success(response: dict, document_name: str, **kwargs) -> No
     from ...apis.apis import submit_inventory
 
     doc = frappe.get_doc("Stock Ledger Entry", document_name)
-    settings = get_settings(company_name=doc.company)
 
     results = (
         response.get("results", [])
