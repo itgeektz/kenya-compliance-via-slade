@@ -5,29 +5,23 @@ import frappe
 from frappe.model.document import Document
 
 from ...apis.api_builder import EndpointsBuilder
-
-# from ...apis.apis import save_operation_type
 from ...apis.process_request import process_request
 from ...doctype.doctype_names_mapping import (
     OPERATION_TYPE_DOCTYPE_NAME,
-    SETTINGS_DOCTYPE_NAME,
 )
 from ...utils import (
     extract_document_series_number,
-    get_settings,
-    get_total_stock_balance_from_sle,
     get_max_submission_attempts,
+    get_settings,
+    get_slade360_id,
+    get_total_stock_balance_from_sle,
 )
 
 endpoints_builder = EndpointsBuilder()
 
 
 def on_update(doc: Document, method: str | None = None) -> None:
-    company_name = (
-        doc.company
-        # or frappe.defaults.get_user_default("Company")
-        # or frappe.get_value("Company", {}, "name")
-    )
+    company_name = doc.company
     settings = get_settings(company_name=company_name)
     if not settings:
         return
@@ -75,13 +69,20 @@ def prepare_payload(doc: dict, record: dict) -> dict:
     settings = get_settings(company_name=company_name)
     series_no = extract_document_series_number(record)
 
+    org_mapping = next(
+        (m for m in settings.organisation_mapping if m.company == company_name),
+        settings.organisation_mapping[0],
+    )
+
+    department_slade_id = frappe.get_value(
+        "Department", org_mapping.department, "custom_slade_id"
+    )
+
     payload = {
         "name": doc.name,
         "document_name": doc.name,
-        "organisation": settings.organisation_mapping[0].organisation,
-        "source_organisation_unit": frappe.get_value(
-            "Department", settings.organisation_mapping[0].department, "custom_slade_id"
-        ),
+        "organisation": org_mapping.organisation,
+        "source_organisation_unit": department_slade_id,
         "document_number": doc.name,
         "document_count": series_no,
     }
@@ -127,13 +128,21 @@ def map_document_type(doc: dict, record: dict) -> str:
 
 def update_payload_for_stock_reconciliation(doc: dict, payload: dict) -> None:
     settings = get_settings(company_name=doc.company)
+
+    org_mapping = next(
+        (m for m in settings.organisation_mapping if m.company == doc.company),
+        settings.organisation_mapping[0],
+    )
+
+    warehouse_slade_id = get_slade360_id(
+        "Warehouse", org_mapping.warehouse, settings.name
+    )
+
     payload.update(
         {
             "inventory_reference": doc.name,
             "reason": "Stock Reconciliation",
-            "location": frappe.get_value(
-                "Warehouse", settings.warehouse, "custom_slade_id"
-            ),
+            "location": warehouse_slade_id,
         }
     )
 
@@ -160,7 +169,11 @@ def update_payload_for_sales(doc: dict, record: dict, payload: dict) -> None:
 
 def handle_operation_type(doc: dict, record: dict, payload: dict) -> None:
     settings = get_settings(company_name=doc.company)
-    warehouse = frappe.get_doc("Warehouse", settings.warehouse)
+    org_mapping = next(
+        (m for m in settings.organisation_mapping if m.company == doc.company),
+        settings.organisation_mapping[0],
+    )
+
     if doc.voucher_type == "Stock Reconciliation" or (
         doc.voucher_type == "Stock Entry" and record.is_opening == "Yes"
     ):
@@ -171,7 +184,7 @@ def handle_operation_type(doc: dict, record: dict, payload: dict) -> None:
 
         matching_operation = frappe.db.get_value(
             OPERATION_TYPE_DOCTYPE_NAME,
-            {"operation_type": operation_type, "warehouse": settings.warehouse},
+            {"operation_type": operation_type, "warehouse": org_mapping.warehouse},
             ["name", "slade_id"],
         )
 
@@ -179,7 +192,9 @@ def handle_operation_type(doc: dict, record: dict, payload: dict) -> None:
             payload["operation_type"] = matching_operation[1]
             submit_stock_mvt(payload, "StockIOSaveReq")
         else:
-            create_and_enqueue_operation(doc, operation_type, warehouse)
+            create_and_enqueue_operation(
+                doc, operation_type, org_mapping.warehouse, settings
+            )
 
 
 def get_operation_type(doc: dict, document_type: str) -> dict:
@@ -201,24 +216,42 @@ def get_operation_type(doc: dict, document_type: str) -> dict:
 
 
 def create_and_enqueue_operation(
-    doc: dict, operation_type: dict, warehouse: Document
+    doc: dict, operation_type: dict, warehouse_name: str, settings: dict
 ) -> None:
-    name_parts = [doc.company, warehouse.name, operation_type]
+    warehouse_slade_id = get_slade360_id("Warehouse", warehouse_name, settings.name)
+
+    warehouse_doc = frappe.get_doc("Warehouse", warehouse_name)
+    slade_supplier_warehouse = (
+        get_slade360_id(
+            "Warehouse", warehouse_doc.slade_supplier_warehouse, settings.name
+        )
+        if warehouse_doc.slade_supplier_warehouse
+        else None
+    )
+    slade_customer_warehouse = (
+        get_slade360_id(
+            "Warehouse", warehouse_doc.slade_customer_warehouse, settings.name
+        )
+        if warehouse_doc.slade_customer_warehouse
+        else None
+    )
+
+    name_parts = [doc.company, warehouse_name, operation_type]
     new_operation_type = frappe.get_doc(
         {
             "doctype": OPERATION_TYPE_DOCTYPE_NAME,
             "operation_type": operation_type,
             "company": doc.company,
-            "warehouse": warehouse.name,
+            "warehouse": warehouse_name,
             "source_location": (
-                warehouse.slade_supplier_warehouse
+                slade_supplier_warehouse
                 if operation_type == "outgoing"
-                else warehouse.custom_slade_id
+                else warehouse_slade_id
             ),
             "destination_location": (
-                warehouse.slade_customer_warehouse
+                slade_customer_warehouse
                 if operation_type == "incoming"
-                else warehouse.custom_slade_id
+                else warehouse_slade_id
             ),
             "operation_name": " ".join(name_parts),
             "active": 1,
@@ -329,6 +362,11 @@ def stock_mvt_submission_on_success(
 @frappe.whitelist()
 def submit_stock_mvt_items(name: str) -> None:
     doc = frappe.get_doc("Stock Ledger Entry", name)
+    settings = get_settings(company_name=doc.company)
+    org_mapping = next(
+        (m for m in settings.organisation_mapping if m.company == doc.company),
+        settings.organisation_mapping[0],
+    )
     if (
         not doc.custom_slade_id
         or doc.custom_inventory_submitted_successfully
@@ -337,12 +375,15 @@ def submit_stock_mvt_items(name: str) -> None:
         return
 
     record = frappe.get_doc(doc.voucher_type, doc.voucher_no)
-    item = frappe.get_doc("Item", doc.item_code)
     route_key = "StockIOLineReq"
     id = doc.custom_slade_id
+
+    # Use get_slade360_id for item
+    item_id = get_slade360_id("Item", doc.item_code, settings.name)
+
     requset_data = {
         "document_name": name,
-        "product": item.custom_slade_id,
+        "product": item_id,
         "quantity": round(abs(doc.actual_qty), 4),
         "quantity_confirmed": round(abs(doc.actual_qty), 4),
     }
@@ -437,11 +478,14 @@ def stock_balance_on_success(response: dict, document_name: str, **kwargs) -> No
     from ...apis.apis import submit_inventory
 
     doc = frappe.get_doc("Stock Ledger Entry", document_name)
+    settings = get_settings(company_name=doc.company)
 
     results = (
         response.get("results", [])
         if isinstance(response, dict)
-        else response if isinstance(response, list) else []
+        else response
+        if isinstance(response, list)
+        else []
     )
 
     if not results:
@@ -489,12 +533,22 @@ def stock_balance_on_success(response: dict, document_name: str, **kwargs) -> No
 def fetch_current_stock_balance(document_name: str) -> float:
     doc = frappe.get_doc("Stock Ledger Entry", document_name)
     settings = get_settings(company_name=doc.company)
+
+    # Get slade_id for warehouse and item
+    org_mapping = next(
+        (m for m in settings.organisation_mapping if m.company == doc.company),
+        settings.organisation_mapping[0],
+    )
+
+    warehouse_slade_id = get_slade360_id(
+        "Warehouse", org_mapping.warehouse, settings.name
+    )
+    item_slade_id = get_slade360_id("Item", doc.item_code, settings.name)
+
     requset_data = {
         "document_name": document_name,
-        "location": frappe.get_value(
-            "Warehouse", settings.warehouse, "custom_slade_id"
-        ),
-        "product": frappe.get_value("Item", doc.item_code, "custom_slade_id"),
+        "location": warehouse_slade_id,
+        "product": item_slade_id,
     }
     frappe.enqueue(
         process_request,
