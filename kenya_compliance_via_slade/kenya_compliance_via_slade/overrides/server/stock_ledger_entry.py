@@ -219,23 +219,10 @@ def get_operation_type(doc: dict, document_type: str) -> dict:
 def create_and_enqueue_operation(
     doc: dict, operation_type: dict, warehouse_name: str, settings: dict
 ) -> None:
-    warehouse_slade_id = get_slade360_id("Warehouse", warehouse_name, settings.name)
-
     warehouse_doc = frappe.get_doc("Warehouse", warehouse_name)
-    slade_supplier_warehouse = (
-        get_slade360_id(
-            "Warehouse", warehouse_doc.slade_supplier_warehouse, settings.name
-        )
-        if warehouse_doc.slade_supplier_warehouse
-        else None
-    )
-    slade_customer_warehouse = (
-        get_slade360_id(
-            "Warehouse", warehouse_doc.slade_customer_warehouse, settings.name
-        )
-        if warehouse_doc.slade_customer_warehouse
-        else None
-    )
+    warehouse_slade_id = warehouse_doc.slade_id
+    slade_supplier_warehouse = warehouse_doc.slade_supplier_warehouse or None
+    slade_customer_warehouse = warehouse_doc.slade_customer_warehouse or None
 
     name_parts = [doc.company, warehouse_name, operation_type]
     new_operation_type = frappe.get_doc(
