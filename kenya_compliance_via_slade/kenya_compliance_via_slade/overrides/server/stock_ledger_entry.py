@@ -71,9 +71,18 @@ def prepare_payload(doc: dict, record: dict) -> dict:
     series_no = extract_document_series_number(record)
 
     org_mapping = next(
-        (m for m in settings.organisation_mapping if m.company == company_name),
-        settings.organisation_mapping[0],
+        (
+            m
+            for m in settings.organisation_mapping
+            if m.company == company_name and m.is_active == 1
+        ),
+        None,
     )
+
+    if not org_mapping:
+        frappe.throw(
+            f"No active organisation mapping is configured for company '{company_name}'."
+        )
 
     department_slade_id = frappe.get_value(
         "Department", org_mapping.department, "custom_slade_id"
