@@ -233,12 +233,12 @@ def create_and_enqueue_operation(
             "warehouse": warehouse_name,
             "source_location": (
                 slade_supplier_warehouse
-                if operation_type == "outgoing"
+                if operation_type == "incoming"
                 else warehouse_slade_id
             ),
             "destination_location": (
                 slade_customer_warehouse
-                if operation_type == "incoming"
+                if operation_type == "outgoing"
                 else warehouse_slade_id
             ),
             "operation_name": " ".join(name_parts),
