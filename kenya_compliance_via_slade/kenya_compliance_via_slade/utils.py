@@ -1700,10 +1700,10 @@ def build_item_payload(item, settings_name: str, slade_id: str = None) -> dict:
         "company_name": frappe.defaults.get_user_default("Company"),
         "code": item.item_code,
         # "scu_item_code": item.custom_item_code_etims,
-        "scu_item_classification": get_slade360_id(
+        "scu_item_classification": frappe.db.get_value(
             ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
             item.custom_item_classification,
-            settings_name,
+            "slade_id",
         ),
         "product_type": item.custom_product_type,
         "item_type": item.custom_item_type,
