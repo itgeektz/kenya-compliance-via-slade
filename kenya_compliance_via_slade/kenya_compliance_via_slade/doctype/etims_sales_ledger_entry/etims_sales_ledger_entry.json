@@ -55,7 +55,6 @@
    "fieldname": "document_number",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "Document Number",
    "read_only": 1
   },
@@ -83,7 +82,6 @@
    "fieldname": "sales_type",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "Sales Type",
    "read_only": 1
   },
@@ -91,7 +89,6 @@
    "fieldname": "workflow_state",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "Workflow State",
    "read_only": 1
   },
@@ -104,7 +101,6 @@
    "fieldname": "customer_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "Customer Name",
    "read_only": 1
   },
@@ -157,7 +153,6 @@
    "fieldname": "scu_receipt_number",
    "fieldtype": "Int",
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "SCU Receipt Number",
    "read_only": 1
   },
@@ -165,7 +160,6 @@
    "fieldname": "scu_id",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "SCU ID",
    "read_only": 1
   },
@@ -177,7 +171,6 @@
    "fieldname": "scu_receipt_signature",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "Receipt Signature",
    "read_only": 1
   },
@@ -185,7 +178,6 @@
    "fieldname": "scu_receipt_date",
    "fieldtype": "Date",
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "SCU Receipt Date",
    "read_only": 1
   },
@@ -245,7 +237,6 @@
    "fieldtype": "Link",
    "in_filter": 1,
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "Sales Invoice",
    "options": "Sales Invoice",
    "read_only": 1
@@ -255,7 +246,6 @@
    "fieldtype": "Link",
    "in_filter": 1,
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "Credit Note",
    "options": "Sales Invoice",
    "read_only": 1
@@ -297,7 +287,6 @@
    "fieldname": "scu_mrc_number",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "SCU MRC Number",
    "read_only": 1
   }
@@ -306,7 +295,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-06 14:31:21.669979",
+ "modified": "2026-05-07 11:26:10.119712",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "eTIMS Sales Ledger Entry",
