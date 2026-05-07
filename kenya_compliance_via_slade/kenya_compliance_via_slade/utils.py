@@ -448,7 +448,8 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
         "document_name": invoice.name,
         "reference_number": reference_number,
         "sales_type": "credit",
-        "customer_pin": invoice.tax_id or frappe.get_value("Customer", invoice.customer, "tax_id")
+        "customer_pin": invoice.tax_id
+        or frappe.get_value("Customer", invoice.customer, "tax_id")
         or None,
         "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name")
         or None,
@@ -520,17 +521,18 @@ def update_last_request_date(
     route: str,
     routes_table: str = ROUTES_TABLE_CHILD_DOCTYPE_NAME,
 ) -> None:
-    if len(route) < 5:
-        return
+    pass
+    # if len(route) < 5:
+    #     return
 
-    frappe.db.set_value(
-        routes_table,
-        {"url_path": route},
-        "last_request_date",
-        response_datetime,
-        update_modified=False,
-    )
-    frappe.db.commit()
+    # frappe.db.set_value(
+    #     routes_table,
+    #     {"url_path": route},
+    #     "last_request_date",
+    #     response_datetime,
+    #     update_modified=False,
+    # )
+    # frappe.db.commit()
 
 
 def get_curr_env_etims_settings(

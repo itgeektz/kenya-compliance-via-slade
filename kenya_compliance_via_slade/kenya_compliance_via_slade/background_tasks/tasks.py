@@ -1,12 +1,11 @@
 import json
 from datetime import datetime, timedelta
+from typing import List
 
 import frappe
 import frappe.defaults
 from frappe.model.document import Document
-from frappe import _
 from frappe.utils import now_datetime
-from typing import List
 
 from ..apis.api_builder import EndpointsBuilder
 from ..apis.process_request import process_request

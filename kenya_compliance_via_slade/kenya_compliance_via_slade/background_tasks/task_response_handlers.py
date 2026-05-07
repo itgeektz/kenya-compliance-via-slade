@@ -14,10 +14,9 @@ from ..doctype.doctype_names_mapping import (
     SETTINGS_DOCTYPE_NAME,
     TAXATION_TYPE_DOCTYPE_NAME,
     UNIT_OF_QUANTITY_DOCTYPE_NAME,
-    UOM_CATEGORY_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_link_value, get_company_from_setup_mapping
+from ..utils import get_company_from_setup_mapping, get_link_value
 
 
 def send_pos_invoices_information() -> None:
