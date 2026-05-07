@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"Sdc1m9AyDb\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">eTims Integration</span>\",\"col\":12}},{\"id\":\"dPft27k0bT\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"eTims Notice\",\"col\":3}},{\"id\":\"IJhA6ryFMf\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Integration Request\",\"col\":3}},{\"id\":\"P-6Iw_P1zg\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Error Log\",\"col\":3}},{\"id\":\"btwAd12hX1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"eTims Settings\",\"col\":3}},{\"id\":\"n0_etvXkCr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"eTims Dashboard\",\"col\":3}},{\"id\":\"2mBJcIyECW\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Detailed Documentation\",\"col\":3}},{\"id\":\"UEeD0TQZ1M\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"wDRcmffW60\",\"type\":\"card\",\"data\":{\"card_name\":\"Masters\",\"col\":4}},{\"id\":\"BWUEC2YYZG\",\"type\":\"card\",\"data\":{\"card_name\":\"Setup and Configurations\",\"col\":4}},{\"id\":\"1uTnc5NfCF\",\"type\":\"card\",\"data\":{\"card_name\":\"Codes\",\"col\":4}},{\"id\":\"vct65zYsQ1\",\"type\":\"card\",\"data\":{\"card_name\":\"Item Information\",\"col\":4}},{\"id\":\"RClRPl22Jw\",\"type\":\"card\",\"data\":{\"card_name\":\"Logs and Troubleshooting\",\"col\":4}},{\"id\":\"-1FtcpP1Od\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}},{\"id\":\"uCoSow52Yf\",\"type\":\"card\",\"data\":{\"card_name\":\"Purchases\",\"col\":4}}]",
+ "content": "[{\"id\":\"Sdc1m9AyDb\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">eTims Integration</span>\",\"col\":12}},{\"id\":\"dPft27k0bT\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"eTims Notice\",\"col\":3}},{\"id\":\"IJhA6ryFMf\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Integration Request\",\"col\":3}},{\"id\":\"P-6Iw_P1zg\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Error Log\",\"col\":3}},{\"id\":\"btwAd12hX1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"eTims Settings\",\"col\":3}},{\"id\":\"n0_etvXkCr\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"eTims Dashboard\",\"col\":3}},{\"id\":\"2mBJcIyECW\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Detailed Documentation\",\"col\":3}},{\"id\":\"UEeD0TQZ1M\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"wDRcmffW60\",\"type\":\"card\",\"data\":{\"card_name\":\"Masters\",\"col\":4}},{\"id\":\"BWUEC2YYZG\",\"type\":\"card\",\"data\":{\"card_name\":\"Setup and Configurations\",\"col\":4}},{\"id\":\"1uTnc5NfCF\",\"type\":\"card\",\"data\":{\"card_name\":\"Codes\",\"col\":4}},{\"id\":\"vct65zYsQ1\",\"type\":\"card\",\"data\":{\"card_name\":\"Item Information\",\"col\":4}},{\"id\":\"RClRPl22Jw\",\"type\":\"card\",\"data\":{\"card_name\":\"Logs and Troubleshooting\",\"col\":4}},{\"id\":\"-1FtcpP1Od\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}},{\"id\":\"uCoSow52Yf\",\"type\":\"card\",\"data\":{\"card_name\":\"Purchases\",\"col\":4}},{\"id\":\"jAshTaCV2Q\",\"type\":\"card\",\"data\":{\"card_name\":\"Ledgers\",\"col\":4}}]",
  "creation": "2024-04-03 10:47:58.925837",
  "custom_blocks": [],
  "docstatus": 0,
@@ -89,65 +89,6 @@
    "link_count": 0,
    "link_to": "Navari eTims Stock Operation Type",
    "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Reports",
-   "link_count": 5,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Integration Request Endpoints Report",
-   "link_count": 0,
-   "link_to": "Integration Requests",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Document Submission Status Report",
-   "link_count": 0,
-   "link_to": "Document Submission Status Report",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Document Submission Time Analysis",
-   "link_count": 0,
-   "link_to": "Document Submission Time Analysis",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Integration Request Time Analysis",
-   "link_count": 0,
-   "link_to": "Integration Request Time Analysis",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Failed Integration Requests Analysis",
-   "link_count": 0,
-   "link_to": "Failed Integration Requests Analysis",
-   "link_type": "Report",
    "onboard": 0,
    "type": "Link"
   },
@@ -438,9 +379,97 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Reports",
+   "link_count": 6,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Integration Request Endpoints Report",
+   "link_count": 0,
+   "link_to": "Integration Requests",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Document Submission Status Report",
+   "link_count": 0,
+   "link_to": "Document Submission Status Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Document Submission Time Analysis",
+   "link_count": 0,
+   "link_to": "Document Submission Time Analysis",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Integration Request Time Analysis",
+   "link_count": 0,
+   "link_to": "Integration Request Time Analysis",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Failed Integration Requests Analysis",
+   "link_count": 0,
+   "link_to": "Failed Integration Requests Analysis",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "eTIMS Sales Ledger",
+   "link_count": 0,
+   "link_to": "eTIMS Sales Ledger",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Ledgers",
+   "link_count": 1,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "eTIMS Sales Ledger Entry",
+   "link_count": 0,
+   "link_to": "eTIMS Sales Ledger Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2025-07-02 18:36:10.215959",
+ "modified": "2026-05-07 21:58:26.637019",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "eTims Integration",
