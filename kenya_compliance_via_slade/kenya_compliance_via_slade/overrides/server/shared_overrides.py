@@ -6,11 +6,9 @@ from frappe.model.document import Document
 from ...apis.api_builder import EndpointsBuilder
 from ...apis.process_request import process_request
 from ...apis.remote_response_status_handlers import (
-    sales_information_submission_on_success,
     sales_information_submission_on_error,
+    sales_information_submission_on_success,
 )
-
-# from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
 from ...utils import (
     build_invoice_payload,
     get_invoice_reference_number,
@@ -101,20 +99,44 @@ def generic_invoices_on_submit_override(
         additional_context = {
             "invoice_type": invoice_type,
         }
-        process_request(
-            payload,
-            "SalesInvoiceSaveReq",
-            lambda response, **kwargs: sales_information_submission_on_success(
-                response=response,
-                **additional_context,
-                **kwargs,
-            ),
-            request_method="POST",
-            doctype=invoice_type,
-            settings_name=settings_doc.name,
-            company=company_name,
-            error_callback=sales_information_submission_on_error,
-        )
+        if (
+            hasattr(doc, "enable_background_invoice_submission")
+            and doc.enable_background_invoice_submission
+        ):
+            frappe.enqueue(
+                process_request,
+                enqueue_after_commit=True,
+                request_data=payload,
+                route_key="SalesInvoiceSaveReq",
+                handler_function=lambda response, **kwargs: (
+                    sales_information_submission_on_success(
+                        response=response,
+                        **additional_context,
+                        **kwargs,
+                    )
+                ),
+                request_method="POST",
+                doctype=invoice_type,
+                settings_name=settings_doc.name,
+                company=company_name,
+                error_callback=sales_information_submission_on_error,
+            )
+
+        else:
+            process_request(
+                payload,
+                "SalesInvoiceSaveReq",
+                lambda response, **kwargs: sales_information_submission_on_success(
+                    response=response,
+                    **additional_context,
+                    **kwargs,
+                ),
+                request_method="POST",
+                doctype=invoice_type,
+                settings_name=settings_doc.name,
+                company=company_name,
+                error_callback=sales_information_submission_on_error,
+            )
 
 
 def validate(doc: Document, method: str) -> None:
