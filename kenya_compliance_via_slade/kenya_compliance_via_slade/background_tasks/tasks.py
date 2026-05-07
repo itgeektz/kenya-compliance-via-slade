@@ -648,6 +648,29 @@ def process_etims_autosubmission(doc):
         doc.save(ignore_permissions=True)
 
 
+def run_etims_ledger_scheduler():
+    settings_list = frappe.get_all(
+        SETTINGS_DOCTYPE_NAME,
+        filters={"is_active": 1},
+        fields=["name"],
+    )
+
+    for s in settings_list:
+        try:
+            invoice_date_before = now_datetime().date()
+            invoice_date_after = invoice_date_before - timedelta(days=2)
+            request_data = {
+                "invoice_date_after": invoice_date_after.isoformat(),
+                "invoice_date_before": invoice_date_before.isoformat(),
+            }
+            fetch_etims_sales_data(request_data, s.name)
+        except Exception:
+            frappe.log_error(
+                f"eTims Ledger Scheduler Failed for {s.name}",
+                frappe.get_traceback(),
+            )
+
+
 @frappe.whitelist()
 def fetch_etims_sales_data(
     request_data: str | dict, settings_name: str, invoice_type: str = "Both"
