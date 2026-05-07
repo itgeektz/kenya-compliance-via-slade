@@ -520,17 +520,18 @@ def update_last_request_date(
     route: str,
     routes_table: str = ROUTES_TABLE_CHILD_DOCTYPE_NAME,
 ) -> None:
-    if len(route) < 5:
-        return
+    pass
+    # if len(route) < 5:
+    #     return
 
-    frappe.db.set_value(
-        routes_table,
-        {"url_path": route},
-        "last_request_date",
-        response_datetime,
-        update_modified=False,
-    )
-    frappe.db.commit()
+    # frappe.db.set_value(
+    #     routes_table,
+    #     {"url_path": route},
+    #     "last_request_date",
+    #     response_datetime,
+    #     update_modified=False,
+    # )
+    # frappe.db.commit()
 
 
 def get_curr_env_etims_settings(
