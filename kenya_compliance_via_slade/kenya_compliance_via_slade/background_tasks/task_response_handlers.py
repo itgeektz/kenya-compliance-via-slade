@@ -3,6 +3,7 @@ import json
 import frappe
 import frappe.defaults
 from frappe.model.document import Document
+from frappe.utils import get_datetime, get_datetime_str
 
 from ..doctype.doctype_names_mapping import (
     COUNTRIES_DOCTYPE_NAME,
@@ -13,10 +14,9 @@ from ..doctype.doctype_names_mapping import (
     SETTINGS_DOCTYPE_NAME,
     TAXATION_TYPE_DOCTYPE_NAME,
     UNIT_OF_QUANTITY_DOCTYPE_NAME,
-    UOM_CATEGORY_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_link_value, get_company_from_setup_mapping
+from ..utils import get_company_from_setup_mapping, get_link_value
 
 
 def send_pos_invoices_information() -> None:
@@ -620,3 +620,259 @@ def update_clusters(response: dict, settings_name: str, **kwargs) -> None:
     #     "data": modal_data,
     #     "settings_name": settings_name
     # })
+
+
+def fetch_etims_sales_invoices_on_success(response: dict, **kwargs) -> None:
+    data = response.get("results")
+
+    if not data or not isinstance(data, list):
+        frappe.log_error(
+            title="eTIMS Fetch Error",
+            message=f"No valid data received from eTims or data is not a list {data}",
+        )
+        return
+
+    settings_name = kwargs.get("settings_name")
+    if not settings_name:
+        frappe.log_error(
+            title="eTIMS Fetch Error", message="Settings name not provided in kwargs"
+        )
+        return
+
+    for invoice_data in data:
+        try:
+            slade_id = invoice_data.get("id")
+            if not slade_id:
+                continue
+
+            existing_name = frappe.db.get_value(
+                "eTIMS Sales Ledger Entry", {"slade360_id": slade_id}
+            )
+
+            invoice_date = invoice_data.get("invoice_date")
+            if invoice_date:
+                try:
+                    dt_obj = get_datetime(invoice_date)
+                    invoice_date = get_datetime_str(dt_obj)
+                except Exception:
+                    invoice_date = None
+
+            if existing_name:
+                sales_ledger = frappe.get_doc("eTIMS Sales Ledger Entry", existing_name)
+            else:
+                sales_ledger = frappe.new_doc("eTIMS Sales Ledger Entry")
+                sales_ledger.slade360_id = slade_id
+
+            sales_ledger.update(
+                {
+                    "etims_settings": settings_name,
+                    "type": "Sales Invoice",
+                    "invoice_date": invoice_date,
+                    "reference_number": invoice_data.get("reference_number"),
+                    "document_number": invoice_data.get("document_number"),
+                    "sales_type": invoice_data.get("sales_type"),
+                    "workflow_state": invoice_data.get("workflow_state"),
+                    "customer_name": invoice_data.get("customer_name"),
+                    "total_vat": invoice_data.get("total_vat", 0),
+                    "total_amount": invoice_data.get("total_amount", 0),
+                    "total_gross_amount": invoice_data.get("total_gross_amount", 0),
+                    "tax_exclusive_amount": invoice_data.get("tax_exclusive_amount", 0),
+                    "tax_inclusive_amount": invoice_data.get("tax_inclusive_amount", 0),
+                    "is_signed": 1 if invoice_data.get("is_signed") else 0,
+                }
+            )
+
+            scu_data = invoice_data.get("scu_data") or {}
+            sales_ledger.update(
+                {
+                    "scu_invoice_number": scu_data.get("scu_invoice_number"),
+                    "scu_receipt_number": scu_data.get("scu_receipt_number"),
+                    "scu_id": scu_data.get("scu_id"),
+                    "scu_receipt_signature": scu_data.get("scu_receipt_signature"),
+                    "scu_receipt_date": scu_data.get("scu_receipt_date"),
+                    "scu_receipt_time": scu_data.get("scu_receipt_time"),
+                    "qr_code_url": scu_data.get("qr_code_url"),
+                    "scu_internal_data": scu_data.get("scu_internal_data"),
+                    "scu_mrc_number": scu_data.get("scu_mrc_number"),
+                }
+            )
+
+            sales_ledger.set("sales_invoice_lines", [])
+            lines = invoice_data.get("sales_invoice_lines") or []
+
+            for line in lines:
+                sales_ledger.append(
+                    "sales_invoice_lines",
+                    {
+                        "product_name": line.get("product_name"),
+                        "quantity": line.get("quantity", 1),
+                        "price_inclusive_tax": line.get("price_inclusive_tax", 0),
+                        "price_exclusive_tax": line.get("price_exclusive_tax", 0),
+                        "tax_code": line.get("tax_code"),
+                        "tax_code_description": line.get("tax_code_description"),
+                        "tax_amount": line.get("tax_amount", 0),
+                        "gross_line_amount": line.get("gross_line_amount", 0),
+                        "tax_exclusive_amount": line.get("tax_exclusive_amount", 0),
+                        "tax_inclusive_amount": line.get("tax_inclusive_amount", 0),
+                        "total_net_amount": line.get("total_net_amount", 0),
+                        "pricelist_name": line.get("pricelist_name"),
+                    },
+                )
+
+            sales_ledger.save(ignore_permissions=True)
+            frappe.db.commit()
+
+        except Exception as e:
+            doc_ref = invoice_data.get("document_number", "Unknown Document")
+            frappe.log_error(
+                title=f"eTIMS Sync Error - {doc_ref}",
+                message=f"Error: {str(e)}\nTraceback: {frappe.get_traceback()}",
+            )
+
+
+def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
+    data = response.get("results")
+
+    if not data or not isinstance(data, list):
+        frappe.log_error(
+            title="eTIMS Fetch Error",
+            message=f"No valid data received from eTims or data is not a list {data}",
+        )
+        return
+
+    settings_name = kwargs.get("settings_name")
+    if not settings_name:
+        frappe.log_error(
+            title="eTIMS Fetch Error", message="Settings name not provided in kwargs"
+        )
+        return
+
+    for invoice_data in data:
+        try:
+            slade_id = invoice_data.get("id")
+            if not slade_id:
+                continue
+
+            sales_credit_note_lines = invoice_data.get("sales_credit_note_lines") or []
+            if not sales_credit_note_lines:
+                frappe.log_error(
+                    title="eTIMS Skip Empty Credit Note",
+                    message=f"Skipping credit note {invoice_data.get('document_number')} - No sales credit note lines found",
+                )
+                continue
+
+            existing_name = frappe.db.get_value(
+                "eTIMS Sales Ledger Entry", {"slade360_id": slade_id}
+            )
+
+            created_at = invoice_data.get("created")
+            invoice_date = None
+            if created_at:
+                try:
+                    dt_obj = get_datetime(created_at)
+                    invoice_date = get_datetime_str(dt_obj)
+                except Exception:
+                    invoice_date = None
+
+            if existing_name:
+                sales_ledger = frappe.get_doc("eTIMS Sales Ledger Entry", existing_name)
+            else:
+                sales_ledger = frappe.new_doc("eTIMS Sales Ledger Entry")
+                sales_ledger.slade360_id = slade_id
+
+            etims_invoice = frappe.db.get_value(
+                "eTIMS Sales Ledger Entry",
+                {"slade360_id": invoice_data.get("invoice")},
+                "name",
+            )
+
+            if etims_invoice:
+                sales_invoice = frappe.db.get_value(
+                    "eTIMS Sales Ledger Entry",
+                    {"slade360_id": invoice_data.get("invoice")},
+                    "sales_invoice",
+                )
+                sales_ledger.etims_invoice = etims_invoice
+                sales_ledger.sales_invoice = sales_invoice
+
+            sales_ledger.update(
+                {
+                    "etims_settings": settings_name,
+                    "type": "Credit Note",
+                    "invoice_date": invoice_date,
+                    "reference_number": invoice_data.get("reference_number"),
+                    "document_number": invoice_data.get("document_number"),
+                    "workflow_state": invoice_data.get("workflow_state"),
+                    "total_vat": -abs(invoice_data.get("total_vat") or 0),
+                    "total_amount": -abs(invoice_data.get("crn_total_amount") or 0),
+                    "total_gross_amount": -abs(
+                        invoice_data.get("total_gross_amount") or 0
+                    ),
+                    "is_signed": 1 if invoice_data.get("is_signed") else 0,
+                    "original_etims_invoice_counter": invoice_data.get(
+                        "original_etims_invoice_counter"
+                    ),
+                }
+            )
+
+            customer_details = invoice_data.get("customer_details") or {}
+            sales_ledger.update(
+                {
+                    "customer_name": customer_details.get("partner_name"),
+                    "customer_tax_id": customer_details.get("customer_tax_pin"),
+                }
+            )
+            scu_data = invoice_data.get("scu_data") or {}
+            sales_ledger.update(
+                {
+                    "scu_invoice_number": scu_data.get("scu_invoice_number"),
+                    "scu_receipt_number": scu_data.get("scu_receipt_number"),
+                    "scu_id": scu_data.get("scu_id"),
+                    "scu_receipt_signature": scu_data.get("scu_receipt_signature"),
+                    "scu_receipt_date": scu_data.get("scu_receipt_date"),
+                    "scu_receipt_time": scu_data.get("scu_receipt_time"),
+                    "qr_code_url": scu_data.get("qr_code_url"),
+                    "scu_internal_data": scu_data.get("scu_internal_data"),
+                    "scu_mrc_number": scu_data.get("scu_mrc_number"),
+                }
+            )
+
+            sales_ledger.set("sales_invoice_lines", [])
+
+            for line in sales_credit_note_lines:
+                quantity = line.get("quantity", 1)
+                price_exclusive_tax = line.get("price_exclusive_tax", 0)
+                price_inclusive_tax = line.get("price_inclusive_tax", 0)
+                tax_amount = line.get("tax_amount", 0)
+                gross_line_amount = line.get("gross_line_amount", 0)
+                tax_exclusive_amount = line.get("total_tax_exclusive_amount", 0)
+                tax_inclusive_amount = line.get("total_amount_line", 0)
+                total_net_amount = line.get("total_tax_exclusive_amount", 0)
+
+                sales_ledger.append(
+                    "sales_invoice_lines",
+                    {
+                        "product_name": line.get("product_name"),
+                        "quantity": quantity,
+                        "price_inclusive_tax": -abs(price_inclusive_tax),
+                        "price_exclusive_tax": -abs(price_exclusive_tax),
+                        "tax_code": line.get("tax_code"),
+                        "tax_code_description": line.get("tax_code_description"),
+                        "tax_amount": -abs(tax_amount),
+                        "gross_line_amount": -abs(gross_line_amount),
+                        "tax_exclusive_amount": -abs(tax_exclusive_amount),
+                        "tax_inclusive_amount": -abs(tax_inclusive_amount),
+                        "total_net_amount": -abs(total_net_amount),
+                        "pricelist_name": line.get("pricelist_name"),
+                    },
+                )
+
+            sales_ledger.save(ignore_permissions=True)
+            frappe.db.commit()
+
+        except Exception as e:
+            doc_ref = invoice_data.get("document_number", "Unknown Document")
+            frappe.log_error(
+                title=f"eTIMS Sync Error - {doc_ref}",
+                message=f"Error: {str(e)}\nTraceback: {frappe.get_traceback()}",
+            )

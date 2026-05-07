@@ -34,6 +34,8 @@ USER_DOCTYPE_NAME: Final[str] = "Navari eTims User"
 REGISTERED_IMPORTED_ITEM_DOCTYPE_NAME: Final[str] = (
     "Navari eTims Registered Imported Item"
 )
+SALES_LEDGER_ENTRY_DOCTYPE_NAME: Final[str] = "eTIMS Sales Ledger Entry"
+
 
 # Global Variables
 SANDBOX_SERVER_URL: Final[str] = "https://etims-api-sbx.kra.go.ke/etims-api"

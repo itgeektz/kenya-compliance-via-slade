@@ -5,9 +5,9 @@ const _existing_onload = frappe.listview_settings[doctypeName]?.onload;
 
 frappe.listview_settings[doctypeName].onload = async function (listview) {
   if (_existing_onload) {
-		await _existing_onload.call(this, listview);
+    await _existing_onload.call(this, listview);
   }
-  
+
   const { message: activeSetting } = await frappe.call({
     method:
       "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_settings",
@@ -28,27 +28,27 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
               settings_name: settings_name,
             },
             success_msg: "Bulk submission to eTims queued.",
-          })
+          }),
         );
       },
-      __("eTims Actions")
+      __("eTims Actions"),
     );
 
-    listview.page.add_inner_button(
-      __("Submit All Invoices"),
-      function () {
-        showSettingsModalAndExecute(
-          "Submit All Invoices",
-          activeSetting,
-          (settings_name) => ({
-            method: "bulk_submit_sales_invoices",
-            args: { docs_list: null, settings_name: settings_name },
-            success_msg: "Bulk submission to eTims queued.",
-          })
-        );
-      },
-      __("eTims Actions")
-    );
+    // listview.page.add_inner_button(
+    //   __("Submit All Invoices"),
+    //   function () {
+    //     showSettingsModalAndExecute(
+    //       "Submit All Invoices",
+    //       activeSetting,
+    //       (settings_name) => ({
+    //         method: "bulk_submit_sales_invoices",
+    //         args: { docs_list: null, settings_name: settings_name },
+    //         success_msg: "Bulk submission to eTims queued.",
+    //       })
+    //     );
+    //   },
+    //   __("eTims Actions")
+    // );
 
     listview.page.add_action_item(
       __("Verify & Resend to eTims"),
@@ -64,28 +64,28 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
             },
             success_msg:
               "Bulk verification queued. Incorrect invoices will be resent to eTims.",
-          })
+          }),
         );
       },
-      __("eTims Actions")
+      __("eTims Actions"),
     );
 
-    listview.page.add_inner_button(
-      __("Verify & Resend All Invoices"),
-      function () {
-        showSettingsModalAndExecute(
-          "Verify & Resend All Invoices",
-          activeSetting,
-          (settings_name) => ({
-            method: "bulk_verify_and_resend_invoices",
-            args: { docs_list: null, settings_name: settings_name },
-            success_msg:
-              "Bulk verification queued. Incorrect invoices will be resent to eTims.",
-          })
-        );
-      },
-      __("eTims Actions")
-    );
+    // listview.page.add_inner_button(
+    //   __("Verify & Resend All Invoices"),
+    //   function () {
+    //     showSettingsModalAndExecute(
+    //       "Verify & Resend All Invoices",
+    //       activeSetting,
+    //       (settings_name) => ({
+    //         method: "bulk_verify_and_resend_invoices",
+    //         args: { docs_list: null, settings_name: settings_name },
+    //         success_msg:
+    //           "Bulk verification queued. Incorrect invoices will be resent to eTims.",
+    //       })
+    //     );
+    //   },
+    //   __("eTims Actions")
+    // );
   }
 };
 
@@ -122,7 +122,7 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
         },
       });
       dialog.show();
-    }
+    },
   );
 }
 
