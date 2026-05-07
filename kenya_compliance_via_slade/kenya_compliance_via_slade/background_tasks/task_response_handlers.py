@@ -675,6 +675,7 @@ def fetch_etims_sales_invoices_on_success(response: dict, **kwargs) -> None:
                     "customer_name": invoice_data.get("customer_name"),
                     "total_vat": invoice_data.get("total_vat", 0),
                     "total_amount": invoice_data.get("total_amount", 0),
+                    "total_gross_amount": invoice_data.get("total_gross_amount", 0),
                     "tax_exclusive_amount": invoice_data.get("tax_exclusive_amount", 0),
                     "tax_inclusive_amount": invoice_data.get("tax_inclusive_amount", 0),
                     "is_signed": 1 if invoice_data.get("is_signed") else 0,
@@ -752,6 +753,14 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
             if not slade_id:
                 continue
 
+            sales_credit_note_lines = invoice_data.get("sales_credit_note_lines") or []
+            if not sales_credit_note_lines:
+                frappe.log_error(
+                    title="eTIMS Skip Empty Credit Note",
+                    message=f"Skipping credit note {invoice_data.get('document_number')} - No sales credit note lines found",
+                )
+                continue
+
             existing_name = frappe.db.get_value(
                 "eTIMS Sales Ledger Entry", {"slade360_id": slade_id}
             )
@@ -771,6 +780,21 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
                 sales_ledger = frappe.new_doc("eTIMS Sales Ledger Entry")
                 sales_ledger.slade360_id = slade_id
 
+            etims_invoice = frappe.db.get_value(
+                "eTIMS Sales Ledger Entry",
+                {"slade360_id": invoice_data.get("invoice")},
+                "name",
+            )
+
+            if etims_invoice:
+                sales_invoice = frappe.db.get_value(
+                    "eTIMS Sales Ledger Entry",
+                    {"slade360_id": invoice_data.get("invoice")},
+                    "sales_invoice",
+                )
+                sales_ledger.etims_invoice = etims_invoice
+                sales_ledger.sales_invoice = sales_invoice
+
             sales_ledger.update(
                 {
                     "etims_settings": settings_name,
@@ -779,16 +803,25 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
                     "reference_number": invoice_data.get("reference_number"),
                     "document_number": invoice_data.get("document_number"),
                     "workflow_state": invoice_data.get("workflow_state"),
-                    "customer_name": invoice_data.get("partner_name"),
-                    "total_vat": invoice_data.get("total_vat", 0),
-                    "total_amount": invoice_data.get("crn_total_amount", 0),
-                    "tax_exclusive_amount": invoice_data.get("total_gross_amount", 0)
-                    - invoice_data.get("total_vat", 0),
-                    "tax_inclusive_amount": invoice_data.get("crn_total_amount", 0),
+                    "total_vat": -abs(invoice_data.get("total_vat") or 0),
+                    "total_amount": -abs(invoice_data.get("crn_total_amount") or 0),
+                    "total_gross_amount": -abs(
+                        invoice_data.get("total_gross_amount") or 0
+                    ),
                     "is_signed": 1 if invoice_data.get("is_signed") else 0,
+                    "original_etims_invoice_counter": invoice_data.get(
+                        "original_etims_invoice_counter"
+                    ),
                 }
             )
 
+            customer_details = invoice_data.get("customer_details") or {}
+            sales_ledger.update(
+                {
+                    "customer_name": customer_details.get("partner_name"),
+                    "customer_tax_id": customer_details.get("customer_tax_pin"),
+                }
+            )
             scu_data = invoice_data.get("scu_data") or {}
             sales_ledger.update(
                 {
@@ -805,25 +838,31 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
             )
 
             sales_ledger.set("sales_invoice_lines", [])
-            lines = invoice_data.get("sales_credit_note_lines") or []
 
-            for line in lines:
+            for line in sales_credit_note_lines:
+                quantity = line.get("quantity", 1)
+                price_exclusive_tax = line.get("price_exclusive_tax", 0)
+                price_inclusive_tax = line.get("price_inclusive_tax", 0)
+                tax_amount = line.get("tax_amount", 0)
+                gross_line_amount = line.get("gross_line_amount", 0)
+                tax_exclusive_amount = line.get("total_tax_exclusive_amount", 0)
+                tax_inclusive_amount = line.get("total_amount_line", 0)
+                total_net_amount = line.get("total_tax_exclusive_amount", 0)
+
                 sales_ledger.append(
                     "sales_invoice_lines",
                     {
                         "product_name": line.get("product_name"),
-                        "quantity": line.get("quantity", 1),
-                        "price_inclusive_tax": line.get("price_inclusive_tax", 0),
-                        "price_exclusive_tax": line.get("price_exclusive_tax", 0),
+                        "quantity": quantity,
+                        "price_inclusive_tax": -abs(price_inclusive_tax),
+                        "price_exclusive_tax": -abs(price_exclusive_tax),
                         "tax_code": line.get("tax_code"),
                         "tax_code_description": line.get("tax_code_description"),
-                        "tax_amount": line.get("tax_amount", 0),
-                        "gross_line_amount": line.get("total_amount_line", 0),
-                        "tax_exclusive_amount": line.get(
-                            "total_tax_exclusive_amount", 0
-                        ),
-                        "tax_inclusive_amount": line.get("total_amount_line", 0),
-                        "total_net_amount": line.get("total_tax_exclusive_amount", 0),
+                        "tax_amount": -abs(tax_amount),
+                        "gross_line_amount": -abs(gross_line_amount),
+                        "tax_exclusive_amount": -abs(tax_exclusive_amount),
+                        "tax_inclusive_amount": -abs(tax_inclusive_amount),
+                        "total_net_amount": -abs(total_net_amount),
                         "pricelist_name": line.get("pricelist_name"),
                     },
                 )

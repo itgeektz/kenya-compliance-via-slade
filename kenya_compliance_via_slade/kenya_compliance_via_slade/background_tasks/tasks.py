@@ -652,10 +652,10 @@ def process_etims_autosubmission(doc):
 def fetch_etims_sales_data(
     request_data: str | dict, settings_name: str, invoice_type: str = "Both"
 ) -> None:
+    if invoice_type == "Sales Invoice" or invoice_type == "Both":
+        fetch_etims_sales_invoices(request_data, settings_name)
     if invoice_type == "Credit Note" or invoice_type == "Both":
         fetch_etims_credit_notes(request_data, settings_name)
-    if invoice_type == "Invoice" or invoice_type == "Both":
-        fetch_etims_sales_invoices(request_data, settings_name)
 
 
 @frappe.whitelist()
