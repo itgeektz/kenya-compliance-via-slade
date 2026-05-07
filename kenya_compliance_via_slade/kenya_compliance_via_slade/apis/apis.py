@@ -1329,18 +1329,24 @@ def save_operation_type(name: str) -> dict | None:
     item = frappe.get_doc(OPERATION_TYPE_DOCTYPE_NAME, name)
     slade_id = item.get("slade_id", None)
 
+    settings = get_settings(company_name=item.get("company"))
+
+    org_mapping = next(
+        (
+            m
+            for m in settings.organisation_mapping
+            if m.company == item.get("company") and m.is_active == 1
+        ),
+        None,
+    )
+
     route_key = "OperationTypesReq"
     if item.get("destination_location") and item.get("source_location"):
         request_data = {
             "operation_name": item.get("operation_name"),
             "document_name": item.get("name"),
             "operation_type": item.get("operation_type"),
-            "organisation": get_sl(
-                "Company",
-                "name",
-                item.get("company"),
-                "custom_slade_id",
-            ),
+            "organisation": org_mapping.organisation,
             "destination_location": item.get("destination_location"),
             "source_location": item.get("source_location"),
             "active": False if item.get("active") == 0 else True,
