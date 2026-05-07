@@ -143,15 +143,13 @@ def update_payload_for_stock_reconciliation(doc: dict, payload: dict) -> None:
         (
             m
             for m in settings.organisation_mapping
-            if m.company == doc.company and getattr(m, "is_active", 0)
+            if m.company == doc.company and getattr(m, "is_active", 1)
         ),
         None,
     )
 
     if not org_mapping:
-        frappe.throw(
-            f"No active organisation mapping found for company {doc.company}"
-        )
+        frappe.throw(f"No active organisation mapping found for company {doc.company}")
 
     warehouse_slade_id = get_slade360_id(
         "Warehouse", org_mapping.warehouse, settings.name
@@ -546,7 +544,7 @@ def fetch_current_stock_balance(document_name: str) -> float:
 
     # Get slade_id for warehouse and item
     active_organisation_mappings = [
-        m for m in settings.organisation_mapping if getattr(m, "is_active", 0)
+        m for m in settings.organisation_mapping if getattr(m, "is_active", 1)
     ]
     org_mapping = next(
         (m for m in active_organisation_mappings if m.company == doc.company),
