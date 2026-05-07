@@ -19,15 +19,19 @@
   "column_break_waqb",
   "company",
   "sales_invoice",
-  "credit_note",
+  "etims_invoice",
+  "original_etims_invoice_counter",
   "section_break_fin",
+  "customer",
   "customer_name",
+  "customer_tax_id",
   "column_break_gvfn",
-  "total_vat",
-  "total_amount",
-  "column_break_lwna",
-  "tax_exclusive_amount",
   "tax_inclusive_amount",
+  "tax_exclusive_amount",
+  "total_vat",
+  "column_break_lwna",
+  "total_gross_amount",
+  "total_amount",
   "section_break_scu",
   "scu_invoice_number",
   "scu_receipt_number",
@@ -242,15 +246,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "credit_note",
-   "fieldtype": "Link",
-   "in_filter": 1,
-   "in_list_view": 1,
-   "label": "Credit Note",
-   "options": "Sales Invoice",
-   "read_only": 1
-  },
-  {
    "fieldname": "column_break_gvfn",
    "fieldtype": "Column Break"
   },
@@ -271,7 +266,8 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Company",
-   "options": "Company"
+   "options": "Company",
+   "read_only": 1
   },
   {
    "default": "0",
@@ -289,13 +285,52 @@
    "in_list_view": 1,
    "label": "SCU MRC Number",
    "read_only": 1
+  },
+  {
+   "fieldname": "etims_invoice",
+   "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "label": "eTims Invoice",
+   "options": "eTIMS Sales Ledger Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "original_etims_invoice_counter",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Original eTIMS Invoice Counter",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_gross_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Total Gross Amount",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "sales_invoice.customer",
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer_tax_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Customer Tax ID",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "in_create": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-07 11:26:10.119712",
+ "modified": "2026-05-07 19:13:13.800323",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "eTIMS Sales Ledger Entry",
@@ -317,7 +352,7 @@
  ],
  "row_format": "Dynamic",
  "rows_threshold_for_grid_search": 20,
- "search_fields": "scu_invoice_number,sales_invoice,credit_note,company,reference_number,slade360_id",
+ "search_fields": "scu_invoice_number,sales_invoice,company,reference_number,slade360_id",
  "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",

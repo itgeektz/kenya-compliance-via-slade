@@ -14,16 +14,18 @@ class eTIMSSalesLedgerEntry(Document):
             return
 
         base_ref = self.reference_number.split("-REV")[0]
+        existing_inv = frappe.db.get_value(
+            "Sales Invoice", {"name": base_ref, "is_return": 0}
+        )
+        if existing_inv:
+            self.sales_invoice = existing_inv
 
-        if self.type == "Credit Note":
-            existing_cn = frappe.db.get_value(
-                "Sales Invoice", {"name": base_ref, "is_return": 1}
+        if self.type == "Credit Note" and self.etims_invoice:
+            sales_invoice = frappe.db.get_value(
+                "eTIMS Sales Ledger Entry",
+                self.etims_invoice,
+                "sales_invoice",
+                cache=True,
             )
-            if existing_cn:
-                self.credit_note = existing_cn
-        else:
-            existing_inv = frappe.db.get_value(
-                "Sales Invoice", {"name": base_ref, "is_return": 0}
-            )
-            if existing_inv:
-                self.sales_invoice = existing_inv
+            if sales_invoice:
+                self.sales_invoice = sales_invoice
