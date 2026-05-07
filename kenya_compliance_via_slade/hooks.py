@@ -1,10 +1,3 @@
-from .kenya_compliance_via_slade.doctype.doctype_names_mapping import (
-    IMPORTED_ITEMS_STATUS_DOCTYPE_NAME,
-    ITEM_TYPE_DOCTYPE_NAME,
-    PRODUCT_TYPE_DOCTYPE_NAME,
-    ROUTES_TABLE_DOCTYPE_NAME,
-)
-
 app_name = "kenya_compliance_via_slade"
 app_title = "Kenya Compliance (KRA eTIMS)"
 app_publisher = "Navari Ltd"
