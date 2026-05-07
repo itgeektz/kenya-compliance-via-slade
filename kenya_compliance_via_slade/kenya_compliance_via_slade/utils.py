@@ -5,24 +5,23 @@ import re
 import secrets
 import string
 from base64 import b64encode
+from collections import defaultdict
 from datetime import datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 from io import BytesIO
 from typing import Any, Dict, List, Union
 from urllib.parse import urlencode
-from collections import defaultdict
 
 import aiohttp
+import frappe
 import qrcode
 import requests
 from aiohttp import ClientTimeout
-
-import frappe
 from frappe import _
 from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
 from frappe.query_builder import DocType
-from frappe.utils import now_datetime, add_to_date
+from frappe.utils import add_to_date, now_datetime
 
 from .doctype.doctype_names_mapping import (
     ENVIRONMENT_SPECIFICATION_DOCTYPE_NAME,
@@ -521,17 +520,18 @@ def update_last_request_date(
     route: str,
     routes_table: str = ROUTES_TABLE_CHILD_DOCTYPE_NAME,
 ) -> None:
-    if len(route) < 5:
-        return
+    pass
+    # if len(route) < 5:
+    #     return
 
-    frappe.db.set_value(
-        routes_table,
-        {"url_path": route},
-        "last_request_date",
-        response_datetime,
-        update_modified=False,
-    )
-    frappe.db.commit()
+    # frappe.db.set_value(
+    #     routes_table,
+    #     {"url_path": route},
+    #     "last_request_date",
+    #     response_datetime,
+    #     update_modified=False,
+    # )
+    # frappe.db.commit()
 
 
 def get_curr_env_etims_settings(
