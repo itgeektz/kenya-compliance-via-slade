@@ -18,6 +18,8 @@ from ..doctype.doctype_names_mapping import (
 )
 from ..utils import get_max_submission_attempts, get_next_run
 from .task_response_handlers import (
+    fetch_etims_credit_notes_on_success,
+    fetch_etims_sales_invoices_on_success,
     operation_types_search_on_success,
     update_branches,
     update_clusters,
@@ -645,3 +647,35 @@ def process_etims_autosubmission(doc):
 
     if updated:
         doc.save(ignore_permissions=True)
+
+
+@frappe.whitelist()
+def fetch_etims_sales_data(
+    request_data: str | dict, settings_name: str, invoice_type: str = "Both"
+) -> None:
+    if invoice_type == "Credit Note" or invoice_type == "Both":
+        fetch_etims_credit_notes(request_data, settings_name)
+    if invoice_type == "Invoice" or invoice_type == "Both":
+        fetch_etims_sales_invoices(request_data, settings_name)
+
+
+@frappe.whitelist()
+def fetch_etims_sales_invoices(request_data: str | dict, settings_name: str) -> None:
+    process_request(
+        request_data,
+        "TrnsSalesSaveWrReq",
+        request_method="GET",
+        settings_name=settings_name,
+        handler_function=fetch_etims_sales_invoices_on_success,
+    )
+
+
+@frappe.whitelist()
+def fetch_etims_credit_notes(request_data: str | dict, settings_name: str) -> None:
+    process_request(
+        request_data,
+        "SalesCreditNoteSaveReq",
+        request_method="GET",
+        settings_name=settings_name,
+        handler_function=fetch_etims_credit_notes_on_success,
+    )
