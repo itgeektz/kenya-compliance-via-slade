@@ -1948,22 +1948,66 @@ def prepare_return_invoice_payload(
     }
 
 
+# def prepare_credit_note_payload(
+#     document_name: str,
+#     data: Dict[str, Any],
+# ) -> Dict:
+
+#     credit_note_details = {
+#         "amount": data.get("total_gross_amount", 0),
+#         "customer": data.get("customer"),
+#         "invoice": data.get("id"),
+#         "reason": "13",
+#         "source_organisation_unit": data.get("source_organisation_unit"),
+#         "organisation": data.get("organisation"),
+#         "description": f"Credit Note for {document_name}",
+#     }
+
+#     return credit_note_details
+
+
 def prepare_credit_note_payload(
     document_name: str,
-    data: Dict[str, Any],
-) -> Dict:
+    reference_number: str,
+    amount: float,
+    invoice: Document,
+    kra_invoice_data: Dict[str, Any],
+    is_full_return: bool,
+    rate_field: str,
+    tax_field: str,
+) -> Dict[str, Any]:
+    items = []
 
-    credit_note_details = {
-        "amount": data.get("total_gross_amount", 0),
-        "customer": data.get("customer"),
-        "invoice": data.get("id"),
-        "reason": "13",
-        "source_organisation_unit": data.get("source_organisation_unit"),
-        "organisation": data.get("organisation"),
-        "description": f"Credit Note for {document_name}",
+    if is_full_return:
+        for line in kra_invoice_data.get("sales_invoice_lines", []):
+            items.append(
+                {
+                    "item_name": line.get("product_name"),
+                    "quantity": round(abs(line.get("quantity", 0)), 2),
+                    "amount": round(abs(line.get("price_inclusive_tax", 0)), 4),
+                }
+            )
+    else:
+        for item in invoice.items:
+            qty = abs(item.get("qty"))
+            tax_total = item.get(tax_field) or 0
+            tax_amount = abs(tax_total / qty) if qty else 0
+            base_amount = round(abs(item.get(rate_field)) or 0, 4) + tax_amount
+
+            items.append(
+                {
+                    "item_name": item.item_code,
+                    "quantity": round(qty, 2),
+                    "amount": round(base_amount, 4),
+                }
+            )
+
+    return {
+        "document_name": document_name,
+        "invoice_reference": reference_number,
+        "refund_reason": "13",
+        "items": items,
     }
-
-    return credit_note_details
 
 
 def prepare_credit_note_items_payload(

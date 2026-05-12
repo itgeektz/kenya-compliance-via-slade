@@ -732,42 +732,54 @@ def request_credit_note_for_wrong_invoice(
         return
 
     return_payload = prepare_credit_note_payload(document_name, data)
-
-    credit_note_data = process_request(
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
         request_data=return_payload,
-        route_key="SalesCreditNoteSaveReq",
+        route_key="CreditNoteSaveReq",
         handler_function=credit_note_on_success,
         request_method="POST",
         doctype=doctype,
         settings_name=settings_name,
         company=doc.company,
     )
-    if credit_note_data and isinstance(credit_note_data, dict):
-        id = credit_note_data.get("id")
-        items_data = prepare_credit_note_items_payload(id, data, settings_name)
-        for item in items_data:
-            process_request(
-                request_data=item,
-                route_key="SalesCreditNoteLineReq",
-                handler_function=credit_note_on_success,
-                request_method="POST",
-                doctype=doctype,
-                settings_name=settings_name,
-                company=doc.company,
-            )
-        payload = {"invoice_id": id, "document_name": document_name}
-        frappe.enqueue(
-            process_request,
-            queue="default",
-            is_async=True,
-            request_data=payload,
-            route_key="SalesCreditNoteTransitionReq",
-            handler_function=sign_credit_note,
-            request_method="PATCH",
-            doctype=doctype,
-            settings_name=settings_name,
-            company=doc.company,
-        )
+
+    # credit_note_data = process_request(
+    #     request_data=return_payload,
+    #     route_key="SalesCreditNoteSaveReq",
+    #     handler_function=credit_note_on_success,
+    #     request_method="POST",
+    #     doctype=doctype,
+    #     settings_name=settings_name,
+    #     company=doc.company,
+    # )
+    # if credit_note_data and isinstance(credit_note_data, dict):
+    #     id = credit_note_data.get("id")
+    #     items_data = prepare_credit_note_items_payload(id, data, settings_name)
+    #     for item in items_data:
+    #         process_request(
+    #             request_data=item,
+    #             route_key="SalesCreditNoteLineReq",
+    #             handler_function=credit_note_on_success,
+    #             request_method="POST",
+    #             doctype=doctype,
+    #             settings_name=settings_name,
+    #             company=doc.company,
+    #         )
+    #     payload = {"invoice_id": id, "document_name": document_name}
+    #     frappe.enqueue(
+    #         process_request,
+    #         queue="default",
+    #         is_async=True,
+    #         request_data=payload,
+    #         route_key="CreditNoteSaveReq",
+    #         handler_function=sign_credit_note,
+    #         request_method="PATCH",
+    #         doctype=doctype,
+    #         settings_name=settings_name,
+    #         company=doc.company,
+    #     )
 
 
 def sign_credit_note(
