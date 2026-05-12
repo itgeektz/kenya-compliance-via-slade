@@ -9,9 +9,10 @@ from ...apis.remote_response_status_handlers import (
     sales_information_submission_on_error,
     sales_information_submission_on_success,
 )
+
+# from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
 from ...utils import (
     build_invoice_payload,
-    get_invoice_reference_number,
     get_settings,
     get_slade360_id,
     validate_kra_pin,

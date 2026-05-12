@@ -1,11 +1,10 @@
+import time
 from datetime import datetime
 from io import BytesIO
 
 import deprecation
 import frappe
 import qrcode
-import time
-
 
 from ... import __version__
 from ..doctype.doctype_names_mapping import (
@@ -27,18 +26,16 @@ from ..doctype.doctype_names_mapping import (
 )
 from ..handlers import handle_slade_errors
 from ..utils import (
+    build_invoice_payload,
     build_item_payload,
     build_partner_payload,
     build_return_invoice_payload,
-    build_invoice_payload,
     get_link_value,
     get_or_create_link,
     get_parent_by_slade360_id,
     get_slade360_id,
     parse_response_data,
-    prepare_credit_note_items_payload,
     prepare_credit_note_payload,
-    prepare_return_invoice_payload,
 )
 
 
@@ -326,7 +323,6 @@ def sales_information_submission_on_success(
 def sales_information_submission_on_error(
     response: dict, document_name: str, doctype: str, settings_name: str, **kwargs
 ) -> None:
-    from ..overrides.server.sales_invoice import send_invoice_details
     from .apis import perform_item_registration
 
     doc = frappe.get_doc(doctype, document_name)
@@ -991,7 +987,9 @@ def purchase_search_on_success(response: dict, settings_name: str, **kwargs) -> 
     sales_list = (
         response.get("results", [])
         if isinstance(response, dict)
-        else response if isinstance(response, list) else [response]
+        else response
+        if isinstance(response, list)
+        else [response]
     )
     for sale in sales_list:
         registered_purchase = create_purchase_from_search_details(sale)

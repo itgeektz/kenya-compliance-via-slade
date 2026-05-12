@@ -101,6 +101,7 @@ frappe.ui.form.on(parentDoctype, {
 function showSettingsModalAndExecute(title, settings, getCallArgs) {
   if (settings.length === 1) {
     const { method, args, success_msg } = getCallArgs(settings[0].name);
+
     frappe.call({
       method: method,
       args: args,
@@ -112,6 +113,7 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
         frappe.msgprint(__("An error occurred during the request."));
       },
     });
+
     return;
   }
 
@@ -133,7 +135,9 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
     primary_action_label: __("Proceed"),
     primary_action: ({ settings_name }) => {
       dialog.hide();
+
       const { method, args, success_msg } = getCallArgs(settings_name);
+
       frappe.call({
         method: method,
         args: args,
@@ -147,6 +151,7 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
       });
     },
   });
+
   dialog.show();
 }
 
@@ -168,6 +173,7 @@ frappe.ui.form.on(childDoctype, {
       );
     }
   },
+
   custom_packaging_unit: async function (frm, cdt, cdn) {
     const packagingUnit = locals[cdt][cdn].custom_packaging_unit;
 
@@ -186,6 +192,7 @@ frappe.ui.form.on(childDoctype, {
       );
     }
   },
+
   custom_unit_of_quantity: function (frm, cdt, cdn) {
     const unitOfQuantity = locals[cdt][cdn].custom_unit_of_quantity;
 
@@ -209,6 +216,7 @@ frappe.ui.form.on(childDoctype, {
 async function updateTaxAmountLabel(frm) {
   try {
     const defaultCompany = frappe.defaults.get_user_default("Company");
+
     if (!defaultCompany) return;
 
     const { message: companyDoc } = await frappe.db.get_value(

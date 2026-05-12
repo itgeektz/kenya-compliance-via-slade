@@ -4,17 +4,16 @@ from datetime import datetime
 from typing import Callable, Literal, Optional, Union
 from urllib import parse
 
-import requests
-
 import frappe
+import requests
 from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
 
 from ..logger import etims_logger
 from ..utils import (
+    reset_auth_password,
     update_last_request_date,
     update_navari_settings_with_token,
-    reset_auth_password,
 )
 from .remote_response_status_handlers import on_slade_error
 
