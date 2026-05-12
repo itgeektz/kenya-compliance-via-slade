@@ -757,7 +757,7 @@ def submit_inventory(name: str, settings_name: str) -> None:
             "Warehouse",
             "name",
             settings.organisation_mapping[0].get("warehouse"),
-            "custom_slade_id",
+            "slade_id",
         ),
     }
     process_request(
@@ -1269,10 +1269,13 @@ def _process_invoice_fetch_request(
             route_key = "TrnsSalesSaveWrReq"
             request_data["reference_number"] = reference_number
 
-    return process_request(
-        request_data,
-        route_key,
-        handler_function,
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
+        request_data=request_data,
+        route_key=route_key,
+        handler_function=handler_function,
         doctype=invoice_type,
         settings_name=settings_name,
         company=company,
@@ -1289,15 +1292,21 @@ def get_invoice_details(
 ) -> None:
     """Get invoice details"""
     invoice = frappe.get_doc(invoice_type, document_name)
-    reference_number = get_invoice_reference_number(invoice)
-    _process_invoice_fetch_request(
-        id=None,
-        document_name=document_name,
-        invoice_type=invoice_type,
+    slade_id = invoice.custom_slade_id
+    request_data = {
+        "document_name": document_name,
+        "id": id or slade_id,
+    }
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
+        request_data=request_data,
+        route_key="SaleSearchReq",
+        handler_function=update_invoice_info,
+        doctype=invoice_type,
         settings_name=settings_name,
         company=company,
-        handler_function=update_invoice_info,
-        reference_number=reference_number,
     )
 
 
@@ -1329,18 +1338,24 @@ def save_operation_type(name: str) -> dict | None:
     item = frappe.get_doc(OPERATION_TYPE_DOCTYPE_NAME, name)
     slade_id = item.get("slade_id", None)
 
+    settings = get_settings(company_name=item.get("company"))
+
+    org_mapping = next(
+        (
+            m
+            for m in settings.organisation_mapping
+            if m.company == item.get("company") and m.is_active == 1
+        ),
+        None,
+    )
+
     route_key = "OperationTypesReq"
     if item.get("destination_location") and item.get("source_location"):
         request_data = {
             "operation_name": item.get("operation_name"),
             "document_name": item.get("name"),
             "operation_type": item.get("operation_type"),
-            "organisation": get_link_value(
-                "Company",
-                "name",
-                item.get("company"),
-                "custom_slade_id",
-            ),
+            "organisation": org_mapping.organisation,
             "destination_location": item.get("destination_location"),
             "source_location": item.get("source_location"),
             "active": False if item.get("active") == 0 else True,

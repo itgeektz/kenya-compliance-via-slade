@@ -78,18 +78,19 @@ def generic_invoices_on_submit_override(
 
         from ...apis.apis import submit_credit_note
 
-        reference_number = get_invoice_reference_number(return_invoice)
+        slade_id = frappe.db.get_value(
+            "Sales Invoice", doc.return_against, "custom_slade_id"
+        )
         request_data = {
             "document_name": doc.name,
-            "company": company_name,
-            "reference_number": reference_number,
+            "id": slade_id,
         }
         frappe.enqueue(
             process_request,
             queue="default",
             is_async=True,
             request_data=request_data,
-            route_key="TrnsSalesSaveWrReq",
+            route_key="SaleSearchReq",
             handler_function=submit_credit_note,
             doctype=invoice_type,
             settings_name=settings_doc.name,
