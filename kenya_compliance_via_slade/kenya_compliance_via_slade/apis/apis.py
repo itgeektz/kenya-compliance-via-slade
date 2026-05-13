@@ -1292,22 +1292,35 @@ def get_invoice_details(
 ) -> None:
     """Get invoice details"""
     invoice = frappe.get_doc(invoice_type, document_name)
-    slade_id = invoice.custom_slade_id
-    request_data = {
-        "document_name": document_name,
-        "id": id or slade_id,
-    }
-    frappe.enqueue(
-        process_request,
-        queue="default",
-        is_async=True,
-        request_data=request_data,
-        route_key="SaleSearchReq",
-        handler_function=update_invoice_info,
-        doctype=invoice_type,
-        settings_name=settings_name,
-        company=company,
-    )
+    slade_id = id or invoice.custom_slade_id
+    if slade_id:
+        request_data = {
+            "document_name": document_name,
+            "id": slade_id,
+        }
+        frappe.enqueue(
+            process_request,
+            queue="default",
+            is_async=True,
+            request_data=request_data,
+            route_key="SaleSearchReq",
+            handler_function=update_invoice_info,
+            doctype=invoice_type,
+            settings_name=settings_name,
+            company=company,
+        )
+
+    else:
+        reference_number = get_invoice_reference_number(invoice)
+        _process_invoice_fetch_request(
+            id=None,
+            document_name=document_name,
+            invoice_type=invoice_type,
+            settings_name=settings_name,
+            company=company,
+            handler_function=update_invoice_info,
+            reference_number=reference_number,
+        )
 
 
 @frappe.whitelist()
