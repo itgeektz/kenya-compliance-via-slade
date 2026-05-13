@@ -4,17 +4,16 @@ from datetime import datetime
 from typing import Callable, Literal, Optional, Union
 from urllib import parse
 
-import requests
-
 import frappe
+import requests
 from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
 
 from ..logger import etims_logger
 from ..utils import (
+    reset_auth_password,
     update_last_request_date,
     update_navari_settings_with_token,
-    reset_auth_password,
 )
 from .remote_response_status_handlers import on_slade_error
 
@@ -250,7 +249,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                     self._url, json=self._payload, headers=self._headers
                 )
             elif self._method == "GET":
-                # self._payload["page_size"] = 15000
+                self._payload["page_size"] = 15000
                 response = requests.get(
                     self._url, headers=self._headers, params=self._payload
                 )
