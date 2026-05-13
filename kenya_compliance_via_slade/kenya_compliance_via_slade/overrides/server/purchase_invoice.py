@@ -22,6 +22,16 @@ def validate(doc: Document, method: str = None) -> None:
             ["name"],
             as_dict=True,
         )
+
+        if not vat_acct:
+            frappe.throw(
+                frappe._(
+                    "No 16% VAT Tax Account found for company {0}. "
+                    "Please ensure a Tax account with account type 'Tax' "
+                    "and tax rate 16 exists."
+                ).format(doc.company)
+            )
+
         doc.set(
             "taxes",
             [
@@ -58,12 +68,6 @@ def submit_purchase_invoice(doc: Document) -> None:
         ):
             # If the submission is prevented or if the invoice number is already set, skip submission
             return
-
-        # company_name = (
-        #     doc.company
-        #     # or frappe.defaults.get_user_default("Company")
-        #     # or frappe.get_value("Company", {}, "name")
-        # )
 
         if settings_doc:
             payload = build_purchase_invoice_payload(doc, company_name)
