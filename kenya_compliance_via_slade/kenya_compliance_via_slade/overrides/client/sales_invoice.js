@@ -53,36 +53,24 @@ frappe.ui.form.on(parentDoctype, {
         );
       }
 
-      if (frm.doc.custom_successfully_submitted || frm.doc.custom_slade_id) {
-        frm.add_custom_button(
-          __("Sync Invoice Details"),
-          function () {
-            showSettingsModalAndExecute(
-              "Sync Invoice",
-              activeSetting,
-              (settings_name) => ({
-                method:
-                  "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
-                args: {
-                  document_name: frm.doc.name,
-                  invoice_type: "Sales Invoice",
-                  settings_name: settings_name,
-                  company: frm.doc.company,
-                },
-                success_msg: "Invoice sync queued",
-              }),
-            );
-          },
-          __("eTims Actions"),
-        );
-      }
-
       frm.add_custom_button(
-        __("Check eTIMS Status"),
+        __("Sync or Check Status"),
         function () {
-          const referenceNumber = frm.doc.is_return
-            ? frm.doc.return_against
-            : frm.doc.name;
+          showSettingsModalAndExecute(
+            "Sync Invoice",
+            activeSetting,
+            (settings_name) => ({
+              method:
+                "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
+              args: {
+                document_name: frm.doc.name,
+                invoice_type: "Sales Invoice",
+                settings_name: settings_name,
+                company: frm.doc.company,
+              },
+              success_msg: "Invoice sync queued",
+            }),
+          );
 
           showSettingsModalAndExecute(
             "Check eTIMS Status",
@@ -92,7 +80,9 @@ frappe.ui.form.on(parentDoctype, {
                 "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_data",
               args: {
                 request_data: {
-                  reference_number: referenceNumber,
+                  reference_number: frm.doc.is_return
+                    ? frm.doc.return_against
+                    : frm.doc.name,
                 },
                 settings_name: settings_name,
                 invoice_type: "Sales Invoice",
@@ -104,7 +94,10 @@ frappe.ui.form.on(parentDoctype, {
         __("eTims Actions"),
       );
 
-      if (summaryData?.hasSignificantMismatch) {
+      if (
+        frm.doc.custom_successfully_submitted &&
+        summaryData?.hasSignificantMismatch
+      ) {
         frm.add_custom_button(
           __("Correction Credit Note on eTIMS"),
           function () {

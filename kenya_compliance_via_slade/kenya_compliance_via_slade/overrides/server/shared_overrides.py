@@ -94,6 +94,7 @@ def generic_invoices_on_submit_override(
             handler_function=submit_credit_note,
             doctype=invoice_type,
             settings_name=settings_doc.name,
+            company=company_name,
         )
 
     else:
