@@ -54,7 +54,7 @@ frappe.ui.form.on(parentDoctype, {
       }
 
       frm.add_custom_button(
-        __("Check & Sync eTIMS Status"),
+        __("Sync or Check Status"),
         function () {
           showSettingsModalAndExecute(
             "Sync Invoice",
@@ -686,10 +686,7 @@ async function renderEtimsSummary(frm) {
         ? frappe.datetime.obj_to_str(creationDate)
         : threeMonthsBack;
 
-    const endDate =
-      postingDate && postingDate < today
-        ? frm.doc.posting_date
-        : frappe.datetime.get_today();
+    const endDate = frappe.datetime.get_today();
 
     const response = await frappe.call({
       method: "frappe.desk.query_report.run",
