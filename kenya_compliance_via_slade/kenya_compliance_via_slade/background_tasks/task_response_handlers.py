@@ -60,6 +60,11 @@ def update_documents(
 
     doc_list = data if isinstance(data, list) else data.get("results", [data])
 
+    def safe_setattr(doc, field, value):
+        if isinstance(value, str):
+            value = value.replace("\\'", "'")
+        setattr(doc, field, value)
+
     for record in doc_list:
         if isinstance(record, str):
             continue
@@ -72,7 +77,7 @@ def update_documents(
 
         for field, value in field_mapping.items():
             if isinstance(value, str):
-                setattr(temp_doc, field, record.get(value, ""))
+                safe_setattr(temp_doc, field, record.get(value, ""))
 
         for field, value in field_mapping.items():
             if isinstance(value, dict) and "doctype" in value:
