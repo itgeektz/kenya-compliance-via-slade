@@ -30,7 +30,6 @@ class BaseEndpointsBuilder:
 
     def attach(self, observer: ErrorObserver) -> None:
         """Attach an observer
-
         Args:
             observer (AbstractObserver): The observer to attach
         """
@@ -47,12 +46,10 @@ class ErrorObserver:
 
     def update(self, notifier: BaseEndpointsBuilder) -> None:
         """Reacts to event from notifier
-
         Args:
             notifier (AbstractEndpointsBuilder): The event notifier object
         """
         if notifier.error:
-            # TODO: Check why integration log is never updated
             update_integration_request(
                 notifier.integration_request.name,
                 status="Failed",
@@ -173,7 +170,6 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         """Fetch a new token and update the headers."""
         try:
             settings = update_navari_settings_with_token(self._settings.name)
-
             if settings:
                 new_token = settings.access_token
                 self._headers["Authorization"] = f"Bearer {new_token}"
@@ -232,7 +228,6 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                     reference_doctype=doctype,
                 )
             except frappe.LinkValidationError:
-                # Retry without passing reference_docname if document doesn't exist
                 self.integration_request = create_request_log(
                     data=self._payload,
                     request_description=self._request_description,
@@ -279,7 +274,6 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                     "status",
                     "Completed",
                 )
-
                 self._success_callback_handler(
                     response=response_data,
                     document_name=document_name,
@@ -287,10 +281,8 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                     payload=self._payload,
                     settings_name=self._settings.name,
                 )
-
                 current_page = response_data.get("current_page", None)
                 total_pages = response_data.get("total_pages", 0)
-
                 update_integration_request(
                     self.integration_request.name,
                     status="Completed",
@@ -315,7 +307,6 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                     in error
                 ):
                     reset_auth_password(self._settings.name)
-
                 update_integration_request(
                     self.integration_request.name,
                     status="Failed",
@@ -337,14 +328,10 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                         payload=self._payload,
                         settings_name=self._settings.name,
                     )
-
                 if response.status_code == 401 and not retrying:
-                    # Optionally, you can refresh token and retry here if needed
                     self.refresh_token()
                     self.make_remote_call(doctype, document_name, retrying=True)
-
             return response_data
-
         except Exception as error:
             frappe.log_error(
                 title="eTims Error",
@@ -372,7 +359,6 @@ def get_response_data(response: requests.Response) -> Optional[Union[dict, str, 
         or "application/zip" in content_type
     ):
         return response.content
-
     return None
 
 
@@ -384,7 +370,6 @@ def update_integration_request(
     request_description: str | None = None,
 ) -> None:
     """Updates the given integration request record silently without creating a version.
-
     Args:
         integration_request (str): The provided integration request.
         status (Literal["Completed", "Failed"]): The new status of the request.
@@ -393,7 +378,6 @@ def update_integration_request(
         request_description (str | None, optional): Additional description for the request.
     """
     update_fields = {"status": status}
-
     if error:
         current_error = frappe.db.get_value(
             "Integration Request", integration_request, "error"
@@ -405,7 +389,6 @@ def update_integration_request(
             update_fields["error"] = (
                 new_error[:5000] if len(new_error) > 5000 else new_error
             )
-
     if output:
         current_output = frappe.db.get_value(
             "Integration Request", integration_request, "output"
@@ -417,7 +400,6 @@ def update_integration_request(
             update_fields["output"] = (
                 new_output[:5000] if len(new_output) > 5000 else new_output
             )
-
     if request_description:
         current_desc = frappe.db.get_value(
             "Integration Request", integration_request, "request_description"
@@ -433,7 +415,6 @@ def update_integration_request(
             update_fields["request_description"] = (
                 new_desc[:5000] if len(new_desc) > 5000 else new_desc
             )
-
     frappe.db.set_value(
         "Integration Request", integration_request, update_fields, update_modified=False
     )
