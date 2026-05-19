@@ -87,7 +87,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         self._method: Literal["GET", "POST", "PATCH", "PUT"] | None = None
         self._success_callback_handler: Callable | None = None
         self._error_callback_handler: Callable | None = None
-
+        self.job_queue: Document | None = None
         self.attach(ErrorObserver())
 
     @property
@@ -239,29 +239,40 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                 )
 
         try:
+            params = {}
+            if self._method == "GET":
+                page_size = 100
+                if self.job_queue and self.job_queue.page_size:
+                    page_size = self.job_queue.page_size
+
+                params = self._payload.copy() if self._payload else {}
+                params["page_size"] = page_size
+
+            request_url = self._url
+            if self.job_queue and self.job_queue.url:
+                request_url = self.job_queue.url
+
             if self._method == "POST":
                 response = requests.post(
-                    self._url, json=self._payload, headers=self._headers
+                    request_url, json=self._payload, headers=self._headers
                 )
             elif self._method == "GET":
-                self._payload["page_size"] = 15000
                 response = requests.get(
-                    self._url, headers=self._headers, params=self._payload
+                    request_url, headers=self._headers, params=params
                 )
-
             elif self._method == "PATCH":
                 patch_id = self._payload.pop("id", None)
-                if patch_id and f"/{patch_id}/" not in self._url:
-                    self._url = f"{self._url.rstrip('/')}/{patch_id}/"
+                if patch_id and f"/{patch_id}/" not in request_url:
+                    request_url = f"{request_url.rstrip('/')}/{patch_id}/"
                 response = requests.patch(
-                    self._url, json=self._payload, headers=self._headers
+                    request_url, json=self._payload, headers=self._headers
                 )
             elif self._method == "PUT":
                 put_id = self._payload.pop("id", None)
-                if put_id and f"/{put_id}/" not in self._url:
-                    self._url = f"{self._url.rstrip('/')}/{put_id}/"
+                if put_id and f"/{put_id}/" not in request_url:
+                    request_url = f"{request_url.rstrip('/')}/{put_id}/"
                 response = requests.put(
-                    self._url, json=self._payload, headers=self._headers
+                    request_url, json=self._payload, headers=self._headers
                 )
 
             response_data = get_response_data(response)
@@ -294,6 +305,14 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                         else None
                     ),
                 )
+                if self.job_queue:
+                    self.job_queue.update_status(
+                        status="Success",
+                        error_message=None,
+                        integration_request=self.integration_request.name
+                        if self.integration_request
+                        else None,
+                    )
             else:
                 if isinstance(response_data, str):
                     error = response_data
@@ -319,6 +338,14 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                     doctype=doctype,
                     document_name=document_name,
                 )
+                if self.job_queue:
+                    self.job_queue.update_status(
+                        status="Failed",
+                        error_message=error,
+                        integration_request=self.integration_request.name
+                        if self.integration_request
+                        else None,
+                    )
                 if self._error_callback_handler:
                     self._error_callback_handler(
                         response=response_data,
@@ -339,14 +366,19 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                 reference_doctype=self.doctype,
                 reference_name=self.document_name,
             )
-            # self.error = error
-            # self.notify()
+            if self.job_queue:
+                self.job_queue.update_status(
+                    status="Failed",
+                    error_message=str(error),
+                    integration_request=self.integration_request.name
+                    if self.integration_request
+                    else None,
+                )
             return None
 
 
 def get_response_data(response: requests.Response) -> Optional[Union[dict, str, bytes]]:
     content_type = response.headers.get("Content-Type", "").lower()
-
     if "application/json" in content_type:
         return response.json()
     elif "text/plain" in content_type or "text/html" in content_type:
