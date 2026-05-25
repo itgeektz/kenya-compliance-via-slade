@@ -3,10 +3,15 @@ from typing import Callable
 import frappe
 import frappe.defaults
 
-from ..doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
+from ..doctype.doctype_names_mapping import (
+    SETTINGS_DOCTYPE_NAME,
+)
 from ..utils import (
+    get_route_path,
+    get_server_url,
     get_settings,
     parse_request_data,
+    process_dynamic_url,
 )
 
 
@@ -39,6 +44,11 @@ def process_request(
             or frappe.get_value("Company", {}, "name")
         )
 
+        server_url = get_server_url(company_name, branch_id, settings_name)
+        route_path, _ = get_route_path(route_key, "VSCU Slade 360")
+        dynamic_route_path = process_dynamic_url(route_path, request_data)
+        url = f"{server_url}{dynamic_route_path}"
+
         settings = get_settings(company_name, branch_id, settings_name)
 
         if not settings or settings.get("is_active") != 1:
@@ -68,6 +78,7 @@ def process_request(
                     if error_callback
                     else None
                 ),
+                "url": url,
             }
         )
 
