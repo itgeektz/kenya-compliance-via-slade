@@ -241,7 +241,10 @@ doc_events = {
 scheduler_events = {
     "cron": {
         "0/5 * * * *": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_autosubmission_scheduler"
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_autosubmission_scheduler",
+        ],
+        "*/1 * * * *": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.queue_maintenance.run_etims_queue_maintenance",
         ],
     },
     "daily": [

@@ -34,6 +34,8 @@ USER_DOCTYPE_NAME: Final[str] = "Navari eTims User"
 REGISTERED_IMPORTED_ITEM_DOCTYPE_NAME: Final[str] = (
     "Navari eTims Registered Imported Item"
 )
+QUEUE_MANAGER_DOCTYPE: Final[str] = "eTims Queue Manager"
+QUEUE_DOCTYPE: Final[str] = "eTims Job Queue"
 
 # Global Variables
 SANDBOX_SERVER_URL: Final[str] = "https://etims-api-sbx.kra.go.ke/etims-api"
