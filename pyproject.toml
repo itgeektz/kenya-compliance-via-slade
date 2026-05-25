@@ -12,7 +12,10 @@ dependencies = [
     "aiohttp==3.9.1",
     "deprecation==2.1.0",
     "qrcode==7.4.2",
-    "bs4"
+    "bs4",
+    "google-genai",
+    "google-cloud-aiplatform",
+    "google-auth",
 ]
 
 [tool.bench.frappe-dependencies]
