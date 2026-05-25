@@ -100,7 +100,20 @@
   "get_new_token",
   "column_break_uosd",
   "token_expiry",
-  "expires_in"
+  "expires_in",
+  "ai_classification_tab",
+  "ai_classification_section",
+  "enable_ai_item_classification",
+  "auto_classify_items",
+  "classification_system_prompt",
+  "ai_provider_column",
+  "classification_ai_provider",
+  "google_provider",
+  "classification_api_key",
+  "gcp_project_id",
+  "gcp_location",
+  "gcp_service_account_key",
+  "classification_model_id"
  ],
  "fields": [
   {
@@ -686,6 +699,88 @@
    "fieldtype": "Datetime",
    "label": "Codes Next Run",
    "read_only": 1
+  },
+  {
+   "fieldname": "ai_classification_tab",
+   "fieldtype": "Tab Break",
+   "label": "AI Classification"
+  },
+  {
+   "fieldname": "ai_classification_section",
+   "fieldtype": "Section Break",
+   "label": "AI Item Classification"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_ai_item_classification",
+   "fieldtype": "Check",
+   "label": "Enable AI Item Classification"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_ai_item_classification",
+   "fieldname": "auto_classify_items",
+   "fieldtype": "Check",
+   "label": "Auto Classify Items"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_item_classification",
+   "fieldname": "classification_ai_provider",
+   "fieldtype": "Select",
+   "label": "AI Provider",
+   "options": "Custom\nGoogle\nOpenAI\nAnthropic\nDeepSeek\nGrok"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_item_classification",
+   "fieldname": "classification_api_key",
+   "fieldtype": "Password",
+   "label": "API Key"
+  },
+  {
+   "default": "gemini-2.0-flash",
+   "depends_on": "eval:doc.enable_ai_item_classification",
+   "fieldname": "classification_model_id",
+   "fieldtype": "Data",
+   "label": "Model ID"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_item_classification",
+   "description": "Custom prompt for AI classification behavior",
+   "fieldname": "classification_system_prompt",
+   "fieldtype": "Code",
+   "label": "System Prompt"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_item_classification",
+   "fieldname": "ai_provider_column",
+   "fieldtype": "Column Break",
+   "label": "AI Provider"
+  },
+  {
+   "default": "Google AI Studio",
+   "depends_on": "eval:doc.enable_ai_item_classification && doc.classification_ai_provider == \"Google\"",
+   "fieldname": "google_provider",
+   "fieldtype": "Select",
+   "label": "Google Provider",
+   "options": "Google AI Studio\nVertex AI"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_item_classification && doc.google_provider == \"Vertex AI\"",
+   "fieldname": "gcp_project_id",
+   "fieldtype": "Data",
+   "label": "GCP Project ID"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_item_classification && doc.google_provider == \"Vertex AI\"",
+   "fieldname": "gcp_location",
+   "fieldtype": "Data",
+   "label": "GCP Location"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_item_classification && doc.google_provider == \"Vertex AI\"",
+   "fieldname": "gcp_service_account_key",
+   "fieldtype": "Small Text",
+   "label": "GCP Service Account Key"
   }
  ],
  "grid_page_length": 50,
@@ -697,7 +792,7 @@
    "link_fieldname": "reference_docname"
   }
  ],
- "modified": "2026-05-18 12:11:04.504516",
+ "modified": "2026-05-25 20:21:54.627669",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "Navari KRA eTims Settings",
