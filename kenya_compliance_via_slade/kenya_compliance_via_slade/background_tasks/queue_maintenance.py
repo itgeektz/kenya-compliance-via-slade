@@ -34,8 +34,6 @@ def run_etims_queue_maintenance() -> None:
 
     cleanup_old_jobs()
 
-    frappe.get_single("eTims Queue Manager").trigger_queue()
-
 
 def mark_stale_jobs_as_failed() -> None:
     """
