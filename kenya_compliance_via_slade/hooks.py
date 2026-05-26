@@ -46,19 +46,19 @@ fixtures = [
 # include js in doctype views
 doctype_js = {
     "Sales Invoice": "kenya_compliance_via_slade/overrides/client/sales_invoice.js",
-    "Purchase Invoice": "kenya_compliance_via_slade/overrides/client/purchase_invoice.js",
+    # "Purchase Invoice": "kenya_compliance_via_slade/overrides/client/purchase_invoice.js",
     "Customer": "kenya_compliance_via_slade/overrides/client/customer.js",
     "Supplier": "kenya_compliance_via_slade/overrides/client/supplier.js",
     "Item": "kenya_compliance_via_slade/overrides/client/items.js",
-    "BOM": "kenya_compliance_via_slade/overrides/client/bom.js",
-    "Branch": "kenya_compliance_via_slade/overrides/client/branch.js",
-    "Stock Ledger Entry": "kenya_compliance_via_slade/overrides/client/stock_ledger_entry.js",
+    # "BOM": "kenya_compliance_via_slade/overrides/client/bom.js",
+    # "Branch": "kenya_compliance_via_slade/overrides/client/branch.js",
+    # "Stock Ledger Entry": "kenya_compliance_via_slade/overrides/client/stock_ledger_entry.js",
 }
 
 doctype_list_js = {
     "Item": "kenya_compliance_via_slade/overrides/client/items_list.js",
     "Sales Invoice": "kenya_compliance_via_slade/overrides/client/sales_invoice_list.js",
-    "Branch": "kenya_compliance_via_slade/overrides/client/branch_list.js",
+    # "Branch": "kenya_compliance_via_slade/overrides/client/branch_list.js",
     "Customer": "kenya_compliance_via_slade/overrides/client/customer_list.js",
     "Supplier": "kenya_compliance_via_slade/overrides/client/supplier_list.js",
 }
@@ -178,20 +178,20 @@ doc_events = {
             "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.after_save_"
         ],
     },
-    "Purchase Invoice": {
-        "on_update": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.after_save_"
-        ],
-        "on_submit": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.purchase_invoice.on_submit"
-        ],
-        "validate": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.purchase_invoice.validate"
-        ],
-        "before_cancel": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.before_cancel"
-        ],
-    },
+    # "Purchase Invoice": {
+    #     "on_update": [
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.after_save_"
+    #     ],
+    #     "on_submit": [
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.purchase_invoice.on_submit"
+    #     ],
+    #     "validate": [
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.purchase_invoice.validate"
+    #     ],
+    #     "before_cancel": [
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.before_cancel"
+    #     ],
+    # },
     "Item": {
         "validate": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.item.validate"
@@ -201,11 +201,11 @@ doc_events = {
         ],
         "on_trash": "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.item.prevent_item_deletion",
     },
-    "BOM": {
-        "on_submit": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.bom.on_submit"
-        ]
-    },
+    # "BOM": {
+    #     "on_submit": [
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.bom.on_submit"
+    #     ]
+    # },
     "Supplier": {
         "before_save": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.supplier.before_save"
@@ -228,11 +228,11 @@ doc_events = {
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.after_insert"
         ],
     },
-    "Stock Ledger Entry": {
-        "on_update": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.stock_ledger_entry.on_update"
-        ],
-    },
+    # "Stock Ledger Entry": {
+    #     "on_update": [
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.stock_ledger_entry.on_update"
+    #     ],
+    # },
 }
 
 # Scheduled Tasks
