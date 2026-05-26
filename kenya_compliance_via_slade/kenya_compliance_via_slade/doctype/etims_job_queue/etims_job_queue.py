@@ -304,11 +304,10 @@ def execute_remote_request(
     endpoints_builder.error_callback = error_handler
     endpoints_builder.settings = settings
     endpoints_builder.job_queue = job_queue
+    endpoints_builder.doctype = doctype
+    endpoints_builder.document_name = document_name
 
-    response = endpoints_builder.make_remote_call(
-        doctype=doctype,
-        document_name=document_name,
-    )
+    response = endpoints_builder.make_remote_call()
 
     if job_queue and isinstance(response, dict) and response.get("next"):
         next_url: str = response["next"]

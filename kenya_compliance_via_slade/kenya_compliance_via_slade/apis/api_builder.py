@@ -29,11 +29,47 @@ class BaseEndpointsBuilder:
     """
 
     def __init__(self) -> None:
-        self.integration_request: str | Document | None = None
-        self.error: str | Exception | None = None
+        self._integration_request: str | Document | None = None
+        self._error: str | Exception | None = None
         self._observers: list[ErrorObserver] = []
-        self.doctype: str | Document | None = None
-        self.document_name: str | None = None
+        self._doctype: str | Document | None = None
+        self._document_name: str | None = None
+
+    @property
+    def integration_request(self) -> str | Document | None:
+        """Integration Request document linked to the current request."""
+        return self._integration_request
+
+    @integration_request.setter
+    def integration_request(self, value: str | Document | None) -> None:
+        self._integration_request = value
+
+    @property
+    def error(self) -> str | Exception | None:
+        """Current error captured during request processing."""
+        return self._error
+
+    @error.setter
+    def error(self, value: str | Exception | None) -> None:
+        self._error = value
+
+    @property
+    def doctype(self) -> str | Document | None:
+        """Reference doctype associated with the current request."""
+        return self._doctype
+
+    @doctype.setter
+    def doctype(self, value: str | Document | None) -> None:
+        self._doctype = value
+
+    @property
+    def document_name(self) -> str | None:
+        """Reference document name associated with the current request."""
+        return self._document_name
+
+    @document_name.setter
+    def document_name(self, value: str | None) -> None:
+        self._document_name = value
 
     def attach(self, observer: "ErrorObserver") -> None:
         """
@@ -102,8 +138,10 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         builder.payload = {...}
         builder.success_callback = my_handler
         builder.settings = settings_doc
-        builder.job_queue = job_doc        # optional, links status updates
-        response = builder.make_remote_call(doctype="Sales Invoice", document_name="SI-001")
+        builder.job_queue = job_doc
+        builder.doctype = "Sales Invoice"
+        builder.document_name = "SI-001"
+        response = builder.make_remote_call()
 
     The builder is typically reused (module-level singleton in ``etims_job_queue.py``)
     with properties reset before each call.
@@ -111,16 +149,18 @@ class EndpointsBuilder(BaseEndpointsBuilder):
 
     def __init__(self) -> None:
         super().__init__()
+
         self._url: str | None = None
         self._route_path: str | None = None
         self._request_description: str | None = None
-        self._payload: dict | None = None
-        self._settings = None
-        self._headers: dict | None = None
+        self._payload: dict | list | None = None
+        self._settings: Document | dict | None = None
+        self._headers: dict[str, str] | None = None
         self._method: Literal["GET", "POST", "PATCH", "PUT"] | None = None
-        self._success_callback_handler: Callable | None = None
-        self._error_callback_handler: Callable | None = None
-        self.job_queue: Document | None = None
+        self._success_callback_handler: Callable[..., None] | None = None
+        self._error_callback_handler: Callable[..., None] | None = None
+        self._job_queue: Document | None = None
+
         self.attach(ErrorObserver())
 
     @property
@@ -138,7 +178,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         return self._url
 
     @url.setter
-    def url(self, value: str) -> None:
+    def url(self, value: str | None) -> None:
         self._url = value
 
     @property
@@ -147,7 +187,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         return self._route_path
 
     @route_path.setter
-    def route_path(self, value: str) -> None:
+    def route_path(self, value: str | None) -> None:
         self._route_path = value
 
     @property
@@ -156,58 +196,65 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         return self._request_description
 
     @request_description.setter
-    def request_description(self, value: str) -> None:
+    def request_description(self, value: str | None) -> None:
         self._request_description = value
 
     @property
-    def payload(self) -> dict | None:
+    def payload(self) -> dict | list | None:
         """Request body / query params dict."""
         return self._payload
 
     @payload.setter
-    def payload(self, value: dict) -> None:
+    def payload(self, value: dict | list | None) -> None:
         self._payload = value
 
     @property
-    def settings(self):
+    def settings(self) -> Document | dict | None:
         """eTims Settings document (or dict) associated with this call."""
         return self._settings
 
     @settings.setter
-    def settings(self, value) -> None:
+    def settings(self, value: Document | dict | None) -> None:
         self._settings = value
 
     @property
-    def headers(self) -> dict | None:
+    def headers(self) -> dict[str, str] | None:
         """HTTP headers including ``Authorization``."""
         return self._headers
 
     @headers.setter
-    def headers(self, value: dict) -> None:
+    def headers(self, value: dict[str, str] | None) -> None:
         self._headers = value
 
     @property
-    def success_callback(self) -> Callable | None:
+    def success_callback(self) -> Callable[..., None] | None:
         """Callable invoked when the server returns 200/201."""
         return self._success_callback_handler
 
     @success_callback.setter
-    def success_callback(self, value: Callable) -> None:
+    def success_callback(self, value: Callable[..., None] | None) -> None:
         self._success_callback_handler = value
 
     @property
-    def error_callback(self) -> Callable | None:
+    def error_callback(self) -> Callable[..., None] | None:
         """Callable invoked on non-2xx responses."""
         return self._error_callback_handler
 
     @error_callback.setter
-    def error_callback(self, value: Callable) -> None:
+    def error_callback(self, value: Callable[..., None] | None) -> None:
         self._error_callback_handler = value
+
+    @property
+    def job_queue(self) -> Document | None:
+        """Queue document associated with the current request."""
+        return self._job_queue
+
+    @job_queue.setter
+    def job_queue(self, value: Document | None) -> None:
+        self._job_queue = value
 
     def make_remote_call(
         self,
-        doctype: str | None = None,
-        document_name: str | None = None,
         retrying: bool = False,
     ) -> dict | str | bytes | None:
         """
@@ -217,54 +264,63 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         Integration Request to ``"Completed"``, and mark the job ``"Success"``.
 
         On error: update the Integration Request to ``"Failed"``, invoke
-        ``error_callback`` (if provided), and mark the job ``"Failed"``.  If
+        ``error_callback`` (if provided), and mark the job ``"Failed"``. If
         the status code is 401 and this is not already a retry, refresh the
         access token and retry once.
 
         Args:
-            doctype: Reference doctype for the Integration Request and error
-                     logs.
-            document_name: Reference document name.
             retrying: Internal flag — ``True`` on the single token-refresh
-                      retry.  Prevents infinite loops.
+                      retry. Prevents infinite loops.
 
         Returns:
             The parsed response (dict, str, or bytes) or ``None`` on error.
         """
         self._validate_required_fields()
 
-        if not self._settings.is_active == 1:
+        if not self.settings.is_active == 1:
             frappe.log_error(
                 title="Inactive eTims Settings",
                 message=(
-                    f"Settings '{self._settings.name}' is inactive. "
-                    "Remote call aborted."
+                    f"Settings '{self.settings.name}' is inactive. Remote call aborted."
                 ),
-                reference_doctype=doctype,
-                reference_name=document_name,
+                reference_doctype=self.doctype,
+                reference_name=self.document_name,
             )
             return None
 
-        self.doctype, self.document_name = doctype, document_name
-
         if not retrying:
             self.integration_request = self._create_integration_log(
-                doctype, document_name
+                self.doctype,
+                self.document_name,
             )
 
         try:
             response = self._dispatch_http_request()
+
             response_data = _parse_response(response)
-            update_last_request_date(datetime.now(), self._route_path)
+
+            update_last_request_date(
+                datetime.now(),
+                self.route_path,
+            )
 
             if response.status_code in {200, 201}:
-                self._handle_success(response_data, doctype, document_name)
+                self._handle_success(
+                    response_data,
+                    self.doctype,
+                    self.document_name,
+                )
             else:
-                self._handle_error(response, response_data, doctype, document_name)
+                self._handle_error(
+                    response,
+                    response_data,
+                    self.doctype,
+                    self.document_name,
+                )
 
                 if response.status_code == 401 and not retrying:
                     self.refresh_token()
-                    return self.make_remote_call(doctype, document_name, retrying=True)
+                    return self.make_remote_call(retrying=True)
 
             return response_data
 
@@ -273,12 +329,13 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                 title="eTims — HTTP error",
                 message=(
                     f"Error: {exc}\n"
-                    f"URL: {self._route_path}\n"
+                    f"URL: {self.route_path}\n"
                     f"Traceback:\n{frappe.get_traceback()}"
                 ),
                 reference_doctype=self.doctype,
                 reference_name=self.document_name,
             )
+
             if self.job_queue:
                 self.job_queue.update_status(
                     status="Failed",
@@ -289,6 +346,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                         else None
                     ),
                 )
+
             return None
 
     def refresh_token(self) -> str | None:
@@ -302,14 +360,23 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             frappe.AuthenticationError: If the refresh request fails.
         """
         try:
-            settings = update_navari_settings_with_token(self._settings.name)
+            settings = update_navari_settings_with_token(self.settings.name)
+
             if settings:
                 new_token = settings.access_token
-                self._headers["Authorization"] = f"Bearer {new_token}"
+                self.headers["Authorization"] = f"Bearer {new_token}"
                 return new_token
-            frappe.throw("Failed to refresh token", frappe.AuthenticationError)
+
+            frappe.throw(
+                "Failed to refresh token",
+                frappe.AuthenticationError,
+            )
+
         except requests.exceptions.RequestException as exc:
-            frappe.throw(f"Error refreshing token: {exc}", frappe.AuthenticationError)
+            frappe.throw(
+                f"Error refreshing token: {exc}",
+                frappe.AuthenticationError,
+            )
 
     def _validate_required_fields(self) -> None:
         """
@@ -319,7 +386,12 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             frappe.MandatoryError: If any required field is missing.
         """
         if not all(
-            [self._url, self._headers, self._method, self._success_callback_handler]
+            [
+                self.url,
+                self.headers,
+                self.method,
+                self.success_callback,
+            ]
         ):
             frappe.throw(
                 "Please ensure URL, headers, method, and success_callback are set.",
@@ -329,14 +401,15 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             )
 
     def _create_integration_log(
-        self, doctype: str | None, document_name: str | None
+        self,
+        doctype: str | None,
+        document_name: str | None,
     ) -> Document:
         """
         Create a Frappe ``Integration Request`` log for this call.
 
         Falls back to a log without ``reference_docname`` if a
-        ``LinkValidationError`` is raised (e.g. if the document name does not
-        exist in the DB yet).
+        ``LinkValidationError`` is raised.
 
         Args:
             doctype: Reference doctype.
@@ -345,18 +418,24 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         Returns:
             The newly created ``Integration Request`` document.
         """
-        cleaned_url = clean_url_params(self._url)
+        cleaned_url = clean_url_params(self.url)
+
         common = dict(
-            data=self._payload,
-            request_description=self._request_description,
+            data=self.payload,
+            request_description=self.request_description,
             is_remote_request=True,
-            service_name=self._request_description,
-            request_headers=self._headers,
+            service_name=self.request_description,
+            request_headers=self.headers,
             url=cleaned_url,
             reference_doctype=doctype,
         )
+
         try:
-            return create_request_log(**common, reference_docname=document_name)
+            return create_request_log(
+                **common,
+                reference_docname=document_name,
+            )
+
         except frappe.LinkValidationError:
             return create_request_log(**common)
 
@@ -366,27 +445,17 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         ``requests.Response``.
 
         URL query parameters are normalized before dispatch to prevent
-        duplicated pagination params such as:
-
-            ?page=5&page_size=100&page_size=100
-
-        For ``GET`` requests:
-            - page_size is injected if missing
-            - final URL is cleaned before request
-
-        For ``PATCH`` / ``PUT``:
-            - payload ``id`` is appended to URL if not already present
+        duplicated pagination params.
 
         Returns:
             requests.Response:
                 Raw HTTP response object.
         """
-
         request_url = (
-            self.job_queue.url if self.job_queue and self.job_queue.url else self._url
+            self.job_queue.url if self.job_queue and self.job_queue.url else self.url
         )
 
-        if self._method == "GET":
+        if self.method == "GET":
             page_size = (
                 self.job_queue.page_size
                 if self.job_queue and self.job_queue.page_size
@@ -394,7 +463,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             )
 
             params = {
-                **(self._payload or {}),
+                **(self.payload or {}),
                 "page_size": page_size,
             }
 
@@ -408,20 +477,20 @@ class EndpointsBuilder(BaseEndpointsBuilder):
 
             return requests.get(
                 request_url,
-                headers=self._headers,
+                headers=self.headers,
             )
 
-        if self._method == "POST":
+        if self.method == "POST":
             request_url = clean_url_params(request_url)
 
             return requests.post(
                 request_url,
-                json=self._payload,
-                headers=self._headers,
+                json=self.payload,
+                headers=self.headers,
             )
 
-        if self._method == "PATCH":
-            patch_id = self._payload.pop("id", None)
+        if self.method == "PATCH":
+            patch_id = self.payload.pop("id", None)
 
             if patch_id and f"/{patch_id}/" not in request_url:
                 request_url = f"{request_url.rstrip('/')}/{patch_id}/"
@@ -430,12 +499,12 @@ class EndpointsBuilder(BaseEndpointsBuilder):
 
             return requests.patch(
                 request_url,
-                json=self._payload,
-                headers=self._headers,
+                json=self.payload,
+                headers=self.headers,
             )
 
-        if self._method == "PUT":
-            put_id = self._payload.pop("id", None)
+        if self.method == "PUT":
+            put_id = self.payload.pop("id", None)
 
             if put_id and f"/{put_id}/" not in request_url:
                 request_url = f"{request_url.rstrip('/')}/{put_id}/"
@@ -444,11 +513,11 @@ class EndpointsBuilder(BaseEndpointsBuilder):
 
             return requests.put(
                 request_url,
-                json=self._payload,
-                headers=self._headers,
+                json=self.payload,
+                headers=self.headers,
             )
 
-        frappe.throw(f"Unsupported HTTP method: {self._method}")
+        frappe.throw(f"Unsupported HTTP method: {self.method}")
 
     def _handle_success(
         self,
@@ -475,12 +544,12 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             "Completed",
         )
 
-        self._success_callback_handler(
+        self.success_callback(
             response=response_data,
             document_name=document_name,
             doctype=doctype,
-            payload=self._payload,
-            settings_name=self._settings.name,
+            payload=self.payload,
+            settings_name=self.settings.name,
         )
 
         current_page = (
@@ -488,6 +557,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             if isinstance(response_data, dict)
             else None
         )
+
         total_pages = (
             response_data.get("total_pages", 0)
             if isinstance(response_data, dict)
@@ -524,9 +594,9 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         Handle a non-2xx response.
 
         * Extracts a human-readable error message.
-        * Resets auth password on JSON-decode errors (token corruption).
+        * Resets auth password on JSON-decode errors.
         * Updates the Integration Request to ``"Failed"``.
-        * Calls ``on_slade_error`` and ``error_callback`` (if set).
+        * Calls ``on_slade_error`` and ``error_callback``.
         * Marks the job ``"Failed"``.
 
         Args:
@@ -535,7 +605,8 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             doctype: Reference doctype.
             document_name: Reference document name.
         """
-        parsed_url = parse.urlparse(self._url)
+        parsed_url = parse.urlparse(self.url)
+
         route_path = f"/{parsed_url.path.split('/')[-1]}"
 
         if isinstance(response_data, str):
@@ -546,7 +617,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             error = str(response_data)
 
         if "could not decode json" in error.lower():
-            reset_auth_password(self._settings.name)
+            reset_auth_password(self.settings.name)
 
         _update_integration_request(
             self.integration_request.name,
@@ -569,14 +640,14 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                 integration_request=self.integration_request.name,
             )
 
-        if self._error_callback_handler:
-            self._error_callback_handler(
+        if self.error_callback:
+            self.error_callback(
                 response=response_data,
                 url=route_path,
                 doctype=doctype,
                 document_name=document_name,
-                payload=self._payload,
-                settings_name=self._settings.name,
+                payload=self.payload,
+                settings_name=self.settings.name,
             )
 
 
