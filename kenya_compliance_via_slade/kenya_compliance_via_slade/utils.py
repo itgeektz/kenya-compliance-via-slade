@@ -483,6 +483,33 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
     return payload
 
 
+def build_bulk_invoice_payload(
+    invoice_names: list[str],
+    settings_name: str,
+) -> dict:
+    invoices_payload = []
+
+    callback_url = (
+        "https://4e73-105-160-101-47.ngrok-free.app"
+        + "/api/method/kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.bulk_invoice_callback"
+    )
+
+    for invoice_name in invoice_names:
+        invoice = frappe.get_doc("Sales Invoice", invoice_name)
+
+        invoices_payload.append(
+            build_invoice_payload(
+                invoice=invoice,
+                settings_name=settings_name,
+            )
+        )
+
+    return {
+        "invoices": invoices_payload,
+        "callback_url": callback_url,
+    }
+
+
 def get_invoice_items_list(invoice: Document) -> list[dict[str, str | int | None]]:
     """Iterates over the invoice items and extracts relevant data
 

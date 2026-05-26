@@ -21,6 +21,7 @@ from ..doctype.doctype_names_mapping import (
     USER_DOCTYPE_NAME,
 )
 from ..utils import (
+    build_bulk_invoice_payload,
     build_return_invoice_payload,
     chunked,
     generate_custom_item_code_etims,
@@ -54,18 +55,67 @@ from .remote_response_status_handlers import (
 endpoints_builder = EndpointsBuilder()
 
 
+# @frappe.whitelist()
+# def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None) -> str:
+#     """Bulk submit sales invoices in chunks"""
+#     filters = {"docstatus": 1, "custom_successfully_submitted": 0}
+
+#     if docs_list:
+#         provided_names = json.loads(docs_list)
+#         valid_invoices = frappe.get_all("Sales Invoice", filters=filters, pluck="name")
+#         invoices_to_process = [n for n in provided_names if n in valid_invoices]
+#     else:
+#         invoices_to_process = frappe.get_all(
+#             "Sales Invoice", filters=filters, pluck="name"
+#         )
+
+#     if not invoices_to_process:
+#         return "No invoices to process."
+
+#     for batch in chunked(invoices_to_process, 100):
+#         frappe.enqueue(
+#             process_invoices_sequentially,
+#             invoice_list=batch,
+#             queue="long",
+#             timeout=3600,
+#             enqueue_after_commit=True,
+#             job_name=f"Bulk Submit Invoices Batch ({len(batch)})",
+#         )
+
+#     return "Processing started."
+
+
 @frappe.whitelist()
-def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None) -> str:
+def bulk_submit_sales_invoices(
+    docs_list: str = None,
+    settings_name: str = None,
+) -> str:
     """Bulk submit sales invoices in chunks"""
-    filters = {"docstatus": 1, "custom_successfully_submitted": 0}
+
+    filters = {
+        "docstatus": 1,
+        "custom_successfully_submitted": 0,
+        "is_return": 0,
+    }
 
     if docs_list:
         provided_names = json.loads(docs_list)
-        valid_invoices = frappe.get_all("Sales Invoice", filters=filters, pluck="name")
-        invoices_to_process = [n for n in provided_names if n in valid_invoices]
+
+        valid_invoices = frappe.get_all(
+            "Sales Invoice",
+            filters=filters,
+            pluck="name",
+        )
+
+        invoices_to_process = [
+            name for name in provided_names if name in valid_invoices
+        ]
+
     else:
         invoices_to_process = frappe.get_all(
-            "Sales Invoice", filters=filters, pluck="name"
+            "Sales Invoice",
+            filters=filters,
+            pluck="name",
         )
 
     if not invoices_to_process:
@@ -73,8 +123,9 @@ def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None)
 
     for batch in chunked(invoices_to_process, 100):
         frappe.enqueue(
-            process_invoices_sequentially,
+            process_bulk_invoice_submission,
             invoice_list=batch,
+            settings_name=settings_name,
             queue="long",
             timeout=3600,
             enqueue_after_commit=True,
@@ -82,6 +133,55 @@ def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None)
         )
 
     return "Processing started."
+
+
+def process_bulk_invoice_submission(
+    invoice_list: list[str],
+    settings_name: str,
+) -> None:
+    payload = build_bulk_invoice_payload(
+        invoice_names=invoice_list,
+        settings_name=settings_name,
+    )
+
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
+        request_data=payload,
+        route_key="BulkSalesInvoiceSaveReq",
+        handler_function=fetch_matching_items_on_success,
+        request_method="POST",
+        settings_name=settings_name,
+    )
+
+
+@frappe.whitelist(allow_guest=True)
+def bulk_invoice_callback():
+    data = frappe.request.get_json()
+
+    frappe.log_error(
+        title="Bulk Invoice Callback",
+        message=frappe.as_json(data),
+    )
+
+    return {
+        "status": "success",
+    }
+
+
+def handle_bulk_invoice_success(**kwargs):
+    frappe.log_error(
+        title="Bulk Invoice Success",
+        message=frappe.as_json(kwargs),
+    )
+
+
+def handle_bulk_invoice_error(**kwargs):
+    frappe.log_error(
+        title="Bulk Invoice Error",
+        message=frappe.as_json(kwargs),
+    )
 
 
 def process_invoices_sequentially(invoice_list: List[str]) -> None:
