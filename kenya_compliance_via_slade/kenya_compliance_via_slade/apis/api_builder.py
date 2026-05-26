@@ -231,7 +231,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
 
     @property
     def success_callback(self) -> Callable[..., None] | None:
-        """Callable invoked when the server returns 200/201."""
+        """Callable invoked when the server returns 200/201/202."""
         return self._success_callback_handler
 
     @success_callback.setter
@@ -263,7 +263,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         """
         Issue the configured HTTP request and handle the response.
 
-        On success (200/201): invoke ``success_callback``, update the
+        On success (200/201/202): invoke ``success_callback``, update the
         Integration Request to ``"Completed"``, and mark the job ``"Success"``.
 
         On error: update the Integration Request to ``"Failed"``, invoke
@@ -307,7 +307,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                 self.route_path,
             )
 
-            if response.status_code in {200, 201}:
+            if response.status_code in {200, 201, 202}:
                 self._handle_success(
                     response_data,
                     self.doctype,
