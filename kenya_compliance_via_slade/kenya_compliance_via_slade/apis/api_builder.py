@@ -111,13 +111,16 @@ class ErrorObserver:
             output=None,
             error=notifier.error,
         )
+
         etims_logger.exception(notifier.error, exc_info=True)
+
         frappe.log_error(
             title="Fatal Error",
             message=notifier.error,
             reference_doctype=notifier.doctype,
             reference_name=notifier.document_name,
         )
+
         frappe.throw(
             "A Fatal Error was encountered. Please check the Error Log for details.",
             notifier.error,
@@ -671,15 +674,23 @@ def _parse_response(
 
     if "application/json" in content_type:
         return response.json()
+
     if "text/plain" in content_type or "text/html" in content_type:
         return response.text if response.text.strip() else None
+
     if "application/xml" in content_type or "text/xml" in content_type:
         return response.text if response.text.strip() else None
+
     if any(
         ct in content_type
-        for ct in ("application/octet-stream", "application/pdf", "application/zip")
+        for ct in (
+            "application/octet-stream",
+            "application/pdf",
+            "application/zip",
+        )
     ):
         return response.content
+
     return None
 
 
@@ -695,32 +706,47 @@ def _update_integration_request(
     version history entry.
 
     Each field is appended to rather than overwritten so that multiple partial
-    updates (e.g. pagination) accumulate a complete audit trail.  All fields
-    are capped at 5 000 characters.
+    updates accumulate a complete audit trail.
 
     Args:
         integration_request: The ``name`` of the Integration Request document.
-        status: New status — either ``"Completed"`` or ``"Failed"``.
-        output: Success response text to append, or ``None``.
-        error: Error detail to append, or ``None``.
-        request_description: Additional description label to append, or ``None``.
+        status: New status.
+        output: Success response text to append.
+        error: Error detail to append.
+        request_description: Additional description label to append.
     """
     update_fields: dict = {"status": status}
 
-    def _append(field: str, new_value: str, separator: str = "\n") -> None:
-        current = frappe.db.get_value("Integration Request", integration_request, field)
+    def _append(
+        field: str,
+        new_value: str,
+        separator: str = "\n",
+    ) -> None:
+        current = frappe.db.get_value(
+            "Integration Request",
+            integration_request,
+            field,
+        )
+
         if not current or current == "null":
             update_fields[field] = new_value[:5000]
+
         elif new_value not in current:
             combined = current + separator + new_value
             update_fields[field] = combined[:5000]
 
     if error:
         _append("error", error)
+
     if output:
         _append("output", output)
+
     if request_description:
-        _append("request_description", request_description, " - ")
+        _append(
+            "request_description",
+            request_description,
+            " - ",
+        )
 
     frappe.db.set_value(
         "Integration Request",
