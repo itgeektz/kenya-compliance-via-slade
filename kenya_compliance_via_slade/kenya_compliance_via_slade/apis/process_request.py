@@ -21,6 +21,7 @@ def process_request(
     handler_function: Callable,
     request_method: str = "GET",
     doctype: str = SETTINGS_DOCTYPE_NAME,
+    document_name: str = None,
     error_callback: Callable = None,
     settings_name: str = None,
     company: str = None,
@@ -35,7 +36,8 @@ def process_request(
 
         data = parse_request_data(request_data)
 
-        extracted_company, branch_id, document_name = extract_metadata(data)
+        extracted_company, branch_id, doc_name = extract_metadata(data)
+        document_name = document_name or doc_name
 
         company_name = (
             company

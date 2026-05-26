@@ -673,31 +673,46 @@ def run_etims_ledger_scheduler():
 
 @frappe.whitelist()
 def fetch_etims_sales_data(
-    request_data: str | dict, settings_name: str, invoice_type: str = "Both"
+    request_data: str | dict,
+    settings_name: str,
+    invoice_type: str = "Both",
+    document_name: str = None,
 ) -> None:
     if invoice_type == "Sales Invoice" or invoice_type == "Both":
-        fetch_etims_sales_invoices(request_data, settings_name)
+        fetch_etims_sales_invoices(
+            request_data, settings_name, document_name=document_name
+        )
     if invoice_type == "Credit Note" or invoice_type == "Both":
-        fetch_etims_credit_notes(request_data, settings_name)
+        fetch_etims_credit_notes(
+            request_data, settings_name, document_name=document_name
+        )
 
 
 @frappe.whitelist()
-def fetch_etims_sales_invoices(request_data: str | dict, settings_name: str) -> None:
+def fetch_etims_sales_invoices(
+    request_data: str | dict, settings_name: str, document_name: str = None
+) -> None:
     process_request(
         request_data,
         "TrnsSalesSaveWrReq",
         request_method="GET",
+        doctype="Sales Invoice",
         settings_name=settings_name,
+        document_name=document_name,
         handler_function=fetch_etims_sales_invoices_on_success,
     )
 
 
 @frappe.whitelist()
-def fetch_etims_credit_notes(request_data: str | dict, settings_name: str) -> None:
+def fetch_etims_credit_notes(
+    request_data: str | dict, settings_name: str, document_name: str = None
+) -> None:
     process_request(
         request_data,
         "SalesCreditNoteSaveReq",
         request_method="GET",
+        doctype="Sales Invoice",
         settings_name=settings_name,
+        document_name=document_name,
         handler_function=fetch_etims_credit_notes_on_success,
     )

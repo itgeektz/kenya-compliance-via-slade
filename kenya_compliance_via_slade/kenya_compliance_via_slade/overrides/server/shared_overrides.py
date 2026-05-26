@@ -93,6 +93,7 @@ def generic_invoices_on_submit_override(
             route_key="SaleSearchReq",
             handler_function=submit_credit_note,
             doctype=invoice_type,
+            document_name=doc.name,
             settings_name=settings_doc.name,
         )
 
@@ -109,6 +110,7 @@ def generic_invoices_on_submit_override(
             handler_function=sales_information_submission_on_success,
             request_method="POST",
             doctype=invoice_type,
+            document_name=doc.name,
             settings_name=settings_doc.name,
             company=company_name,
             error_callback=sales_information_submission_on_error,

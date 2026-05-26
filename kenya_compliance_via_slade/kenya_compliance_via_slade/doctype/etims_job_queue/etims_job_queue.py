@@ -63,6 +63,7 @@ class eTimsJobQueue(Document):
                 handler=self._resolve_callable(self.handler_function),
                 request_method=self.request_method,
                 doctype=self.reference_doctype,
+                document_name=self.reference_docname,
                 error_handler=self._resolve_callable(self.error_callback),
                 settings_name=self.settings_name,
                 company=self.company,
@@ -180,6 +181,7 @@ def process_job_request(
     handler: Callable | None,
     request_method: str,
     doctype: str,
+    document_name: str,
     error_handler: Callable | None,
     settings_name: str | None,
     company: str | None,
@@ -200,6 +202,7 @@ def process_job_request(
         request_method: HTTP method (``"GET"``, ``"POST"``, ``"PATCH"``,
                         ``"PUT"``).
         doctype: Reference doctype name for the triggering document.
+        document_name: Name of the document triggering the job.
         error_handler: Error callback function, or ``None``.
         settings_name: Explicit eTims Settings document name, or ``None`` to
                        use the active default.
@@ -212,7 +215,7 @@ def process_job_request(
         return
 
     data = parse_request_data(request_data)
-    company_name, branch_id, document_name = extract_metadata(data)
+    company_name, branch_id, doc_name = extract_metadata(data)
 
     company_name = (
         company
@@ -253,7 +256,7 @@ def process_job_request(
         error_handler=error_handler,
         request_method=request_method,
         doctype=doctype,
-        document_name=document_name,
+        document_name=document_name or doc_name,
         settings=settings,
         job_queue=job_queue,
     )

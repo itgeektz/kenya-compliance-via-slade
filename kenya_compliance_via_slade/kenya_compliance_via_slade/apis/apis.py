@@ -324,6 +324,7 @@ def perform_item_registration(item_name: str, settings_name: str) -> dict | None
         handler_function=fetch_matching_items_on_success,
         request_method="GET",
         doctype="Item",
+        document_name=item.name,
         settings_name=settings_name,
     )
 
@@ -1277,6 +1278,7 @@ def _process_invoice_fetch_request(
         route_key=route_key,
         handler_function=handler_function,
         doctype=invoice_type,
+        document_name=document_name,
         settings_name=settings_name,
         company=company,
     )
@@ -1306,6 +1308,7 @@ def get_invoice_details(
             route_key="SaleSearchReq",
             handler_function=update_invoice_info,
             doctype=invoice_type,
+            document_name=document_name,
             settings_name=settings_name,
             company=company,
         )
@@ -1421,6 +1424,7 @@ def submit_credit_note(
         handler_function=sales_information_submission_on_success,
         request_method="POST",
         doctype=doctype,
+        document_name=document_name,
         settings_name=settings_name,
         company=doc.company,
     )

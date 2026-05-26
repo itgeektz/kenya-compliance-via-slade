@@ -265,6 +265,7 @@ def submit_inventory_on_success(
         queue="default",
         is_async=True,
         doctype="Item",
+        document_name=document_name,
         request_data=request_data,
         route_key="StockMasterLineReq",
         handler_function=submit_inventory_item_on_success,
@@ -287,6 +288,7 @@ def submit_inventory_item_on_success(
         process_request,
         queue="default",
         doctype="Item",
+        document_name=document_name,
         request_data=request_data,
         route_key="StockAdjustmentTransitionReq",
         handler_function=process_inventory_transition,
@@ -452,6 +454,7 @@ def process_invoice_items(
             sales_item_submission_on_success,
             doctype=items_table_doctype,
             request_method=request_method,
+            document_name=document_name,
         )
 
     process_sales_transition(document_name, doctype, invoice_slade_id)
@@ -485,6 +488,7 @@ def process_sales_transition(
         handle_transition_success,
         request_method="PATCH",
         doctype=doctype,
+        document_name=document_name,
     )
 
 
@@ -518,6 +522,7 @@ def process_sales_sign(document_name: str, doctype: str, invoice_slade_id: str) 
         handle_invoice_sign_success,
         request_method="POST",
         doctype=doctype,
+        document_name=document_name,
     )
 
 
@@ -798,6 +803,7 @@ def sign_credit_note(
         handler_function=credit_note_on_success,
         request_method="POST",
         doctype=doctype,
+        document_name=document_name,
         settings_name=settings_name,
         company=doc.company,
     )
@@ -1028,6 +1034,7 @@ def fetch_purchase_items(registered_purchase: str, settings_name: str) -> None:
         request_method="GET",
         doctype=REGISTERED_PURCHASES_DOCTYPE_NAME,
         settings_name=settings_name,
+        document_name=registered_purchase,
     )
 
 
@@ -1680,6 +1687,7 @@ def fetch_matching_items_on_success(
                         "id": item.get("id"),
                         "active": False,
                     },
+                    document_name=item_doc.name,
                     route_key="ItemsSearchReq",
                     handler_function=item_archive_on_success,
                     request_method="PATCH",
@@ -1746,6 +1754,7 @@ def fetch_matching_partner_on_success(
                         "id": partner.get("id"),
                         "active": False,
                     },
+                    document_name=partner_doc.name,
                     route_key="BhfCustSaveReq",
                     handler_function=partner_archive_on_success,
                     request_method="PATCH",
@@ -1763,6 +1772,7 @@ def fetch_matching_partner_on_success(
         queue="default",
         doctype=doctype,
         request_data=request_data,
+        document_name=partner_doc.name,
         route_key="BhfCustSaveReq",
         handler_function=customer_branch_details_submission_on_success,
         request_method=request_method,
