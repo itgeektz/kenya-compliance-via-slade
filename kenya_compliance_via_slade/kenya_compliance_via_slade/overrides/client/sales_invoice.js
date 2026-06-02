@@ -95,6 +95,19 @@ frappe.ui.form.on(parentDoctype, {
         __("eTims Actions"),
       );
 
+      frm.add_custom_button(
+        __("View Invoice Status"),
+        () => {
+          const key = frm.doc.creation.replace(/[-:\s]/g, "").replace(".", "");
+
+          window.open(
+            `/app/invoice-verification?id=${encodeURIComponent(frm.doc.name)}&key=${encodeURIComponent(key)}`,
+            "_blank",
+          );
+        },
+        __("eTims Actions"),
+      );
+
       if (
         frm.doc.custom_successfully_submitted &&
         summaryData?.hasSignificantMismatch

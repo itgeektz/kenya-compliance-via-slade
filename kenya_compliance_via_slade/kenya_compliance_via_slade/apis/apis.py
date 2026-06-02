@@ -8,6 +8,7 @@ import frappe.defaults
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder import DocType
+from frappe.utils import get_datetime
 
 from ..background_tasks.task_response_handlers import (
     operation_types_search_on_success,
@@ -1528,3 +1529,46 @@ def submit_credit_note(
         settings_name=settings_name,
         company=doc.company,
     )
+
+
+@frappe.whitelist(allow_guest=True)
+def check_invoice_submission_status(id: str, key: str) -> dict:
+    """Check invoice submission status"""
+
+    invoice = frappe.db.get_value(
+        "Sales Invoice",
+        id,
+        [
+            "name",
+            "customer",
+            "posting_date",
+            "grand_total",
+            "creation",
+            "custom_successfully_submitted",
+            "custom_qr_code_url",
+        ],
+        as_dict=True,
+    )
+
+    if not invoice:
+        return {"error": _("Invoice not found.")}
+
+    expected_key = get_datetime(invoice.creation).strftime("%Y%m%d%H%M%S%f")
+
+    frappe.log_error(
+        message=f"Expected: {expected_key}, Provided: {key}",
+        title="Invoice Verification Debug",
+    )
+
+    if expected_key != key:
+        return {"error": _("Invalid verification link.")}
+
+    if invoice.custom_successfully_submitted and invoice.custom_qr_code_url:
+        return {"custom_qr_code_url": invoice.custom_qr_code_url}
+
+    return {
+        "name": invoice.name,
+        "customer": invoice.customer,
+        "posting_date": invoice.posting_date,
+        "grand_total": invoice.grand_total,
+    }

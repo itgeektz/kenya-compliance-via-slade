@@ -240,7 +240,7 @@ doc_events = {
 
 scheduler_events = {
     "cron": {
-        "0/5 * * * *": [
+        "*/5 * * * *": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_autosubmission_scheduler",
         ],
         "*/1 * * * *": [
@@ -327,3 +327,11 @@ after_migrate = (
 # auth_hooks = [
 # 	"kenya_compliance_via_slade.auth.validate"
 # ]
+
+
+website_route_rules = [
+    {
+        "from_route": "/invoice-verification",
+        "to_route": "invoice_verification",
+    }
+]

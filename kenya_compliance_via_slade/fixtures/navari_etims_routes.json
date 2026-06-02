@@ -607,6 +607,15 @@
         "parenttype": "Navari eTims Routes",
         "url_path": "/api/sales/salesinvoices/{id}/",
         "url_path_function": "SaleSearchReq"
+      },
+      {
+        "description": null,
+        "last_request_date": null,
+        "parent": "VSCU Slade 360",
+        "parentfield": "routes_table",
+        "parenttype": "Navari eTims Routes",
+        "url_path": "/api/etims/bulk_sign_sales_invoice/",
+        "url_path_function": "BulkSalesInvoiceSaveReq"
       }
     ],
     "vendor": "VSCU Slade 360"
