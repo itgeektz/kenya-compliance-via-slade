@@ -101,7 +101,7 @@ frappe.ui.form.on(parentDoctype, {
           const key = frm.doc.creation.replace(/[-:\s]/g, "").replace(".", "");
 
           window.open(
-            `/app/invoice-verification?id=${encodeURIComponent(frm.doc.name)}&key=${encodeURIComponent(key)}`,
+            `/invoice-verification?id=${encodeURIComponent(frm.doc.name)}&key=${encodeURIComponent(key)}`,
             "_blank",
           );
         },

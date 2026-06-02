@@ -330,8 +330,5 @@ after_migrate = (
 
 
 website_route_rules = [
-    {
-        "from_route": "/invoice-verification",
-        "to_route": "invoice_verification",
-    }
+    {"from_route": "/invoice-verification", "to_route": "invoice_verification"}
 ]
