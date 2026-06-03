@@ -51,6 +51,21 @@ frappe.ui.form.on(parentDoctype, {
           },
           __("eTims Actions"),
         );
+      } else {
+        frm.add_custom_button(
+          __("eTIMS Sales Ledger"),
+          function () {
+            frappe.route_options = {
+              company: frm.doc.company,
+              sales_invoice: frm.doc.name,
+              show_details: 1,
+              from_date: frm.doc.posting_date,
+              to_date: moment(frm.doc.modified).format("YYYY-MM-DD"),
+            };
+            frappe.set_route("query-report", "eTIMS Sales Ledger");
+          },
+          __("View"),
+        );
       }
 
       frm.add_custom_button(
@@ -68,7 +83,6 @@ frappe.ui.form.on(parentDoctype, {
                 settings_name: settings_name,
                 company: frm.doc.company,
               },
-              success_msg: "Invoice sync queued",
             }),
           );
 
@@ -79,11 +93,6 @@ frappe.ui.form.on(parentDoctype, {
               method:
                 "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_data",
               args: {
-                request_data: {
-                  reference_number: frm.doc.is_return
-                    ? frm.doc.return_against
-                    : frm.doc.name,
-                },
                 settings_name: settings_name,
                 invoice_type: "Both",
                 document_name: frm.doc.name,
