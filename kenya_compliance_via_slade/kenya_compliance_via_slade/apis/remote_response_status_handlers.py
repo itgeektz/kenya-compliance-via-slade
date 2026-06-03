@@ -314,7 +314,7 @@ def sales_information_submission_on_success(
     frappe.db.set_value(doctype, document_name, updates)
 
     frappe.enqueue(
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_data",
         document_name=document_name,
         invoice_type=doctype,
         settings_name=settings_name,
@@ -533,6 +533,7 @@ def update_invoice_info(
     settings_name: str | None = None,
     **kwargs,
 ) -> None:
+
     process_invoice_response(response, document_name, doctype, settings_name)
 
 

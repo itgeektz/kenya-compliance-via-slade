@@ -692,6 +692,8 @@ def fetch_etims_sales_data(
 def fetch_etims_sales_invoices(
     request_data: str | dict, settings_name: str, document_name: str = None
 ) -> None:
+    if document_name:
+        request_data = {**request_data, "reference_number": document_name}
     process_request(
         request_data,
         "TrnsSalesSaveWrReq",
@@ -707,6 +709,14 @@ def fetch_etims_sales_invoices(
 def fetch_etims_credit_notes(
     request_data: str | dict, settings_name: str, document_name: str = None
 ) -> None:
+    if document_name:
+        doc = frappe.get_doc("Sales Invoice", document_name)
+        request_data = {
+            **request_data,
+            "reference_number": document_name
+            if not doc.is_return
+            else doc.return_against,
+        }
     process_request(
         request_data,
         "SalesCreditNoteSaveReq",
