@@ -1,16 +1,16 @@
-from typing import Optional
 import json
+
 import frappe
 from frappe.model.document import Document
 
+from ...doctype.doctype_names_mapping import (
+    ORGANISATION_MAPPING_DOCTYPE_NAME,
+    SETTINGS_DOCTYPE_NAME,
+)
 from ...utils import (
+    get_next_run,
     reset_auth_password,
     update_navari_settings_with_token,
-    get_next_run,
-)
-from ...doctype.doctype_names_mapping import (
-    SETTINGS_DOCTYPE_NAME,
-    ORGANISATION_MAPPING_DOCTYPE_NAME,
 )
 
 
@@ -148,7 +148,7 @@ def update_companies_with_cluster_info(matched_data, settings_name):
             duplicate_mappings = []
 
             for mapping in company.setup_mapping:
-                if mapping.etims_setup == settings_name:
+                if mapping.setup_docname == settings_name:
                     if existing_mapping:
                         duplicate_mappings.append(mapping)
                     else:
@@ -164,7 +164,7 @@ def update_companies_with_cluster_info(matched_data, settings_name):
                 company.append(
                     "setup_mapping",
                     {
-                        "etims_setup": settings_name,
+                        "setup_docname": settings_name,
                         "organisation": match.get("organisation", ""),
                         "cluster": match["cluster_id"],
                         "is_active": 1,

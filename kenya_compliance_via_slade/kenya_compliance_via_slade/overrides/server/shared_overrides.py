@@ -13,8 +13,8 @@ from ...apis.remote_response_status_handlers import (
 # from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
 from ...utils import (
     build_invoice_payload,
+    get_etims_id,
     get_settings,
-    get_slade360_id,
     validate_kra_pin,
 )
 
@@ -49,7 +49,7 @@ def generic_invoices_on_submit_override(
     ):
         return
 
-    customer_slade_id = get_slade360_id("Customer", doc.customer, settings_doc.name)
+    customer_slade_id = get_etims_id("Customer", doc.customer, settings_doc.name)
     if not customer_slade_id:
         frappe.msgprint(
             f"Customer {doc.customer} is not registered. Cannot send invoice to eTims."
@@ -58,7 +58,7 @@ def generic_invoices_on_submit_override(
 
     for item in doc.items:
         item_doc = frappe.get_doc("Item", item.item_code)
-        slade_id = get_slade360_id("Item", item_doc.get("name"), settings_doc.name)
+        slade_id = get_etims_id("Item", item_doc.get("name"), settings_doc.name)
         if not slade_id:
             from ...apis.apis import perform_item_registration
 

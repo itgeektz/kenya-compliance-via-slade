@@ -346,7 +346,7 @@ def get_company_from_existing_cluster_mapping(
     """
     return frappe.db.get_value(
         "eTims Company Setup Mapping",
-        {"cluster": cluster_id, "etims_setup": settings_name, "is_active": 1},
+        {"cluster": cluster_id, "setup_docname": settings_name, "is_active": 1},
         "parent",
     )
 

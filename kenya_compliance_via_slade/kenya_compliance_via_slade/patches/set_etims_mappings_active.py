@@ -3,7 +3,7 @@ import frappe
 
 def execute():
     doctypes = [
-        "eTims Slade360 ID Mapping",
+        "eTims ID Mapping",
         "eTims Settings Organisation Mapping",
         "eTims Company Setup Mapping",
     ]

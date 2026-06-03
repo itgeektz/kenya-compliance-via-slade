@@ -15,10 +15,11 @@ frappe.realtime.on("refresh_form", function (name) {
 frappe.ui.form.on(parentDoctype, {
   refresh: async function (frm) {
     await updateTaxAmountLabel(frm);
+    if (frm.is_new()) return;
 
     const summaryData = await renderEtimsSummary(frm);
 
-    if (frm.is_new()) return;
+    await renderEtimsEligibilityBanner(frm);
 
     const { message: activeSetting } = await frappe.call({
       method:
@@ -596,24 +597,23 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
 frappe.ui.form.on(childDoctype, {
   item_code: function (frm, cdt, cdn) {
     const item = locals[cdt][cdn].item_code;
-    const taxationType = locals[cdt][cdn].custom_taxation_type;
+    const taxationType = locals[cdt][cdn].taxation_type;
 
     if (!taxationType) {
       frappe.db.get_value(
         "Item",
         { item_code: item },
-        ["custom_taxation_type"],
+        ["taxation_type"],
         (response) => {
-          locals[cdt][cdn].custom_taxation_type = response.custom_taxation_type;
-          locals[cdt][cdn].custom_taxation_type_code =
-            response.custom_taxation_type;
+          locals[cdt][cdn].taxation_type = response.taxation_type;
+          locals[cdt][cdn].taxation_type_code = response.taxation_type;
         },
       );
     }
   },
 
-  custom_packaging_unit: async function (frm, cdt, cdn) {
-    const packagingUnit = locals[cdt][cdn].custom_packaging_unit;
+  packaging_unit: async function (frm, cdt, cdn) {
+    const packagingUnit = locals[cdt][cdn].packaging_unit;
 
     if (packagingUnit) {
       frappe.db.get_value(
@@ -624,15 +624,15 @@ frappe.ui.form.on(childDoctype, {
         ["code"],
         (response) => {
           const code = response.code;
-          locals[cdt][cdn].custom_packaging_unit_code = code;
-          frm.refresh_field("custom_packaging_unit_code");
+          locals[cdt][cdn].packaging_unit_code = code;
+          frm.refresh_field("packaging_unit_code");
         },
       );
     }
   },
 
-  custom_unit_of_quantity: function (frm, cdt, cdn) {
-    const unitOfQuantity = locals[cdt][cdn].custom_unit_of_quantity;
+  unit_of_quantity: function (frm, cdt, cdn) {
+    const unitOfQuantity = locals[cdt][cdn].unit_of_quantity;
 
     if (unitOfQuantity) {
       frappe.db.get_value(
@@ -643,8 +643,8 @@ frappe.ui.form.on(childDoctype, {
         ["code"],
         (response) => {
           const code = response.code;
-          locals[cdt][cdn].custom_unit_of_quantity_code = code;
-          frm.refresh_field("custom_unit_of_quantity_code");
+          locals[cdt][cdn].unit_of_quantity_code = code;
+          frm.refresh_field("unit_of_quantity_code");
         },
       );
     }
@@ -667,7 +667,7 @@ async function updateTaxAmountLabel(frm) {
       const currency = companyDoc.default_currency;
 
       frm.fields_dict.items.grid.update_docfield_property(
-        "custom_tax_amount",
+        "tax_amount",
         "label",
         `Tax Amount (${currency})`,
       );

@@ -39,11 +39,11 @@ function addSupplierActionButtons(frm, data) {
           frm,
           "search_supplier",
           registeredMappings.map((r) => ({
-            name: r.etims_setup,
-            company: getCompanyName(allSettings, r.etims_setup),
-          }))
+            name: r.setup_docname,
+            company: getCompanyName(allSettings, r.setup_docname),
+          })),
         ),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -52,7 +52,7 @@ function addSupplierActionButtons(frm, data) {
       __("Send Supplier Details"),
       () =>
         showCompanySelectionModal(frm, "send_supplier", unregisteredSettings),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -64,11 +64,11 @@ function addSupplierActionButtons(frm, data) {
           frm,
           "update_supplier",
           registeredMappings.map((r) => ({
-            name: r.etims_setup,
-            company: getCompanyName(allSettings, r.etims_setup),
-          }))
+            name: r.setup_docname,
+            company: getCompanyName(allSettings, r.setup_docname),
+          })),
         ),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -80,8 +80,8 @@ function addSupplierActionButtons(frm, data) {
   //         frm,
   //         "get_supplier_details",
   //         registeredMappings.map((r) => ({
-  //           name: r.etims_setup,
-  //           company: getCompanyName(allSettings, r.etims_setup),
+  //           name: r.setup_docname,
+  //           company: getCompanyName(allSettings, r.setup_docname),
   //         }))
   //       ),
   //     __("eTims Actions")
@@ -136,11 +136,11 @@ function executeSupplierAction(frm, actionType, settingsName) {
   let method, args, successMessage;
 
   let sladeId = "";
-  if (frm.doc.etims_setup_mapping) {
-    const mappingRow = frm.doc.etims_setup_mapping.find(
-      (row) => row.etims_setup === settingsName
+  if (frm.doc.etims_id_mapping) {
+    const mappingRow = frm.doc.etims_id_mapping.find(
+      (row) => row.setup_docname === settingsName,
     );
-    sladeId = mappingRow ? mappingRow.slade360_id : "";
+    sladeId = mappingRow ? mappingRow.etims_id : "";
   }
 
   switch (actionType) {

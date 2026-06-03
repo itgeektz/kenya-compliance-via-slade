@@ -12,6 +12,7 @@ from ..doctype.doctype_names_mapping import (
     PACKAGING_UNIT_DOCTYPE_NAME,
     PAYMENT_TYPE_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
+    SLADE_ID_MAPPING_DOCTYPE_NAME,
     TAXATION_TYPE_DOCTYPE_NAME,
     UNIT_OF_QUANTITY_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
@@ -141,16 +142,16 @@ def update_documents(
         if is_table and table_name and hasattr(doc, table_name):
             found = False
             for child_row in getattr(doc, table_name):
-                if child_row.etims_setup == settings_name:
-                    child_row.slade360_id = record.get("id")
+                if child_row.setup_docname == settings_name:
+                    child_row.etims_id = record.get("id")
                     child_row.is_active = 1
                     found = True
                     break
 
             if not found and settings_name:
                 new_row = doc.append(table_name)
-                new_row.etims_setup = settings_name
-                new_row.slade360_id = record.get("id")
+                new_row.setup_docname = settings_name
+                new_row.etims_id = record.get("id")
                 new_row.is_active = 1
 
         if settings_name and not is_table:
@@ -655,7 +656,7 @@ def fetch_etims_sales_invoices_on_success(response: dict, **kwargs) -> None:
                 continue
 
             existing_name = frappe.db.get_value(
-                "eTIMS Sales Ledger Entry", {"slade360_id": slade_id}
+                "eTIMS Sales Ledger Entry", {"etims_id": slade_id}
             )
 
             invoice_date = invoice_data.get("invoice_date")
@@ -670,7 +671,7 @@ def fetch_etims_sales_invoices_on_success(response: dict, **kwargs) -> None:
                 sales_ledger = frappe.get_doc("eTIMS Sales Ledger Entry", existing_name)
             else:
                 sales_ledger = frappe.new_doc("eTIMS Sales Ledger Entry")
-                sales_ledger.slade360_id = slade_id
+                sales_ledger.etims_id = slade_id
 
             sales_ledger.update(
                 {
@@ -773,7 +774,7 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
                 continue
 
             existing_name = frappe.db.get_value(
-                "eTIMS Sales Ledger Entry", {"slade360_id": slade_id}
+                "eTIMS Sales Ledger Entry", {"etims_id": slade_id}
             )
 
             created_at = invoice_data.get("created")
@@ -789,18 +790,18 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
                 sales_ledger = frappe.get_doc("eTIMS Sales Ledger Entry", existing_name)
             else:
                 sales_ledger = frappe.new_doc("eTIMS Sales Ledger Entry")
-                sales_ledger.slade360_id = slade_id
+                sales_ledger.etims_id = slade_id
 
             etims_invoice = frappe.db.get_value(
                 "eTIMS Sales Ledger Entry",
-                {"slade360_id": invoice_data.get("invoice")},
+                {"etims_id": invoice_data.get("invoice")},
                 "name",
             )
 
             if etims_invoice:
                 sales_invoice = frappe.db.get_value(
                     "eTIMS Sales Ledger Entry",
-                    {"slade360_id": invoice_data.get("invoice")},
+                    {"etims_id": invoice_data.get("invoice")},
                     "sales_invoice",
                 )
                 sales_ledger.etims_invoice = etims_invoice

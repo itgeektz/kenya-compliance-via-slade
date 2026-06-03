@@ -29,10 +29,10 @@ from ..utils import (
     build_partner_payload,
     build_return_invoice_payload,
     generate_and_attach_qr_code,
+    get_etims_id,
     get_link_value,
     get_or_create_link,
-    get_parent_by_slade360_id,
-    get_slade360_id,
+    get_parent_by_etims_id,
     parse_response_data,
     prepare_credit_note_payload,
 )
@@ -98,13 +98,13 @@ def update_document_mapping(
         doc.require_tax_id = 0
 
     found = False
-    for row in doc.get("etims_setup_mapping", []):
-        if row.etims_setup == settings_name:
+    for row in doc.get("etims_id_mapping", []):
+        if row.setup_docname == settings_name:
             frappe.db.set_value(
                 SLADE_ID_MAPPING_DOCTYPE_NAME,
                 row.name,
                 {
-                    "slade360_id": slade_id,
+                    "etims_id": slade_id,
                 },
             )
             found = True
@@ -112,10 +112,10 @@ def update_document_mapping(
 
     if not found:
         doc.append(
-            "etims_setup_mapping",
+            "etims_id_mapping",
             {
-                "etims_setup": settings_name,
-                "slade360_id": slade_id,
+                "setup_docname": settings_name,
+                "etims_id": slade_id,
                 "is_active": 1,
             },
         )
@@ -254,7 +254,7 @@ def submit_inventory_on_success(
 
     request_data = {
         "document_name": document_name,
-        "product": get_slade360_id("Item", document_name, settings_name),
+        "product": get_etims_id("Item", document_name, settings_name),
         "quantity": sum([float(stock.get("actual_qty", 0)) for stock in stock_levels]),
         "inventory_adjustment": response.get("id"),
     }
@@ -419,7 +419,7 @@ def process_invoice_items(
     conversion_rate = invoice.conversion_rate or 1
 
     for item in items:
-        tax_amount = item.get("custom_tax_amount", 0) or 0
+        tax_amount = item.get("tax_amount", 0) or 0
 
         converted_tax_amount = (
             round(tax_amount * conversion_rate, 4) if tax_amount else 0
@@ -1297,13 +1297,16 @@ def imported_items_search_on_success(
                 product_name = None
                 if frappe.db.exists(
                     SLADE_ID_MAPPING_DOCTYPE_NAME,
-                    {"slade360_id": item.get("product"), "etims_setup": settings_name},
+                    {
+                        "etims_id": item.get("product"),
+                        "setup_docname": settings_name,
+                    },
                 ):
                     product_name = frappe.db.get_value(
                         SLADE_ID_MAPPING_DOCTYPE_NAME,
                         {
-                            "slade360_id": item.get("product"),
-                            "etims_setup": settings_name,
+                            "etims_id": item.get("product"),
+                            "setup_docname": settings_name,
                         },
                         "parent",
                         order_by="creation desc",
@@ -1323,7 +1326,7 @@ def imported_items_search_on_success(
                         product = frappe.new_doc("Item")
                         product.item_name = item_name
                         product.item_code = product_code or item_name
-                        product.custom_prevent_etims_registration = 1
+                        product.prevent_etims_registration = 1
                         default_item_group = frappe.get_all(
                             "Item Group",
                             filters={"is_group": 1},
@@ -1342,9 +1345,10 @@ def imported_items_search_on_success(
                             "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
                             "parent": product.name,
                             "parenttype": "Item",
-                            "parentfield": "etims_setup_mapping",
-                            "slade360_id": item.get("product"),
-                            "etims_setup": settings_name,
+                            "parentfield": "etims_id_mapping",
+                            "setup_doctype": SETTINGS_DOCTYPE_NAME,
+                            "etims_id": item.get("product"),
+                            "setup_docname": settings_name,
                         }
                     ).insert(ignore_permissions=True)
 
@@ -1452,7 +1456,7 @@ def item_search_on_success(response: dict, settings_name: str, **kwargs) -> None
             slade_id = item_data.get("id")
             existing_item = frappe.db.get_value(
                 SLADE_ID_MAPPING_DOCTYPE_NAME,
-                {"slade360_id": slade_id, "etims_setup": settings_name},
+                {"etims_id": slade_id, "setup_docname": settings_name},
                 "parent",
                 order_by="creation desc",
             )
@@ -1475,37 +1479,37 @@ def item_search_on_success(response: dict, settings_name: str, **kwargs) -> None
                 "is_sales_item": item_data.get("can_be_sold", False),
                 "is_purchase_item": item_data.get("can_be_purchased", False),
                 "custom_item_code_etims": item_data.get("scu_item_code", ""),
-                "custom_etims_country_of_origin_code": country_of_origin_code or "",
+                "etims_country_of_origin": country_of_origin_code or "",
                 "valuation_rate": round(item_data.get("selling_price", 0.0), 2),
                 "last_purchase_rate": round(item_data.get("purchasing_price", 0.0), 2),
-                "custom_etims_country_of_origin": country_of_origin or "",
-                "custom_item_type": item_data.get("item_type", ""),
-                "custom_product_type": item_data.get("product_type", ""),
+                "etims_country_of_origin": country_of_origin or "",
+                "item_type": item_data.get("item_type", ""),
+                "product_type": item_data.get("product_type", ""),
             }
 
             if item_data.get("scu_item_classification"):
-                request_data["custom_item_classification"] = get_parent_by_slade360_id(
+                request_data["item_classification"] = get_parent_by_etims_id(
                     ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
                     item_data.get("scu_item_classification"),
                     settings_name,
                 )
 
             if item_data.get("packaging_unit"):
-                request_data["custom_packaging_unit"] = get_parent_by_slade360_id(
+                request_data["packaging_unit"] = get_parent_by_etims_id(
                     PACKAGING_UNIT_DOCTYPE_NAME,
                     item_data.get("packaging_unit"),
                     settings_name,
                 )
 
             if item_data.get("quantity_unit"):
-                request_data["custom_unit_of_quantity"] = get_parent_by_slade360_id(
+                request_data["unit_of_quantity"] = get_parent_by_etims_id(
                     UNIT_OF_QUANTITY_DOCTYPE_NAME,
                     item_data.get("quantity_unit"),
                     settings_name,
                 )
 
             if item_data.get("sale_taxes") and len(item_data.get("sale_taxes", [])) > 0:
-                request_data["custom_taxation_type"] = get_parent_by_slade360_id(
+                request_data["taxation_type"] = get_parent_by_etims_id(
                     TAXATION_TYPE_DOCTYPE_NAME,
                     item_data.get("sale_taxes")[0],
                     settings_name,
@@ -1534,8 +1538,8 @@ def item_search_on_success(response: dict, settings_name: str, **kwargs) -> None
                 {
                     "parent": item_doc.name,
                     "parenttype": "Item",
-                    "parentfield": "etims_setup_mapping",
-                    "etims_setup": settings_name,
+                    "parentfield": "etims_id_mapping",
+                    "setup_docname": settings_name,
                 },
             )
 
@@ -1543,7 +1547,7 @@ def item_search_on_success(response: dict, settings_name: str, **kwargs) -> None
                 frappe.db.set_value(
                     SLADE_ID_MAPPING_DOCTYPE_NAME,
                     existing_mapping,
-                    {"slade360_id": slade_id},
+                    {"etims_id": slade_id},
                 )
             else:
                 frappe.get_doc(
@@ -1551,9 +1555,10 @@ def item_search_on_success(response: dict, settings_name: str, **kwargs) -> None
                         "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
                         "parent": item_doc.name,
                         "parenttype": "Item",
-                        "parentfield": "etims_setup_mapping",
-                        "slade360_id": slade_id,
-                        "etims_setup": settings_name,
+                        "parentfield": "etims_id_mapping",
+                        "setup_doctype": SETTINGS_DOCTYPE_NAME,
+                        "etims_id": slade_id,
+                        "setup_docname": settings_name,
                     }
                 ).insert(ignore_permissions=True)
 
@@ -1625,22 +1630,23 @@ def fetch_matching_items_on_success(
     item_doc = frappe.get_doc("Item", document_name)
     existing_id = next(
         (
-            row.slade360_id
-            for row in item_doc.etims_setup_mapping
-            if row.etims_setup == settings_name
+            row.etims_id
+            for row in item_doc.etims_id_mapping
+            if row.setup_docname == settings_name
         ),
         None,
     )
     if len(items) > 0:
-        if not item_doc.etims_setup_mapping:
+        if not item_doc.etims_id_mapping:
             frappe.get_doc(
                 {
                     "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
                     "parent": item_doc.name,
                     "parenttype": "Item",
-                    "parentfield": "etims_setup_mapping",
-                    "slade360_id": items[0].get("id"),
-                    "etims_setup": settings_name,
+                    "setup_doctype": SETTINGS_DOCTYPE_NAME,
+                    "parentfield": "etims_id_mapping",
+                    "etims_id": items[0].get("id"),
+                    "setup_docname": settings_name,
                 }
             ).insert(ignore_permissions=True)
 
@@ -1691,22 +1697,23 @@ def fetch_matching_partner_on_success(
     partner_doc = frappe.get_doc(doctype, document_name)
     existing_id = next(
         (
-            row.slade360_id
-            for row in partner_doc.etims_setup_mapping
-            if row.etims_setup == settings_name
+            row.etims_id
+            for row in partner_doc.etims_id_mapping
+            if row.setup_docname == settings_name
         ),
         None,
     )
     if len(partners) > 0:
-        if not partner_doc.etims_setup_mapping:
+        if not partner_doc.etims_id_mapping:
             frappe.get_doc(
                 {
                     "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
                     "parent": partner_doc.name,
                     "parenttype": doctype,
-                    "parentfield": "etims_setup_mapping",
-                    "slade360_id": partners[0].get("id"),
-                    "etims_setup": settings_name,
+                    "parentfield": "etims_id_mapping",
+                    "setup_doctype": SETTINGS_DOCTYPE_NAME,
+                    "etims_id": partners[0].get("id"),
+                    "setup_docname": settings_name,
                 }
             ).insert(ignore_permissions=True)
 

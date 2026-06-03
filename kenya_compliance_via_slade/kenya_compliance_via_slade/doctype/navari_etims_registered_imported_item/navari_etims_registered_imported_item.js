@@ -40,10 +40,10 @@ frappe.ui.form.on(doctypeName, {
               item_name: frm.doc.item_name || undefined,
               item_group: "All Item Groups",
               is_stock_item: frm.doc.task_code !== "3" ? 1 : 0,
-              custom_packaging_unit: frm.doc.packaging_unit_code || undefined,
-              custom_unit_of_quantity: frm.doc.quantity_unit_code || undefined,
-              custom_taxation_type: frm.doc.taxation_type_code || undefined,
-              custom_item_classification:
+              packaging_unit: frm.doc.packaging_unit_code || undefined,
+              unit_of_quantity: frm.doc.quantity_unit_code || undefined,
+              taxation_type: frm.doc.taxation_type_code || undefined,
+              item_classification:
                 frm.doc.item_classification_code || undefined,
               custom_item_code_etims: frm.doc.item_code || undefined,
               valuation_rate:
@@ -55,7 +55,7 @@ frappe.ui.form.on(doctypeName, {
             };
             frappe.set_route("Form", "Item", "new-item");
           },
-          __("eTims Actions")
+          __("eTims Actions"),
         );
       }
 
@@ -84,7 +84,7 @@ frappe.ui.form.on(doctypeName, {
                   frappe.set_route("Form", "Supplier", newSupplier.name);
                 } else {
                   frappe.msgprint(
-                    __("Failed to create supplier. Please try again.")
+                    __("Failed to create supplier. Please try again."),
                   );
                 }
               },
@@ -92,13 +92,13 @@ frappe.ui.form.on(doctypeName, {
                 frappe.msgprint(
                   __(
                     "An error occurred while creating the supplier. Please try again.",
-                    error
-                  )
+                    error,
+                  ),
                 );
               },
             });
           },
-          __("eTims Actions")
+          __("eTims Actions"),
         );
       }
 
@@ -127,7 +127,7 @@ frappe.ui.form.on(doctypeName, {
                         frm.doc.invoice_foreign_currency_amount &&
                         frm.doc.quantity
                           ? parseFloat(
-                              frm.doc.invoice_foreign_currency_amount
+                              frm.doc.invoice_foreign_currency_amount,
                             ) / parseFloat(frm.doc.quantity)
                           : 0,
                     },
@@ -142,7 +142,7 @@ frappe.ui.form.on(doctypeName, {
                   frappe.set_route("Form", "Purchase Invoice", newPI.name);
                 } else {
                   frappe.msgprint(
-                    __("Failed to create Purchase Invoice. Please try again.")
+                    __("Failed to create Purchase Invoice. Please try again."),
                   );
                 }
               },
@@ -150,13 +150,13 @@ frappe.ui.form.on(doctypeName, {
                 frappe.msgprint(
                   __(
                     "An error occurred while creating the Purchase Invoice. Please try again.",
-                    error
-                  )
+                    error,
+                  ),
                 );
               },
             });
           },
-          __("eTims Actions")
+          __("eTims Actions"),
         );
       }
     });

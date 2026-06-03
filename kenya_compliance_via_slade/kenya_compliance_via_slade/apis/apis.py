@@ -291,7 +291,7 @@ def update_all_items(settings_name: str = None) -> None:
             .on(
                 (Mapping.parent == Item.name)
                 & (Mapping.parenttype == "Item")
-                & (Mapping.etims_setup == setting.name)
+                & (Mapping.setup_docname == setting.name)
             )
             .select(Item.name)
             .where(Item.custom_sent_to_slade == 1)
@@ -332,7 +332,7 @@ def register_all_items(settings_name: str = None) -> None:
             .on(
                 (Mapping.parent == Item.name)
                 & (Mapping.parenttype == "Item")
-                & (Mapping.etims_setup == setting.name)
+                & (Mapping.setup_docname == setting.name)
             )
             .select(Item.name)
             .where((Item.custom_sent_to_slade == 0) & (Mapping.name.isnull()))
@@ -432,19 +432,19 @@ def perform_item_registration(item_name: str, settings_name: str) -> dict | None
 
 def is_item_eligible_for_registration(item) -> bool:
     """Check if item meets basic registration criteria"""
-    return not (item.custom_prevent_etims_registration or item.disabled)
+    return not (item.prevent_etims_registration or item.disabled)
 
 
 def validate_required_fields(item) -> List[str]:
     """Validate required fields for item registration"""
     required_fields = [
-        "custom_item_classification",
-        "custom_product_type",
-        "custom_item_type",
-        "custom_etims_country_of_origin",
-        "custom_packaging_unit",
-        "custom_unit_of_quantity",
-        "custom_taxation_type",
+        "item_classification",
+        "product_type",
+        "item_type",
+        "etims_country_of_origin",
+        "packaging_unit",
+        "unit_of_quantity",
+        "taxation_type",
     ]
     return [field for field in required_fields if not item.get(field)]
 
@@ -491,7 +491,7 @@ def submit_all_suppliers(settings_name: str = None) -> None:
             .on(
                 (Mapping.parent == Supplier.name)
                 & (Mapping.parenttype == "Supplier")
-                & (Mapping.etims_setup == setting.name)
+                & (Mapping.setup_docname == setting.name)
             )
             .select(Supplier.name)
             .where((Mapping.name.isnull()))
@@ -588,7 +588,7 @@ def submit_all_customers(settings_name: str = None) -> None:
             .on(
                 (Mapping.parent == Customer.name)
                 & (Mapping.parenttype == "Customer")
-                & (Mapping.etims_setup == setting.name)
+                & (Mapping.setup_docname == setting.name)
             )
             .select(Customer.name)
             .where(Mapping.name.isnull())
@@ -625,8 +625,7 @@ def send_branch_customer_details(
     data = frappe.get_doc(doctype, name)
 
     if (hasattr(data, "disabled") and data.disabled) or (
-        hasattr(data, "custom_prevent_etims_registration")
-        and data.custom_prevent_etims_registration
+        hasattr(data, "prevent_etims_registration") and data.prevent_etims_registration
     ):
         return
 
@@ -808,7 +807,7 @@ def send_entire_stock_balance(settings_name: str) -> None:
         .on(
             (Mapping.parent == Item.name)
             & (Mapping.parenttype == "Item")
-            & (Mapping.etims_setup == settings_name)
+            & (Mapping.setup_docname == settings_name)
         )
         .select(Item.name, Item.item_code, Item.item_name)
         .where((Item.is_stock_item == 1) & (Item.custom_sent_to_slade == 1))
@@ -1015,13 +1014,13 @@ def create_item(item: dict | frappe._dict) -> Document:
     new_item.item_name = item["item_name"]
     new_item.item_group = "All Item Groups"
     if "item_classification_code" in item:
-        new_item.custom_item_classification = item["item_classification_code"]
-    new_item.custom_packaging_unit = item["packaging_unit_code"]
-    new_item.custom_unit_of_quantity = (
+        new_item.item_classification = item["item_classification_code"]
+    new_item.packaging_unit = item["packaging_unit_code"]
+    new_item.unit_of_quantity = (
         item.get("quantity_unit_code", None) or item["unit_of_quantity_code"]
     )
-    new_item.custom_taxation_type = item["taxation_type_code"]
-    new_item.custom_etims_country_of_origin = (
+    new_item.taxation_type = item["taxation_type_code"]
+    new_item.etims_country_of_origin = (
         frappe.get_doc(
             COUNTRIES_DOCTYPE_NAME,
             {"code": item_code[:2]},
@@ -1030,7 +1029,7 @@ def create_item(item: dict | frappe._dict) -> Document:
         if item_code
         else None
     )
-    new_item.custom_product_type = item_code[2:3] if item_code else None
+    new_item.product_type = item_code[2:3] if item_code else None
 
     if item_code and int(item_code[2:3]) != 3:
         new_item.is_stock_item = 1
@@ -1135,10 +1134,8 @@ def create_purchase_invoice_from_request(request_data: str) -> Document:
             tax_amount = float(item.get("tax_amount") or 0.0)
             total_amount = float(item.get("total_amount") or 0.0) - tax_amount
             net_rate = total_amount / float(item_doc["qty"]) if item_doc["qty"] else 0.0
-            custom_tax_rate = (
-                (tax_amount / total_amount * 100.0) if total_amount else 0.0
-            )
-            item_doc["custom_tax_rate"] = custom_tax_rate
+            tax_rate = (tax_amount / total_amount * 100.0) if total_amount else 0.0
+            item_doc["tax_rate"] = tax_rate
             item_doc["net_amount"] = total_amount
             item_doc["rate"] = net_rate
 
@@ -1153,7 +1150,7 @@ def create_purchase_invoice_from_request(request_data: str) -> Document:
                         "account_name",
                     ),
                     "description": "Tax for " + item["item_name"],
-                    "rate": custom_tax_rate,
+                    "rate": tax_rate,
                 },
             )
 

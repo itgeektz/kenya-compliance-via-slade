@@ -15,7 +15,7 @@ The **eTims Details tab** will be present for each item during and after loading
 
 #### 🚫 Prevent eTIMS Registration
 
-**custom_prevent_etims_registration**: Enable this option to exclude the item from being sent to eTIMS. When checked, this item will not be registered or used in eTIMS transactions.
+**prevent_etims_registration**: Enable this option to exclude the item from being sent to eTIMS. When checked, this item will not be registered or used in eTIMS transactions.
 
 #### 📤 Imported Item Submitted?
 

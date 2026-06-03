@@ -4,11 +4,6 @@ frappe.ui.form.on(itemDoctypName, {
   refresh: async function (frm) {
     await getEtimsSettings(frm);
     await applyEtimsAutofillFields(frm);
-    let grid = frm.get_field("etims_setup_mapping").grid;
-    grid.cannot_add_rows = true;
-    grid.cannot_delete_rows = true;
-    grid.only_sortable();
-    frm.refresh_field("etims_setup_mapping");
     toggleImportedLocks(frm);
     if (!frm.is_new()) {
       setupButtons(frm);
@@ -19,10 +14,10 @@ frappe.ui.form.on(itemDoctypName, {
     await applyEtimsAutofillFields(frm);
   },
 
-  custom_product_type_name: function (frm) {
+  product_type_name: function (frm) {
     frm.set_value(
       "is_stock_item",
-      frm.doc.custom_product_type_name !== "Service" ? 1 : 0,
+      frm.doc.product_type_name !== "Service" ? 1 : 0,
     );
   },
 });
@@ -45,7 +40,7 @@ async function getEtimsSettings(frm) {
 }
 
 async function applyEtimsAutofillFields(frm) {
-  if (frm.doc.custom_prevent_etims_registration == 1) return;
+  if (frm.doc.prevent_etims_registration == 1) return;
   const fallbackSetting = frm.etims?.allSettings?.length
     ? frm.etims.allSettings[0].name
     : null;
@@ -88,8 +83,8 @@ function setupButtons(frm) {
   if (!allSettings.length || frm.is_new()) return;
 
   const canRegister =
-    frm.doc.custom_item_classification &&
-    frm.doc.custom_taxation_type &&
+    frm.doc.item_classification &&
+    frm.doc.taxation_type &&
     unregisteredSettings.length;
 
   if (canRegister) {
@@ -103,8 +98,8 @@ function setupButtons(frm) {
 
   if (registeredMappings.length) {
     const registeredSetups = registeredMappings.map((r) => ({
-      name: r.etims_setup,
-      company: getCompanyName(allSettings, r.etims_setup),
+      name: r.setup_docname,
+      company: getCompanyName(allSettings, r.setup_docname),
     }));
 
     frm.add_custom_button(
@@ -129,8 +124,8 @@ function setupButtons(frm) {
           frm,
           "submit_inventory",
           registeredMappings.map((r) => ({
-            name: r.etims_setup,
-            company: getCompanyName(allSettings, r.etims_setup),
+            name: r.setup_docname,
+            company: getCompanyName(allSettings, r.setup_docname),
           })),
         ),
       __("eTims Actions"),
@@ -185,11 +180,11 @@ function executeItemAction(frm, actionType, settingName) {
   let args = {};
   let sladeId = "";
 
-  if (frm.doc.etims_setup_mapping) {
-    const row = frm.doc.etims_setup_mapping.find(
-      (r) => r.etims_setup === settingName,
+  if (frm.doc.etims_id_mapping) {
+    const row = frm.doc.etims_id_mapping.find(
+      (r) => r.setup_docname === settingName,
     );
-    sladeId = row ? row.slade360_id : "";
+    sladeId = row ? row.etims_id : "";
   }
 
   switch (actionType) {
