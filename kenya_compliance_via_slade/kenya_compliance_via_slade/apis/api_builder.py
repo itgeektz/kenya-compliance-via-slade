@@ -462,7 +462,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             page_size = (
                 self.job_queue.page_size
                 if self.job_queue and self.job_queue.page_size
-                else 100
+                else 1000
             )
 
             params = {
