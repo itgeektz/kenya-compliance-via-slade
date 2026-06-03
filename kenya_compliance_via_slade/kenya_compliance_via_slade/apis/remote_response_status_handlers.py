@@ -1,10 +1,8 @@
 import time
 from datetime import datetime
-from io import BytesIO
 
 import deprecation
 import frappe
-import qrcode
 
 from ... import __version__
 from ..doctype.doctype_names_mapping import (
@@ -30,6 +28,7 @@ from ..utils import (
     build_item_payload,
     build_partner_payload,
     build_return_invoice_payload,
+    generate_and_attach_qr_code,
     get_link_value,
     get_or_create_link,
     get_parent_by_slade360_id,
@@ -318,6 +317,7 @@ def sales_information_submission_on_success(
         document_name=document_name,
         invoice_type=doctype,
         settings_name=settings_name,
+        request_data={"reference_number": document_name},
         queue="long",
     )
 
@@ -598,9 +598,9 @@ def process_invoice_response(
         **map_scu_fields(data, custom_slade_id, doctype, qr_key="qr_code_url"),
     }
 
-    if document_name:
-        frappe.db.set_value(doctype, document_name, updates)
-        frappe.publish_realtime("refresh_form", document_name)
+    # if document_name:
+    #     frappe.db.set_value(doctype, document_name, updates)
+    #     frappe.publish_realtime("refresh_form", document_name)
 
 
 def verify_and_fix_invoice_revisions(
@@ -873,36 +873,6 @@ def is_invoice_data_matching(payload: dict, response_data: dict) -> bool:
             return False
 
     return True
-
-
-def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=10,
-        border=4,
-    )
-    qr.add_data(url)
-    qr.make(fit=True)
-
-    img = qr.make_image(fill_color="black", back_color="white")
-    buffer = BytesIO()
-    img.save(buffer, format="PNG")
-    buffer.seek(0)
-
-    file_doc = frappe.get_doc(
-        {
-            "doctype": "File",
-            "file_name": f"QR-{docname}.png",
-            "is_private": 0,
-            "content": buffer.read(),
-            "attached_to_doctype": doctype,
-            "attached_to_name": docname,
-        }
-    )
-    file_doc.save(ignore_permissions=True)
-
-    return file_doc.file_url
 
 
 def map_scu_fields(data: dict, docname: str, doctype: str, qr_key: str) -> dict:

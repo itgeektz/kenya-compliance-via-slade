@@ -31,7 +31,7 @@ frappe.ui.form.on(parentDoctype, {
       frm.doc.docstatus !== 0 &&
       !frm.doc.prevent_etims_submission
     ) {
-      if (!frm.doc.custom_successfully_submitted) {
+      if (!frm.doc.successfully_submitted) {
         frm.add_custom_button(
           __("Send Invoice"),
           function () {
@@ -96,6 +96,7 @@ frappe.ui.form.on(parentDoctype, {
                 settings_name: settings_name,
                 invoice_type: "Both",
                 document_name: frm.doc.name,
+                request_data: { reference_number: frm.doc.name },
               },
               success_msg: "Invoice status fetch queued",
             }),
@@ -118,7 +119,7 @@ frappe.ui.form.on(parentDoctype, {
       );
 
       if (
-        frm.doc.custom_successfully_submitted &&
+        frm.doc.successfully_submitted &&
         summaryData?.hasSignificantMismatch
       ) {
         frm.add_custom_button(

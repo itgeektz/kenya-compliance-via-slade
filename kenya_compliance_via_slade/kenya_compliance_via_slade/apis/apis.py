@@ -1545,7 +1545,7 @@ def check_invoice_submission_status(id: str, key: str) -> dict:
             "grand_total",
             "creation",
             "custom_successfully_submitted",
-            "custom_qr_code_url",
+            "qr_code_url",
         ],
         as_dict=True,
     )
@@ -1555,16 +1555,11 @@ def check_invoice_submission_status(id: str, key: str) -> dict:
 
     expected_key = get_datetime(invoice.creation).strftime("%Y%m%d%H%M%S%f")
 
-    frappe.log_error(
-        message=f"Expected: {expected_key}, Provided: {key}",
-        title="Invoice Verification Debug",
-    )
-
     if expected_key != key:
         return {"error": _("Invalid verification link.")}
 
-    if invoice.custom_successfully_submitted and invoice.custom_qr_code_url:
-        return {"custom_qr_code_url": invoice.custom_qr_code_url}
+    if invoice.custom_successfully_submitted and invoice.qr_code_url:
+        return {"qr_code_url": invoice.qr_code_url}
 
     return {
         "name": invoice.name,

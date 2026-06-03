@@ -2154,3 +2154,66 @@ def clean_url_params(url: str) -> str:
             parsed.fragment,
         )
     )
+
+
+def update_sales_invoice_etims_details(name: str) -> None:
+    sales_invoice = frappe.get_doc("Sales Invoice", name)
+
+    etims_ledger = frappe.db.get_value(
+        "eTIMS Sales Ledger Entry",
+        {"sales_invoice": sales_invoice.name},
+        [
+            "name",
+            "slade360_id",
+            "qr_code_url",
+        ],
+        as_dict=True,
+        order_by="creation desc",
+    )
+
+    values = {
+        "qr_code_url": None,
+        "etims_id": None,
+        "successfully_submitted": 0,
+    }
+
+    if etims_ledger and etims_ledger.qr_code_url:
+        values.update(
+            {
+                "qr_code_url": etims_ledger.qr_code_url,
+                "etims_id": etims_ledger.slade360_id,
+                "successfully_submitted": 1,
+            }
+        )
+
+    sales_invoice.db_set(values, update_modified=False)
+
+
+def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    file_doc = frappe.get_doc(
+        {
+            "doctype": "File",
+            "file_name": f"QR-{docname}.png",
+            "is_private": 0,
+            "content": buffer.read(),
+            "attached_to_doctype": doctype,
+            "attached_to_name": docname,
+        }
+    )
+    file_doc.save(ignore_permissions=True)
+
+    return file_doc.file_url

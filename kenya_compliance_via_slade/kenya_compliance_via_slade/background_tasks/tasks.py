@@ -673,16 +673,19 @@ def run_etims_ledger_scheduler():
 
 @frappe.whitelist()
 def fetch_etims_sales_data(
-    request_data: str | dict,
-    settings_name: str,
+    request_data: str | dict = None,
+    settings_name: str = None,
     invoice_type: str = "Both",
     document_name: str = None,
 ) -> None:
-    if invoice_type == "Sales Invoice" or invoice_type == "Both":
+    request_data = parse_request_data(request_data)
+
+    if invoice_type in ("Sales Invoice", "Both"):
         fetch_etims_sales_invoices(
             request_data, settings_name, document_name=document_name
         )
-    if invoice_type == "Credit Note" or invoice_type == "Both":
+
+    if invoice_type in ("Credit Note", "Both"):
         fetch_etims_credit_notes(
             request_data, settings_name, document_name=document_name
         )
@@ -690,10 +693,15 @@ def fetch_etims_sales_data(
 
 @frappe.whitelist()
 def fetch_etims_sales_invoices(
-    request_data: str | dict, settings_name: str, document_name: str = None
+    request_data: str | dict = None,
+    settings_name: str = None,
+    document_name: str = None,
 ) -> None:
+    request_data = parse_request_data(request_data)
+
     if document_name:
-        request_data = {**request_data, "reference_number": document_name}
+        request_data["reference_number"] = document_name
+
     process_request(
         request_data,
         "TrnsSalesSaveWrReq",
@@ -707,16 +715,19 @@ def fetch_etims_sales_invoices(
 
 @frappe.whitelist()
 def fetch_etims_credit_notes(
-    request_data: str | dict, settings_name: str, document_name: str = None
+    request_data: str | dict = None,
+    settings_name: str = None,
+    document_name: str = None,
 ) -> None:
+    request_data = parse_request_data(request_data)
+
     if document_name:
         doc = frappe.get_doc("Sales Invoice", document_name)
-        request_data = {
-            **request_data,
-            "reference_number": document_name
-            if not doc.is_return
-            else doc.return_against,
-        }
+
+        request_data["reference_number"] = (
+            document_name if not doc.is_return else doc.return_against
+        )
+
     process_request(
         request_data,
         "SalesCreditNoteSaveReq",
@@ -726,3 +737,13 @@ def fetch_etims_credit_notes(
         document_name=document_name,
         handler_function=fetch_etims_credit_notes_on_success,
     )
+
+
+def parse_request_data(request_data):
+    if not request_data:
+        return {}
+
+    if isinstance(request_data, str):
+        return json.loads(request_data)
+
+    return request_data

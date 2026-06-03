@@ -21760,8 +21760,8 @@
             setError(message.error);
             return;
           }
-          if (message.custom_qr_code_url) {
-            window.location.replace(message.custom_qr_code_url);
+          if (message.qr_code_url) {
+            window.location.replace(message.qr_code_url);
             return;
           }
           setInvoice(message);
@@ -21887,4 +21887,4 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
-//# sourceMappingURL=invoice_verification.bundle.B5WPI6JZ.js.map
+//# sourceMappingURL=invoice_verification.bundle.NZLPB56M.js.map

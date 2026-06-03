@@ -16,7 +16,11 @@ from ..doctype.doctype_names_mapping import (
     UNIT_OF_QUANTITY_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_company_from_setup_mapping, get_link_value
+from ..utils import (
+    get_company_from_setup_mapping,
+    get_link_value,
+    update_sales_invoice_etims_details,
+)
 
 
 def send_pos_invoices_information() -> None:
@@ -631,10 +635,10 @@ def fetch_etims_sales_invoices_on_success(response: dict, **kwargs) -> None:
     data = response.get("results")
 
     if not data or not isinstance(data, list):
-        frappe.log_error(
-            title="eTIMS Fetch Error",
-            message=f"No valid data received from eTims or data is not a list {data}",
-        )
+        # frappe.log_error(
+        #     title="eTIMS Fetch Error",
+        #     message=f"No valid data received from eTims or data is not a list {data}",
+        # )
         return
 
     settings_name = kwargs.get("settings_name")
@@ -726,6 +730,8 @@ def fetch_etims_sales_invoices_on_success(response: dict, **kwargs) -> None:
 
             sales_ledger.save(ignore_permissions=True)
             frappe.db.commit()
+            if sales_ledger.sales_invoice:
+                update_sales_invoice_etims_details(sales_ledger.sales_invoice)
 
         except Exception as e:
             doc_ref = invoice_data.get("document_number", "Unknown Document")
@@ -739,10 +745,10 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
     data = response.get("results")
 
     if not data or not isinstance(data, list):
-        frappe.log_error(
-            title="eTIMS Fetch Error",
-            message=f"No valid data received from eTims or data is not a list {data}",
-        )
+        # frappe.log_error(
+        #     title="eTIMS Fetch Error",
+        #     message=f"No valid data received from eTims or data is not a list {data}",
+        # )
         return
 
     settings_name = kwargs.get("settings_name")

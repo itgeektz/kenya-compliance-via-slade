@@ -53,8 +53,8 @@ export function App() {
           return;
         }
 
-        if (message.custom_qr_code_url) {
-          window.location.replace(message.custom_qr_code_url);
+        if (message.qr_code_url) {
+          window.location.replace(message.qr_code_url);
           return;
         }
 
