@@ -4,7 +4,7 @@ app_publisher = "Navari Ltd"
 app_description = "This app works to integrate ERPNext with KRA's eTIMS via Slade360 Advantage to allow for the sharing of information with the revenue authority."
 app_email = "support@navari.co.ke"
 app_license = "GNU Affero General Public License v3.0"
-required_apps = ["erpnext"]
+required_apps = ["erpnext", "csf_ke"]
 
 
 # Fixtures
@@ -61,6 +61,7 @@ doctype_list_js = {
     # "Branch": "kenya_compliance_via_slade/overrides/client/branch_list.js",
     "Customer": "kenya_compliance_via_slade/overrides/client/customer_list.js",
     "Supplier": "kenya_compliance_via_slade/overrides/client/supplier_list.js",
+    "eTIMS Sales Ledger Entry": "kenya_compliance_via_slade/overrides/client/etims_sales_ledger_entry_list.js",
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -150,6 +151,7 @@ doctype_list_js = {
 
 override_doctype_class = {
     "Scheduled Job Type": "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.scheduled_job_type.CustomScheduledJobType",
+    "eTims Job Queue": "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.etims_job_queue.CustomETimsJobQueue",
 }
 # Document Events
 # ---------------
