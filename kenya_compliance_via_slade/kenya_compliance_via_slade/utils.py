@@ -2219,3 +2219,76 @@ def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:
     file_doc.save(ignore_permissions=True)
 
     return file_doc.file_url
+
+
+@frappe.whitelist()
+def analyze_etims_eligibility(invoice_name):
+    doc = frappe.get_doc("Sales Invoice", invoice_name)
+
+    errors = []
+    warnings = []
+
+    try:
+        if doc.tax_id:
+            validate_kra_pin(doc.tax_id)
+    except Exception as e:
+        errors.append(str(e))
+
+    settings_doc = get_settings(company_name=doc.company)
+
+    if doc.prevent_etims_submission:
+        errors.append("eTIMS submission is disabled for this invoice.")
+
+    if getattr(doc, "etr_invoice_number", None):
+        warnings.append(
+            f"Invoice already has ETR Invoice Number {doc.etr_invoice_number}."
+        )
+
+    if doc.status == "Credit Note Issued":
+        warnings.append("Credit Note has already been issued.")
+
+    if not settings_doc:
+        errors.append(f"No active eTIMS settings found for company {doc.company}.")
+
+    if settings_doc:
+        customer_slade_id = get_etims_id(
+            "Customer",
+            doc.customer,
+            settings_doc.name,
+        )
+
+        if not customer_slade_id:
+            errors.append(f"Customer {doc.customer} is not registered in eTIMS.")
+
+        for item in doc.items:
+            slade_id = get_etims_id(
+                "Item",
+                item.item_code,
+                settings_doc.name,
+            )
+
+            if not slade_id:
+                errors.append(f"Item {item.item_code} is not registered in eTIMS.")
+
+        if doc.is_return and doc.return_against:
+            return_invoice = frappe.get_doc(
+                "Sales Invoice",
+                doc.return_against,
+            )
+
+            if not return_invoice.custom_successfully_submitted:
+                errors.append(
+                    f"Return Against Invoice {doc.return_against} was not successfully submitted to eTIMS."
+                )
+
+    last_error = None
+
+    if hasattr(doc, "custom_etims_error_message"):
+        last_error = doc.custom_etims_error_message
+
+    return {
+        "eligible": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "last_error": last_error,
+    }

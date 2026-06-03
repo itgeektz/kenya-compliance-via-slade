@@ -1177,3 +1177,180 @@ async function renderEtimsSummary(frm) {
     return null;
   }
 }
+
+async function renderEtimsEligibilityBanner(frm) {
+  if (frm.is_new()) return;
+
+  const htmlField = frm.fields_dict.etims_summary;
+
+  if (!htmlField) return;
+
+  frm.$wrapper.find(".etims-top-alert").remove();
+  htmlField.$wrapper.find(".etims-validation-banner").remove();
+
+  try {
+    const { message } = await frappe.call({
+      method:
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.analyze_etims_eligibility",
+      args: {
+        invoice_name: frm.doc.name,
+      },
+    });
+
+    const errors = message?.errors || [];
+    const warnings = message?.warnings || [];
+    const lastError = message?.last_error;
+
+    if (!errors.length && !warnings.length && !lastError) {
+      return;
+    }
+
+    if (errors.length) {
+      const alertHtml = `
+        <div class="etims-top-alert alert alert-danger" style="
+          margin:12px 15px;
+          cursor:pointer;
+          display:flex;
+          justify-content:space-between;
+          align-items:flex-start;
+          gap:12px;
+        ">
+          <div>
+            <div style="font-weight:700;">
+              eTIMS Validation Issues Detected
+            </div>
+
+            <div style="margin-top:4px;">
+              This invoice may not be eligible for eTIMS submission.
+              Click here to review the eTIMS Details section.
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="btn-close etims-alert-close"
+            style="
+              border:none;
+              background:transparent;
+              font-size:18px;
+              cursor:pointer;
+            "
+          >
+            ×
+          </button>
+        </div>
+      `;
+
+      frm.$wrapper.find(".layout-main-section").first().prepend(alertHtml);
+
+      frm.$wrapper.find(".etims-top-alert").on("click", function (e) {
+        if ($(e.target).closest(".etims-alert-close").length) {
+          return;
+        }
+
+        frm.scroll_to_field("etims_summary");
+      });
+
+      frm.$wrapper.find(".etims-alert-close").on("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        $(this).closest(".etims-top-alert").remove();
+      });
+    }
+
+    const html = `
+      <div class="etims-validation-banner" style="
+        margin-bottom:16px;
+        border-radius:12px;
+        overflow:hidden;
+      ">
+
+        ${
+          lastError
+            ? `
+          <div style="
+            padding:14px 18px;
+            background:#7f1d1d;
+            color:white;
+          ">
+            <div style="
+              font-weight:700;
+              margin-bottom:6px;
+            ">
+              Last eTIMS Submission Failed
+            </div>
+
+            <div>
+              ${frappe.utils.escape_html(lastError)}
+            </div>
+          </div>
+        `
+            : ""
+        }
+
+        ${
+          errors.length
+            ? `
+          <div style="
+            padding:14px 18px;
+            background:#fef2f2;
+            border:1px solid #fecaca;
+            color:#991b1b;
+          ">
+            <div style="
+              font-weight:700;
+              margin-bottom:8px;
+            ">
+              eTIMS Submission Blockers
+            </div>
+
+            <ul style="
+              margin:0;
+              padding-left:20px;
+            ">
+              ${errors
+                .map((d) => `<li>${frappe.utils.escape_html(d)}</li>`)
+                .join("")}
+            </ul>
+          </div>
+        `
+            : ""
+        }
+
+        ${
+          warnings.length
+            ? `
+          <div style="
+            padding:14px 18px;
+            background:#fffbeb;
+            border:1px solid #fde68a;
+            color:#92400e;
+          ">
+            <div style="
+              font-weight:700;
+              margin-bottom:8px;
+            ">
+              eTIMS Warnings
+            </div>
+
+            <ul style="
+              margin:0;
+              padding-left:20px;
+            ">
+              ${warnings
+                .map((d) => `<li>${frappe.utils.escape_html(d)}</li>`)
+                .join("")}
+            </ul>
+          </div>
+        `
+            : ""
+        }
+
+      </div>
+    `;
+
+    htmlField.$wrapper.prepend(html);
+  } catch (error) {
+    console.error("Failed to render eTIMS eligibility banner:", error);
+  }
+}
