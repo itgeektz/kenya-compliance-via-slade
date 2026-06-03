@@ -169,39 +169,149 @@ def update_documents(
     frappe.db.commit()
 
 
-def update_unit_of_quantity(response: dict, settings_name: str, **kwargs) -> None:
-    field_mapping = {
-        "slade_id": "id",
-        "code": "code",
-        "sort_order": "sort_order",
-        "code_name": "name",
-        "code_description": "description",
-    }
-    update_documents(
-        response,
-        UNIT_OF_QUANTITY_DOCTYPE_NAME,
-        field_mapping,
+def sync_etims_mappings(
+    response: list | dict,
+    doctype: str,
+    settings_name: str,
+    match_field: str,
+    response_field: str,
+    update_fields: dict | None = None,
+    create_missing: bool = False,
+) -> None:
+    if isinstance(response, str):
+        response = json.loads(response)
+
+    records = response if isinstance(response, list) else response.get("results", [])
+
+    if not records:
+        return
+
+    match_values = [
+        row.get(response_field) for row in records if row.get(response_field)
+    ]
+
+    existing_docs = frappe.get_all(
+        doctype,
+        filters={match_field: ["in", match_values]},
+        fields=["name", match_field],
+    )
+
+    doc_map = {d[match_field]: d["name"] for d in existing_docs}
+
+    modified = False
+
+    for row in records:
+        match_value = row.get(response_field)
+        etims_id = row.get("id")
+
+        if not match_value:
+            continue
+
+        docname = doc_map.get(match_value)
+
+        if not docname and create_missing:
+            doc = frappe.new_doc(doctype)
+            doc.set(match_field, match_value)
+
+            if update_fields:
+                for target_field, source_field in update_fields.items():
+                    value = row.get(source_field)
+
+                    if value is not None:
+                        doc.set(target_field, value)
+
+            doc.insert(ignore_permissions=True)
+
+            docname = doc.name
+            doc_map[match_value] = docname
+            modified = True
+
+        if not docname:
+            continue
+
+        if etims_id:
+            exists = frappe.db.exists(
+                SLADE_ID_MAPPING_DOCTYPE_NAME,
+                {
+                    "parent": docname,
+                    "parenttype": doctype,
+                    "parentfield": "etims_id_mapping",
+                    "setup_docname": settings_name,
+                },
+            )
+
+            if not exists:
+                frappe.get_doc(
+                    {
+                        "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
+                        "parent": docname,
+                        "parenttype": doctype,
+                        "parentfield": "etims_id_mapping",
+                        "setup_doctype": SETTINGS_DOCTYPE_NAME,
+                        "setup_docname": settings_name,
+                        "etims_id": etims_id,
+                    }
+                ).insert(ignore_permissions=True)
+
+                modified = True
+
+        if update_fields:
+            values = {}
+
+            for target_field, source_field in update_fields.items():
+                value = row.get(source_field)
+
+                if value is not None:
+                    values[target_field] = value
+
+            if values:
+                frappe.db.set_value(
+                    doctype,
+                    docname,
+                    values,
+                    update_modified=False,
+                )
+                modified = True
+
+    if modified:
+        frappe.db.commit()
+
+
+def update_unit_of_quantity(
+    response: dict,
+    settings_name: str,
+    **kwargs,
+) -> None:
+    sync_etims_mappings(
+        response=response,
+        doctype=UNIT_OF_QUANTITY_DOCTYPE_NAME,
         settings_name=settings_name,
-        is_table=True,
-        table_name="etims_setup_mapping",
+        match_field="code",
+        response_field="code",
+        update_fields={
+            "code_name": "name",
+            "code_description": "description",
+            "sort_order": "sort_order",
+        },
     )
 
 
-def update_packaging_units(response: dict, settings_name: str, **kwargs) -> None:
-    field_mapping = {
-        "slade_id": "id",
-        "code": "code",
-        "code_name": "name",
-        "sort_order": "sort_order",
-        "code_description": "description",
-    }
-    update_documents(
-        response,
-        PACKAGING_UNIT_DOCTYPE_NAME,
-        field_mapping,
+def update_packaging_units(
+    response: dict,
+    settings_name: str,
+    **kwargs,
+) -> None:
+    sync_etims_mappings(
+        response=response,
+        doctype=PACKAGING_UNIT_DOCTYPE_NAME,
         settings_name=settings_name,
-        is_table=True,
-        table_name="etims_setup_mapping",
+        match_field="code",
+        response_field="code",
+        update_fields={
+            "code_name": "name",
+            "code_description": "description",
+            "sort_order": "sort_order",
+        },
     )
 
 
@@ -224,58 +334,56 @@ def update_payment_methods(response: dict, **kwargs) -> None:
     )
 
 
-def update_currencies(response: dict, settings_name: str, **kwargs) -> None:
-    field_mapping = {
-        "custom_slade_id": "id",
-        "currency_name": "iso_code",
-        "enabled": lambda x: 1 if x.get("active") else 0,
-        "custom_conversion_rate": "conversion_rate",
-    }
-    update_documents(
-        response,
-        "Currency",
-        field_mapping,
-        filter_field="currency_name",
+def update_currencies(
+    response: dict,
+    settings_name: str,
+    **kwargs,
+) -> None:
+    sync_etims_mappings(
+        response=response,
+        doctype="Currency",
         settings_name=settings_name,
-        is_table=True,
-        table_name="etims_setup_mapping",
+        match_field="name",
+        response_field="iso_code",
     )
 
 
-def update_item_classification_codes(response: dict | list, **kwargs) -> None:
-    field_mapping = {
-        "slade_id": "id",
-        "itemclscd": "classification_code",
-        "itemclslvl": "classification_level",
-        "itemclsnm": "classification_name",
-        "taxtycd": "tax_type_code",
-        "useyn": lambda x: 1 if x.get("is_used") else 0,
-        "mjrtgyn": lambda x: 1 if x.get("is_frequently_used") else 0,
-    }
-    update_documents(
-        response,
-        ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
-        field_mapping,
-        filter_field="itemclscd",
+def update_item_classification_codes(
+    response: dict | list,
+    settings_name: str,
+    **kwargs,
+) -> None:
+    sync_etims_mappings(
+        response=response,
+        doctype=ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
+        settings_name=settings_name,
+        match_field="itemclscd",
+        response_field="classification_code",
+        update_fields={
+            "itemclsnm": "classification_name",
+            "itemclslvl": "classification_level",
+        },
+        create_missing=True,
     )
 
 
-def update_taxation_type(response: dict, settings_name: str, **kwargs) -> None:
-    field_mapping = {
-        "slade_id": "id",
-        "cd": "tax_code",
-        "srtord": "sort_order",
-        "cdnm": "name",
-        "cddesc": "description",
-    }
-    update_documents(
-        response,
-        TAXATION_TYPE_DOCTYPE_NAME,
-        field_mapping,
-        filter_field="cd",
+def update_taxation_type(
+    response: list,
+    settings_name: str,
+    **kwargs,
+) -> None:
+    sync_etims_mappings(
+        response=response,
+        doctype=TAXATION_TYPE_DOCTYPE_NAME,
         settings_name=settings_name,
-        is_table=True,
-        table_name="etims_setup_mapping",
+        match_field="cd",
+        response_field="tax_code",
+        update_fields={
+            "cdnm": "name",
+            "cddesc": "description",
+            "percentage": "percentage",
+            "amount_type": "amount_type",
+        },
     )
 
 
