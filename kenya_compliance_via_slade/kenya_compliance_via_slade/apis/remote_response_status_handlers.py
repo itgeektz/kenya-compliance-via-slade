@@ -105,6 +105,7 @@ def update_document_mapping(
                 row.name,
                 {
                     "etims_id": slade_id,
+                    "setup_doctype": SETTINGS_DOCTYPE_NAME,
                 },
             )
             found = True
@@ -115,6 +116,7 @@ def update_document_mapping(
             "etims_id_mapping",
             {
                 "setup_docname": settings_name,
+                "setup_doctype": SETTINGS_DOCTYPE_NAME,
                 "etims_id": slade_id,
                 "is_active": 1,
             },
@@ -306,6 +308,8 @@ def sales_information_submission_on_success(
     """
     updates = {
         "sent_to_etims": 1,
+        "etims_id": response.get("sales_invoice_id"),
+        "qr_code_url": response.get("signature_link"),
     }
 
     frappe.db.set_value(doctype, document_name, updates)
@@ -1473,7 +1477,6 @@ def item_search_on_success(response: dict, settings_name: str, **kwargs) -> None
                 "is_sales_item": item_data.get("can_be_sold", False),
                 "is_purchase_item": item_data.get("can_be_purchased", False),
                 "custom_item_code_etims": item_data.get("scu_item_code", ""),
-                "etims_country_of_origin": country_of_origin_code or "",
                 "valuation_rate": round(item_data.get("selling_price", 0.0), 2),
                 "last_purchase_rate": round(item_data.get("purchasing_price", 0.0), 2),
                 "etims_country_of_origin": country_of_origin or "",
