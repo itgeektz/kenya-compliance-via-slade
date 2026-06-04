@@ -34,7 +34,7 @@ def on_update(doc: Document, method: str | None = None) -> None:
     if not settings.get("stock_auto_submission_enabled"):
         return
     max_tries = get_max_submission_attempts("Stock Ledger Entry", company=doc.company)
-    if doc.custom_submission_tries and int(doc.custom_submission_tries) >= max_tries:
+    if doc.submission_attempts and int(doc.submission_attempts) >= max_tries:
         return
     save_ledger_details(doc.name)
 
@@ -393,8 +393,8 @@ def submit_stock_mvt_transition(name: str) -> None:
     if not name:
         return
     doc = frappe.get_doc("Stock Ledger Entry", name)
-    doc.custom_submission_tries = (
-        int(doc.custom_submission_tries) + 1 if doc.custom_submission_tries else 1
+    doc.submission_attempts = (
+        int(doc.submission_attempts) + 1 if doc.submission_attempts else 1
     )
     doc.save(ignore_permissions=True)
     if doc.voucher_type == "Stock Reconciliation":
@@ -459,7 +459,7 @@ def stock_balance_on_success(response: dict, document_name: str, **kwargs) -> No
             "item_code": doc.item_code,
             "creation": [">=", doc.creation],
         },
-        fields=["name", "custom_submission_tries"],
+        fields=["name", "submission_attempts"],
         order_by="creation asc",
     )
 
@@ -467,10 +467,7 @@ def stock_balance_on_success(response: dict, document_name: str, **kwargs) -> No
         max_tries = get_max_submission_attempts(
             "Stock Ledger Entry", company=doc.company
         )
-        if (
-            sle.custom_submission_tries
-            and int(sle.custom_submission_tries) >= max_tries
-        ):
+        if sle.submission_attempts and int(sle.submission_attempts) >= max_tries:
             continue
         frappe.enqueue(
             on_update,
