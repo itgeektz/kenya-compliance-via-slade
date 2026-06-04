@@ -490,9 +490,8 @@ def build_bulk_invoice_payload(
 ) -> dict:
     invoices_payload = []
 
-    callback_url = (
-        "https://4e73-105-160-101-47.ngrok-free.app"
-        + "/api/method/kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.bulk_invoice_callback"
+    callback_url = build_callback_url(
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.bulk_invoice_callback"
     )
 
     for invoice_name in invoice_names:
@@ -509,6 +508,19 @@ def build_bulk_invoice_payload(
         "invoices": invoices_payload,
         "callback_url": callback_url,
     }
+
+
+def build_callback_url(endpoint: str) -> str:
+    base_url = get_request_site_address(True)
+    parsed_url = urlparse(base_url)
+
+    if not (
+        parsed_url.hostname == "localhost"
+        or parsed_url.hostname.replace(".", "").isdigit()
+    ):
+        base_url = f"{parsed_url.scheme}://{parsed_url.hostname}"
+
+    return f"{base_url}/api/method/{endpoint}"
 
 
 def get_invoice_items_list(invoice: Document) -> list[dict[str, str | int | None]]:

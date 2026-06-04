@@ -1613,6 +1613,11 @@ def operation_type_create_on_success(
     )
 
 
+def invoice_bulk_submission_on_success(
+    response: dict, document_name: str, settings_name: str, **kwargs
+) -> None:
+    pass
+
 def fetch_matching_items_on_success(
     response: dict, document_name: str, settings_name: str, **kwargs
 ) -> None:

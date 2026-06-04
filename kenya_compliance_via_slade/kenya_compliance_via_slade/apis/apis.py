@@ -41,6 +41,7 @@ from .remote_response_status_handlers import (
     imported_item_submission_on_success,
     imported_items_search_on_success,
     initialize_device_submission_on_success,
+    invoice_bulk_submission_on_success,
     item_composition_submission_on_success,
     item_search_on_success,
     purchase_search_on_success,
@@ -150,7 +151,7 @@ def process_bulk_invoice_submission(
         is_async=True,
         request_data=payload,
         route_key="BulkSalesInvoiceSaveReq",
-        handler_function=fetch_matching_items_on_success,
+        handler_function=invoice_bulk_submission_on_success,
         request_method="POST",
         settings_name=settings_name,
     )
