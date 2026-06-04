@@ -242,15 +242,16 @@ doc_events = {
 
 scheduler_events = {
     "cron": {
-        "*/5 * * * *": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_autosubmission_scheduler",
-        ],
         "*/1 * * * *": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.queue_maintenance.run_etims_queue_maintenance",
         ],
     },
+    "hourly": [
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_autosubmission_scheduler_hourly",
+    ],
     "daily": [
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_ledger_scheduler",
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_autosubmission_scheduler_daily",
     ],
     "weekly": [
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.update_setting_passwords",

@@ -15,7 +15,7 @@ from ..doctype.doctype_names_mapping import (
     SETTINGS_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_max_submission_attempts, get_next_run
+from ..utils import get_max_submission_attempts
 from .task_response_handlers import (
     fetch_etims_credit_notes_on_success,
     fetch_etims_sales_invoices_on_success,
@@ -538,7 +538,18 @@ def search_branch_request(request_data: str | dict, settings_name: str) -> None:
     )
 
 
-def run_etims_autosubmission_scheduler():
+def should_run(schedule_value: str, mode: str) -> bool:
+    """
+    schedule_value: "Hourly", "Daily", "Both"
+    mode: "Hourly" or "Daily"
+    """
+    if not schedule_value:
+        return False
+
+    return schedule_value == mode or schedule_value == "Both"
+
+
+def run_etims_autosubmission_scheduler_hourly():
     settings_list = frappe.get_all(
         SETTINGS_DOCTYPE_NAME,
         filters={"is_active": 1},
@@ -548,104 +559,72 @@ def run_etims_autosubmission_scheduler():
     for s in settings_list:
         try:
             doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, s.name)
-            process_etims_autosubmission(doc)
+
+            if should_run(doc.sales_information_submission, "Hourly"):
+                frappe.enqueue(
+                    send_sales_invoices_information,
+                    queue="long",
+                    settings_name=doc.name,
+                )
+
+            if should_run(doc.purchase_information_submission, "Hourly"):
+                frappe.enqueue(
+                    send_purchase_information,
+                    queue="long",
+                    settings_name=doc.name,
+                )
+
+            if should_run(doc.stock_information_submission, "Hourly"):
+                frappe.enqueue(
+                    send_stock_information,
+                    queue="long",
+                    settings_name=doc.name,
+                )
+
         except Exception:
             frappe.log_error(
-                f"eTims Autosubmission Scheduler Failed for {s.name}",
+                f"Hourly eTims Autosubmission Failed: {s.name}",
                 frappe.get_traceback(),
             )
 
 
-def process_etims_autosubmission(doc):
-    now = now_datetime()
-    updated = False
+def run_etims_autosubmission_scheduler_daily():
+    settings_list = frappe.get_all(
+        SETTINGS_DOCTYPE_NAME,
+        filters={"is_active": 1},
+        fields=["name"],
+    )
 
-    if (
-        doc.sales_auto_submission_enabled
-        and doc.sales_next_run
-        and doc.sales_next_run <= now
-    ):
-        frappe.enqueue(
-            send_sales_invoices_information,
-            queue="long",
-            settings_name=doc.name,
-        )
-        doc.sales_last_run = now
-        doc.sales_next_run = get_next_run(
-            doc.sales_information_submission,
-            doc.sales_info_cron_format,
-        )
-        updated = True
+    for s in settings_list:
+        try:
+            doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, s.name)
 
-    if (
-        doc.purchase_auto_submission_enabled
-        and doc.purchases_next_run
-        and doc.purchases_next_run <= now
-    ):
-        frappe.enqueue(
-            send_purchase_information,
-            queue="long",
-            settings_name=doc.name,
-        )
-        doc.purchases_last_run = now
-        doc.purchases_next_run = get_next_run(
-            doc.purchase_information_submission,
-            doc.purchase_info_cron_format,
-        )
-        updated = True
+            if should_run(doc.sales_information_submission, "Daily"):
+                frappe.enqueue(
+                    send_sales_invoices_information,
+                    queue="long",
+                    settings_name=doc.name,
+                )
 
-    if (
-        doc.stock_auto_submission_enabled
-        and doc.stock_next_run
-        and doc.stock_next_run <= now
-    ):
-        frappe.enqueue(
-            send_stock_information,
-            queue="long",
-            settings_name=doc.name,
-        )
-        doc.stock_last_run = now
-        doc.stock_next_run = get_next_run(
-            doc.stock_information_submission,
-            doc.stock_info_cron_format,
-        )
-        updated = True
+            if should_run(doc.purchase_information_submission, "Daily"):
+                frappe.enqueue(
+                    send_purchase_information,
+                    queue="long",
+                    settings_name=doc.name,
+                )
 
-    if doc.notices_next_run and doc.notices_next_run <= now:
-        frappe.enqueue(
-            refresh_notices,
-            queue="long",
-            settings_name=doc.name,
-        )
-        doc.notices_last_run = now
-        doc.notices_next_run = get_next_run(
-            doc.notices_refresh_frequency,
-            doc.notices_refresh_freq_cron_format,
-        )
-        updated = True
+            if should_run(doc.stock_information_submission, "Daily"):
+                frappe.enqueue(
+                    send_stock_information,
+                    queue="long",
+                    settings_name=doc.name,
+                )
 
-    if doc.codes_next_run and doc.codes_next_run <= now:
-        frappe.enqueue(
-            refresh_code_lists,
-            queue="long",
-            settings_name=doc.name,
-            request_data={},
-        )
-        frappe.enqueue(
-            get_item_classification_codes,
-            queue="long",
-            settings_name=doc.name,
-            request_data={},
-        )
-        doc.codes_last_run = now
-        doc.codes_next_run = get_next_run(
-            doc.codes_refresh_frequency,
-            doc.codes_refresh_freq_cron_format,
-        )
-        updated = True
-
-    if updated:
-        doc.save(ignore_permissions=True)
+        except Exception:
+            frappe.log_error(
+                f"Daily eTims Autosubmission Failed: {s.name}",
+                frappe.get_traceback(),
+            )
 
 
 def run_etims_ledger_scheduler():
