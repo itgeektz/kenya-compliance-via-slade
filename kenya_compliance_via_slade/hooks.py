@@ -173,6 +173,9 @@ doc_events = {
         "validate": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.shared_overrides.validate"
         ],
+        "before_submit": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.shared_overrides.before_submit"
+        ],
         "before_cancel": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.before_cancel"
         ],

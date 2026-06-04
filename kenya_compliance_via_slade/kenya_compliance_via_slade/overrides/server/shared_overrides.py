@@ -12,7 +12,10 @@ from ...apis.remote_response_status_handlers import (
 
 # from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
 from ...utils import (
+    analyze_etims_eligibility,
     build_invoice_payload,
+    build_verification_url,
+    generate_and_attach_qr_code,
     get_etims_id,
     get_settings,
     validate_kra_pin,
@@ -118,3 +121,20 @@ def generic_invoices_on_submit_override(
 def validate(doc: Document, method: str) -> None:
     if doc.tax_id:
         validate_kra_pin(doc.tax_id)
+
+
+def before_submit(doc: Document, method: str) -> None:
+    if doc.doctype == "Sales Invoice":
+        response = analyze_etims_eligibility(doc.name)
+
+        if response.get("eligible"):
+            url = build_verification_url(doc)
+
+            if not doc.get("etims_verification_url"):
+                doc.etims_verification_url = url
+
+            if not doc.etims_qr_image:
+                image_url = generate_and_attach_qr_code(
+                    doc.etims_verification_url, doc.name, doc.doctype
+                )
+                doc.etims_qr_image = image_url

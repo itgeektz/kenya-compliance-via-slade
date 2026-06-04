@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 from io import BytesIO
 from typing import Any, Dict, List, Union
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
 import aiohttp
 import frappe
@@ -21,7 +21,12 @@ from frappe import _
 from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
 from frappe.query_builder import DocType
-from frappe.utils import add_to_date, now_datetime
+from frappe.utils import (
+    add_to_date,
+    get_datetime,
+    get_request_site_address,
+    now_datetime,
+)
 
 from .doctype.doctype_names_mapping import (
     COUNTRIES_DOCTYPE_NAME,
@@ -455,6 +460,7 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
         or None,
         "invoice_date": formatted_date,
         "itemDetails": [],
+        "invoice_details": True,
     }
 
     tax_map = calculate_tax(invoice)
@@ -813,6 +819,35 @@ def apply_item_taxes_and_codes(doc: "Document") -> None:
 
 def after_save_(doc: "Document", method: str | None = None) -> None:
     apply_item_taxes_and_codes(doc)
+
+    if doc.doctype == "Sales Invoice":
+        response = analyze_etims_eligibility(doc.name)
+
+        if response.get("eligible"):
+            url = build_verification_url(doc)
+
+            if not doc.get("etims_verification_url"):
+                frappe.db.set_value(
+                    doc.doctype,
+                    doc.name,
+                    "etims_verification_url",
+                    url,
+                    update_modified=False,
+                )
+
+            if (
+                doc.enable_background_invoice_submission
+                and url
+                and not doc.etims_qr_image
+            ):
+                image_url = generate_and_attach_qr_code(url, doc.name, doc.doctype)
+                frappe.db.set_value(
+                    doc.doctype,
+                    doc.name,
+                    "etims_qr_image",
+                    image_url,
+                    update_modified=False,
+                )
 
 
 def get_invoice_number(invoice_name: str) -> int:
@@ -2304,3 +2339,11 @@ def analyze_etims_eligibility(invoice_name):
         "warnings": warnings,
         "last_error": last_error,
     }
+
+
+def build_verification_url(doc) -> str:
+    creation = get_datetime(doc.creation) if doc.creation else None
+
+    key = creation.strftime("%Y%m%d%H%M%S%f") if creation else ""
+
+    return f"/invoice-verification?id={quote(str(doc.name))}&key={quote(key)}"
