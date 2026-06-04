@@ -17,8 +17,6 @@ frappe.ui.form.on(parentDoctype, {
     await updateTaxAmountLabel(frm);
     if (frm.is_new()) return;
 
-    const summaryData = await renderEtimsSummary(frm);
-
     await renderEtimsEligibilityBanner(frm);
 
     const { message: activeSetting } = await frappe.call({
@@ -32,6 +30,7 @@ frappe.ui.form.on(parentDoctype, {
       frm.doc.docstatus !== 0 &&
       !frm.doc.prevent_etims_submission
     ) {
+      const summaryData = await renderEtimsSummary(frm);
       if (!frm.doc.sent_to_etims) {
         frm.add_custom_button(
           __("Send Invoice"),
@@ -284,7 +283,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #e2e8f0;
                     background:#ffffff;
                   ">
@@ -304,7 +303,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #e2e8f0;
                     background:#ffffff;
                   ">
@@ -324,7 +323,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #bfdbfe;
                     background:#eff6ff;
                   ">
@@ -344,7 +343,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #bfdbfe;
                     background:#eff6ff;
                   ">
@@ -364,7 +363,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #fecaca;
                     background:#fef2f2;
                   ">
@@ -384,7 +383,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #fecaca;
                     background:#fef2f2;
                   ">
@@ -404,7 +403,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #e5e7eb;
                     background:#ffffff;
                   ">
@@ -424,7 +423,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #e5e7eb;
                     background:#ffffff;
                   ">
@@ -444,7 +443,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #fcd34d;
                     background:#fffbeb;
                   ">
@@ -848,12 +847,13 @@ async function renderEtimsSummary(frm) {
         display:flex;
         flex-direction:column;
         gap:16px;
+        margin-bottom:15px;
       ">
 
         <div style="
           border:1px solid #dbeafe;
           background:linear-gradient(135deg,#eff6ff 0%,#ffffff 100%);
-          border-radius:16px;
+          border-radius:5px;
           padding:20px;
         ">
           <div style="
@@ -883,7 +883,7 @@ async function renderEtimsSummary(frm) {
 
             <div style="
               padding:10px 16px;
-              border-radius:999px;
+              border-radius:10px;
               background:${hasSignificantMismatch ? "#fee2e2" : "#dcfce7"};
               color:${hasSignificantMismatch ? "#991b1b" : "#166534"};
               font-weight:700;
@@ -901,7 +901,7 @@ async function renderEtimsSummary(frm) {
         ">
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #e2e8f0;
             background:#ffffff;
@@ -921,7 +921,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #e2e8f0;
             background:#ffffff;
@@ -941,7 +941,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #e2e8f0;
             background:#ffffff;
@@ -961,7 +961,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #bfdbfe;
             background:#eff6ff;
@@ -981,7 +981,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #bfdbfe;
             background:#eff6ff;
@@ -1001,7 +1001,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #bfdbfe;
             background:#eff6ff;
@@ -1021,7 +1021,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #fecaca;
             background:#fef2f2;
@@ -1044,7 +1044,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #fecaca;
             background:#fef2f2;
@@ -1202,7 +1202,7 @@ async function renderEtimsEligibilityBanner(frm) {
       return;
     }
 
-    if (errors.length) {
+    if (errors.length || warnings.length) {
       const alertHtml = `
         <div class="etims-top-alert alert alert-danger" style="
           margin:12px 15px;
