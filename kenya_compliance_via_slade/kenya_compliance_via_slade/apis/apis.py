@@ -25,7 +25,6 @@ from ..utils import (
     build_bulk_invoice_payload,
     build_return_invoice_payload,
     chunked,
-    generate_custom_item_code_etims,
     get_active_settings,
     get_invoice_reference_number,
     get_link_value,
@@ -269,88 +268,6 @@ def bulk_register_items(docs_list: str, settings_name: str = None) -> None:
             )
 
 
-@frappe.whitelist()
-def update_all_items(settings_name: str = None) -> None:
-    """Update all items in chunks"""
-    settings = (
-        [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
-        if settings_name
-        else get_active_settings()
-    )
-
-    if not settings:
-        return
-
-    for setting in settings:
-        Item = DocType("Item")
-        Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
-
-        items = (
-            frappe.qb.from_(Item)
-            .inner_join(Mapping)
-            .on(
-                (Mapping.parent == Item.name)
-                & (Mapping.parenttype == "Item")
-                & (Mapping.setup_docname == setting.name)
-            )
-            .select(Item.name)
-            .where(Item.custom_sent_to_slade == 1)
-            .run(as_dict=True)
-        )
-
-        item_names = [i.name for i in items]
-
-        for batch in chunked(item_names, 100):
-            frappe.enqueue(
-                process_item_batch,
-                queue="long",
-                settings_name=setting.name,
-                items=batch,
-                job_name=f"Item Update Batch ({len(batch)})",
-            )
-
-
-@frappe.whitelist()
-def register_all_items(settings_name: str = None) -> None:
-    """Register all items in chunks"""
-    settings = (
-        [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
-        if settings_name
-        else get_active_settings()
-    )
-
-    if not settings:
-        return
-
-    for setting in settings:
-        Item = DocType("Item")
-        Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
-
-        items = (
-            frappe.qb.from_(Item)
-            .left_join(Mapping)
-            .on(
-                (Mapping.parent == Item.name)
-                & (Mapping.parenttype == "Item")
-                & (Mapping.setup_docname == setting.name)
-            )
-            .select(Item.name)
-            .where((Item.custom_sent_to_slade == 0) & (Mapping.name.isnull()))
-            .run(as_dict=True)
-        )
-
-        item_names = [i.name for i in items]
-
-        for batch in chunked(item_names, 100):
-            frappe.enqueue(
-                process_item_batch,
-                queue="long",
-                settings_name=setting.name,
-                items=batch,
-                job_name=f"Item Register Batch ({len(batch)})",
-            )
-
-
 def process_item_batch(settings_name: str, items: List[str]) -> None:
     """Process a batch of items for registration/update"""
     for item_name in items:
@@ -413,9 +330,6 @@ def perform_item_registration(item_name: str, settings_name: str) -> dict | None
             )
         )
 
-    if not item.custom_item_code_etims:
-        generate_and_set_etims_code(item)
-
     frappe.enqueue(
         process_request,
         queue="default",
@@ -447,15 +361,6 @@ def validate_required_fields(item) -> List[str]:
         "taxation_type",
     ]
     return [field for field in required_fields if not item.get(field)]
-
-
-def generate_and_set_etims_code(item) -> None:
-    """Generate and set ETIMS code for item"""
-    item.custom_item_code_etims = generate_custom_item_code_etims(item)
-    frappe.db.set_value(
-        "Item", item.name, "custom_item_code_etims", item.custom_item_code_etims
-    )
-    frappe.db.commit()
 
 
 @frappe.whitelist()
