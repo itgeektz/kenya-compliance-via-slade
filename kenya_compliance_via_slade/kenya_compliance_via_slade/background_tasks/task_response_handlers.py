@@ -28,7 +28,7 @@ def send_pos_invoices_information() -> None:
     from ..overrides.server.sales_invoice import on_submit
 
     all_pending_pos_invoices: list[Document] = frappe.get_all(
-        "POS Invoice", {"docstatus": 1, "custom_successfully_submitted": 0}, ["name"]
+        "POS Invoice", {"docstatus": 1, "sent_to_etims": 0}, ["name"]
     )
 
     if all_pending_pos_invoices:
@@ -88,7 +88,7 @@ def update_documents(
             if isinstance(value, dict) and "doctype" in value:
                 linked_doctype = value.get("doctype")
                 link_field = value.get("link_field")
-                link_filter_field = value.get("filter_field", "custom_slade_id")
+                link_filter_field = value.get("filter_field", "etims_id")
                 link_extract_field = value.get("extract_field", "name")
                 link_filter_value = record.get(link_field)
                 if linked_doctype and link_filter_value:
@@ -430,9 +430,7 @@ def update_organisations(response: dict, **kwargs) -> None:
 
     if record.get("default_currency"):
         doc.default_currency = (
-            get_link_value(
-                "Currency", "custom_slade_id", record.get("default_currency")
-            )
+            get_link_value("Currency", "etims_id", record.get("default_currency"))
             or "KES"
         )
     if record.get("web_address"):
@@ -442,7 +440,7 @@ def update_organisations(response: dict, **kwargs) -> None:
     if record.get("description"):
         doc.company_description = record.get("description", "")
     if record.get("id"):
-        doc.custom_slade_id = record.get("id", "")
+        doc.etims_id = record.get("id", "")
     if record.get("email_address"):
         doc.email = record.get("email_address", "")
     if record.get("tax_payer_pin"):
@@ -543,14 +541,14 @@ def update_departments(response: dict, **kwargs) -> None:
 
     if record.get("organisation"):
         doc.company = (
-            get_link_value("Company", "custom_slade_id", record.get("organisation"))
+            get_link_value("Company", "etims_id", record.get("organisation"))
             or frappe.defaults.get_user_default("Company")
             or frappe.get_value("Company", {}, "name")
         )
     if record.get("parent"):
         doc.custom_branch = get_link_value("Branch", "slade_id", record.get("parent"))
     if record.get("id"):
-        doc.custom_slade_id = record.get("id")
+        doc.etims_id = record.get("id")
     doc.is_etims_verified = 1 if record.get("is_etims_verified") else 0
     doc.custom_is_etims_department = 1
 

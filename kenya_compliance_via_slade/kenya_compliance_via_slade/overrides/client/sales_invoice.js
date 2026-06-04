@@ -32,7 +32,7 @@ frappe.ui.form.on(parentDoctype, {
       frm.doc.docstatus !== 0 &&
       !frm.doc.prevent_etims_submission
     ) {
-      if (!frm.doc.successfully_submitted) {
+      if (!frm.doc.sent_to_etims) {
         frm.add_custom_button(
           __("Send Invoice"),
           function () {
@@ -119,10 +119,7 @@ frappe.ui.form.on(parentDoctype, {
         __("eTims Actions"),
       );
 
-      if (
-        frm.doc.successfully_submitted &&
-        summaryData?.hasSignificantMismatch
-      ) {
+      if (frm.doc.sent_to_etims && summaryData?.hasSignificantMismatch) {
         frm.add_custom_button(
           __("Correction Credit Note on eTIMS"),
           function () {

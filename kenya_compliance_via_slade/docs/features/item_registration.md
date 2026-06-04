@@ -19,11 +19,11 @@ The **eTims Details tab** will be present for each item during and after loading
 
 #### 📤 Imported Item Submitted?
 
-**custom_imported_item_submitted**: Indicates whether this imported item has been successfully submitted to eTIMS servers through the "send imported item" button.
+**custom_imported_item_submitted**: Indicates whether this imported item has been Sent to eTims to eTIMS servers through the "send imported item" button.
 
 #### 🆔 Slade ID
 
-**custom_slade_id**: The unique identifier assigned to the item by Slade 360's servers.
+**etims_id**: The unique identifier assigned to the item by Slade 360's servers.
 
 #### 🔄 Submission Tries
 

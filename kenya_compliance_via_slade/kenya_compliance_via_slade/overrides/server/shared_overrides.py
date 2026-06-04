@@ -70,17 +70,15 @@ def generic_invoices_on_submit_override(
 
     if doc.is_return:
         return_invoice = frappe.get_doc(invoice_type, doc.return_against)
-        if not return_invoice.custom_successfully_submitted:
+        if not return_invoice.sent_to_etims:
             frappe.msgprint(
-                f"Return against invoice {doc.return_against} was not successfully submitted. Cannot process return."
+                f"Return against invoice {doc.return_against} was not Sent to eTims. Cannot process return."
             )
             return
 
         from ...apis.apis import submit_credit_note
 
-        slade_id = frappe.db.get_value(
-            "Sales Invoice", doc.return_against, "custom_slade_id"
-        )
+        slade_id = frappe.db.get_value("Sales Invoice", doc.return_against, "etims_id")
         request_data = {
             "document_name": doc.name,
             "id": slade_id,

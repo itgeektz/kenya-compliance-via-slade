@@ -29,7 +29,7 @@ def execute() -> None:
         if setup.organisation_mapping:
             return
         update_setting(setup)
-        update_entities(setup, "Item", "custom_sent_to_slade", "custom_slade_id")
+        update_entities(setup, "Item", "custom_sent_to_slade", "etims_id")
         update_entities(
             setup, "Customer", "custom_details_submitted_successfully", "slade_id"
         )

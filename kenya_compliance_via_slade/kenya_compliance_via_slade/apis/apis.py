@@ -59,7 +59,7 @@ endpoints_builder = EndpointsBuilder()
 # @frappe.whitelist()
 # def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None) -> str:
 #     """Bulk submit sales invoices in chunks"""
-#     filters = {"docstatus": 1, "custom_successfully_submitted": 0}
+#     filters = {"docstatus": 1, "sent_to_etims": 0}
 
 #     if docs_list:
 #         provided_names = json.loads(docs_list)
@@ -95,7 +95,7 @@ def bulk_submit_sales_invoices(
 
     filters = {
         "docstatus": 1,
-        "custom_successfully_submitted": 0,
+        "sent_to_etims": 0,
         "is_return": 0,
     }
 
@@ -852,7 +852,7 @@ def submit_inventory(name: str, settings_name: str) -> None:
             "Department",
             "name",
             settings.organisation_mapping[0].department,
-            "custom_slade_id",
+            "etims_id",
         ),
         "location": get_link_value(
             "Warehouse",
@@ -933,7 +933,7 @@ def submit_item_composition(name: str) -> None:
     """Submit item composition"""
     item = frappe.get_doc("BOM", name)
     request_data = {
-        "final_product": get_link_value("Item", "name", item.item, "custom_slade_id"),
+        "final_product": get_link_value("Item", "name", item.item, "etims_id"),
         "document_name": name,
     }
     process_request(
@@ -1360,7 +1360,7 @@ def _process_invoice_fetch_request(
                 original_invoice_id
                 if is_return
                 else frappe.db.get_value(
-                    "Sales Invoice", invoice.return_against, "custom_slade_id"
+                    "Sales Invoice", invoice.return_against, "etims_id"
                 )
             )
             request_data["invoice"] = original_invoice_slade_id
@@ -1392,7 +1392,7 @@ def get_invoice_details(
 ) -> None:
     """Get invoice details"""
     invoice = frappe.get_doc(invoice_type, document_name)
-    slade_id = id or invoice.custom_slade_id
+    slade_id = id or invoice.etims_id
     if slade_id:
         request_data = {
             "document_name": document_name,
@@ -1541,7 +1541,7 @@ def check_invoice_submission_status(id: str, key: str) -> dict:
             "posting_date",
             "grand_total",
             "creation",
-            "custom_successfully_submitted",
+            "sent_to_etims",
             "qr_code_url",
         ],
         as_dict=True,
@@ -1555,7 +1555,7 @@ def check_invoice_submission_status(id: str, key: str) -> dict:
     if expected_key != key:
         return {"error": _("Invalid verification link.")}
 
-    if invoice.custom_successfully_submitted and invoice.qr_code_url:
+    if invoice.sent_to_etims and invoice.qr_code_url:
         return {"qr_code_url": invoice.qr_code_url}
 
     return {

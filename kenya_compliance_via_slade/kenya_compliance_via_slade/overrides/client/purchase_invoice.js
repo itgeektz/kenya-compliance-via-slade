@@ -14,7 +14,7 @@ frappe.ui.form.on(purchaseParentDoctype, {
       frm.doc.docstatus !== 0 &&
       !frm.doc.prevent_etims_submission
     ) {
-      if (!frm.doc.custom_submitted_successfully) {
+      if (!frm.doc.sent_to_etims) {
         frm.add_custom_button(
           __("Send Invoice"),
           function () {

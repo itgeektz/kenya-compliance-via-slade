@@ -1200,7 +1200,7 @@ def get_department(id: str, company: str) -> str:
             "Department",
             existing_department,
             {
-                "custom_slade_id": id,
+                "etims_id": id,
                 "custom_is_etims_department": 1,
                 "company": company,
             },
@@ -1211,7 +1211,7 @@ def get_department(id: str, company: str) -> str:
             {
                 "doctype": "Department",
                 "department_name": department_name,
-                "custom_slade_id": id,
+                "etims_id": id,
                 "custom_is_etims_department": 1,
                 "company": company,
             }
@@ -2176,7 +2176,7 @@ def update_sales_invoice_etims_details(name: str) -> None:
     values = {
         "qr_code_url": None,
         "etims_id": None,
-        "successfully_submitted": 0,
+        "sent_to_etims": 0,
     }
 
     if etims_ledger and etims_ledger.qr_code_url:
@@ -2184,7 +2184,7 @@ def update_sales_invoice_etims_details(name: str) -> None:
             {
                 "qr_code_url": etims_ledger.qr_code_url,
                 "etims_id": etims_ledger.etims_id,
-                "successfully_submitted": 1,
+                "sent_to_etims": 1,
             }
         )
 
@@ -2276,9 +2276,9 @@ def analyze_etims_eligibility(invoice_name):
                 doc.return_against,
             )
 
-            if not return_invoice.custom_successfully_submitted:
+            if not return_invoice.sent_to_etims:
                 errors.append(
-                    f"Return Against Invoice {doc.return_against} was not successfully submitted to eTIMS."
+                    f"Return Against Invoice {doc.return_against} was not Sent to eTims to eTIMS."
                 )
 
     last_error = None

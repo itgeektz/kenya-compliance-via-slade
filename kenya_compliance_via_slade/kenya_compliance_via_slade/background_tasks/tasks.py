@@ -90,7 +90,7 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
     all_submitted_unsent = fetch_sales_invoices(
         {
             "docstatus": 1,
-            "custom_successfully_submitted": 0,
+            "sent_to_etims": 0,
             "creation": [">=", timeframe_ago],
         }
     )
@@ -111,8 +111,8 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
     # sent_unprocessed = fetch_sales_invoices(
     #     {
     #         "docstatus": 1,
-    #         "custom_slade_id": ["is", "set"],
-    #         "custom_successfully_submitted": 0,
+    #         "etims_id": ["is", "set"],
+    #         "sent_to_etims": 0,
     #         "custom_transition_successful": 0,
     #         "creation": [">=", timeframe_ago],
     #     }
@@ -123,7 +123,7 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
     # processed_unsent_to_etims = fetch_sales_invoices(
     #     {
     #         "docstatus": 1,
-    #         "custom_successfully_submitted": 0,
+    #         "sent_to_etims": 0,
     #         "custom_transition_successful": 1,
     #         "creation": [">=", timeframe_ago],
     #         "is_opening":"No"
@@ -175,7 +175,7 @@ def sign_processed_invoices(invoices: list) -> None:
     from ..apis.remote_response_status_handlers import process_sales_sign
 
     def action_func(doc: Document) -> None:
-        process_sales_sign(doc.name, "Sales Invoice", doc.custom_slade_id)
+        process_sales_sign(doc.name, "Sales Invoice", doc.etims_id)
 
     handle_invoice_submission(invoices, action_func)
 
@@ -184,7 +184,7 @@ def process_sent_invoices(invoices: list) -> None:
     from ..apis.remote_response_status_handlers import process_invoice_items
 
     def action_func(doc: Document) -> None:
-        process_invoice_items(doc.name, "Sales Invoice", doc.custom_slade_id)
+        process_invoice_items(doc.name, "Sales Invoice", doc.etims_id)
 
     handle_invoice_submission(invoices, action_func)
 
@@ -448,9 +448,9 @@ def fetch_stock_ledgers(timeframe_ago: datetime) -> List[Document]:
         "Stock Ledger Entry",
         filters={
             "docstatus": 1,
-            "custom_submitted_successfully": 0,
+            "sent_to_etims": 0,
             "creation": [">=", timeframe_ago],
-            "custom_submission_tries": ["<", max_tries],
+            "submission_attempts": ["<", max_tries],
         },
         fields=["name", "item_code"],
         order_by="creation asc",
@@ -487,7 +487,7 @@ def send_purchase_information(settings_name: str = None) -> None:
         "Purchase Invoice",
         {
             "docstatus": 1,
-            "custom_submitted_successfully": 0,
+            "sent_to_etims": 0,
             "creation": [">=", timeframe_ago],
         },
         ["name"],

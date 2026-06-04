@@ -18,7 +18,7 @@ def on_submit(doc: Document, method: str = None) -> None:
     apply_item_taxes_and_codes(doc)
 
     if (
-        doc.custom_successfully_submitted == 0
+        doc.sent_to_etims == 0
         and doc.prevent_etims_submission == 0
         and doc.is_opening == "No"
         and settings_doc.sales_auto_submission_enabled
@@ -35,12 +35,12 @@ def on_submit(doc: Document, method: str = None) -> None:
 def before_cancel(doc: Document, method: str = None) -> None:
     """Disallow cancelling of submitted invoice to eTIMS."""
 
-    if doc.doctype == "Sales Invoice" and doc.custom_successfully_submitted:
+    if doc.doctype == "Sales Invoice" and doc.sent_to_etims:
         frappe.throw(
             "This invoice has already been <b>submitted</b> to eTIMS and cannot be <span style='color:red'>Canceled.</span>\n"
             "If you need to make adjustments, please create a Credit Note instead."
         )
-    elif doc.doctype == "Purchase Invoice" and doc.custom_submitted_successfully:
+    elif doc.doctype == "Purchase Invoice" and doc.sent_to_etims:
         frappe.throw(
             "This invoice has already been <b>submitted</b> to eTIMS and cannot be <span style='color:red'>Canceled.</span>.\nIf you need to make adjustments, please create a Debit Note instead."
         )

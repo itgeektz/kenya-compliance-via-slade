@@ -207,9 +207,7 @@ def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) 
         "users_full_names": result.get("full_name"),
         "email": email,
         "workstation": workstation,
-        "company": get_link_value(
-            "Company", "custom_slade_id", result.get("organisation_id")
-        ),
+        "company": get_link_value("Company", "etims_id", result.get("organisation_id")),
         "branch": get_link_value("Branch", "slade_id", branch_id),
         "system_user": user.name,
     }
@@ -307,7 +305,7 @@ def sales_information_submission_on_success(
     Callback after successful submission. Maps SCU data and signature_link.
     """
     updates = {
-        "custom_successfully_submitted": 1,
+        "sent_to_etims": 1,
     }
 
     frappe.db.set_value(doctype, document_name, updates)
@@ -380,7 +378,7 @@ def sales_information_submission_on_error(
 #         doctype,
 #         document_name,
 #         {
-#             "custom_slade_id": response.get("id"),
+#             "etims_id": response.get("id"),
 #         },
 #     )
 #     frappe.enqueue(
@@ -431,7 +429,7 @@ def process_invoice_items(
 
         payload = {
             "product": get_link_value(
-                "Item", "name", item.get("item_code"), "custom_slade_id"
+                "Item", "name", item.get("item_code"), "etims_id"
             ),
             "quantity": round(qty, 4),
             "new_price": round(
@@ -444,9 +442,9 @@ def process_invoice_items(
         }
 
         request_method = "POST"
-        if item.get("custom_slade_id"):
+        if item.get("etims_id"):
             request_method = "PATCH"
-            payload["id"] = item.get("custom_slade_id")
+            payload["id"] = item.get("etims_id")
 
         process_request(
             payload,
@@ -500,9 +498,7 @@ def process_sales_sign(document_name: str, doctype: str, invoice_slade_id: str) 
     def handle_invoice_sign_success(
         response: dict, document_name: str, **kwargs
     ) -> None:
-        frappe.db.set_value(
-            doctype, document_name, {"custom_successfully_submitted": 1}
-        )
+        frappe.db.set_value(doctype, document_name, {"sent_to_etims": 1})
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
             id=invoice_slade_id,
@@ -556,8 +552,8 @@ def verify_and_fix_invoice_info(
         return
 
     elif not data.get("scu_data"):
-        if doc.custom_slade_id:
-            process_sales_sign(document_name, doctype, doc.custom_slade_id)
+        if doc.etims_id:
+            process_sales_sign(document_name, doctype, doc.etims_id)
             return
 
     invoice_data = (
@@ -579,14 +575,14 @@ def process_invoice_response(
     data = get_response_data(response)
     if not data:
         return
-    custom_slade_id = data.get("id")
-    slade_id = frappe.get_value(doctype, document_name, "custom_slade_id")
+    etims_id = data.get("id")
+    slade_id = frappe.get_value(doctype, document_name, "etims_id")
 
-    if not slade_id and custom_slade_id and not data.get("scu_data"):
+    if not slade_id and etims_id and not data.get("scu_data"):
         company = frappe.get_value(doctype, document_name, "company")
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
-            id=custom_slade_id,
+            id=etims_id,
             document_name=document_name,
             invoice_type=doctype,
             settings_name=settings_name,
@@ -594,8 +590,8 @@ def process_invoice_response(
         )
 
     updates = {
-        "custom_slade_id": custom_slade_id,
-        **map_scu_fields(data, custom_slade_id, doctype, qr_key="qr_code_url"),
+        "etims_id": etims_id,
+        **map_scu_fields(data, etims_id, doctype, qr_key="qr_code_url"),
     }
 
     # if document_name:
@@ -903,7 +899,7 @@ def sales_item_submission_on_success(
     response: dict, document_name: str, doctype: str, **kwargs
 ) -> None:
     updates = {
-        "custom_slade_id": response.get("id"),
+        "etims_id": response.get("id"),
         "custom_sent_to_slade": 1,
     }
     frappe.db.set_value(doctype, document_name, updates)
@@ -919,7 +915,7 @@ def item_composition_submission_on_success(
         document_name,
         {
             "custom_item_composition_submitted_successfully": 1,
-            "custom_slade_id": response.get("id"),
+            "etims_id": response.get("id"),
         },
     )
 
@@ -931,9 +927,7 @@ def item_composition_submission_on_success(
             "active": True,
             "quantity": item.qty,
             "bom": response.get("id"),
-            "raw_product": get_link_value(
-                "Item", "name", item.item_code, "custom_slade_id"
-            ),
+            "raw_product": get_link_value("Item", "name", item.item_code, "etims_id"),
         }
         frappe.enqueue(
             process_request,
@@ -953,8 +947,8 @@ def bom_item_submission_on_success(
         "BOM Item",
         document_name,
         {
-            "custom_slade_id": response.get("id"),
-            "custom_submitted_successfully": 1,
+            "etims_id": response.get("id"),
+            "sent_to_etims": 1,
         },
     )
 
@@ -966,8 +960,8 @@ def purchase_invoice_submission_on_success(
         "Purchase Invoice",
         document_name,
         {
-            "custom_slade_id": response.get("id"),
-            "custom_submitted_successfully": 1,
+            "etims_id": response.get("id"),
+            "sent_to_etims": 1,
         },
     )
 
@@ -1608,9 +1602,7 @@ def customers_search_on_success(response: dict, **kwargs) -> None:
 
 
 def location_update_on_success(response: dict, document_name: str, **kwargs) -> None:
-    frappe.db.set_value(
-        "Warehouse", document_name, {"custom_slade_id": response.get("id")}
-    )
+    frappe.db.set_value("Warehouse", document_name, {"etims_id": response.get("id")})
 
 
 def operation_type_create_on_success(
