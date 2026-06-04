@@ -22,7 +22,7 @@ def ensure_custom_fields_exist():
                 "fieldname": "etims_taxation_type",
                 "label": "eTims Taxation Type",
                 "fieldtype": "Link",
-                "options": "Navari KRA eTims Taxation Type",
+                "options": "eTims Taxation Type",
                 "insert_after": "tax_category",
             }
         ],
@@ -31,7 +31,7 @@ def ensure_custom_fields_exist():
                 "fieldname": "etims_taxation_type",
                 "label": "eTims Taxation Type",
                 "fieldtype": "Link",
-                "options": "Navari KRA eTims Taxation Type",
+                "options": "eTims Taxation Type",
                 "insert_after": "taxes",
             }
         ],

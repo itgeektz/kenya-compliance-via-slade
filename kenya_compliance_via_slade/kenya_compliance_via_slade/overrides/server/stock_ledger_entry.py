@@ -10,13 +10,12 @@ from ...apis.api_builder import EndpointsBuilder
 from ...apis.process_request import process_request
 from ...doctype.doctype_names_mapping import (
     OPERATION_TYPE_DOCTYPE_NAME,
-    SETTINGS_DOCTYPE_NAME,
 )
 from ...utils import (
     extract_document_series_number,
+    get_max_submission_attempts,
     get_settings,
     get_total_stock_balance_from_sle,
-    get_max_submission_attempts,
 )
 
 endpoints_builder = EndpointsBuilder()
@@ -434,7 +433,9 @@ def stock_balance_on_success(response: dict, document_name: str, **kwargs) -> No
     results = (
         response.get("results", [])
         if isinstance(response, dict)
-        else response if isinstance(response, list) else []
+        else response
+        if isinstance(response, list)
+        else []
     )
 
     if not results:

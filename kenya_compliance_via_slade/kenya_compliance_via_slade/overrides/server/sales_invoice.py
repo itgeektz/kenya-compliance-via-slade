@@ -1,8 +1,8 @@
 import frappe
 from frappe.model.document import Document
 
-from .shared_overrides import generic_invoices_on_submit_override
 from ...utils import apply_item_taxes_and_codes, get_settings
+from .shared_overrides import generic_invoices_on_submit_override
 
 
 def on_submit(doc: Document, method: str = None) -> None:

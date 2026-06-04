@@ -31,7 +31,7 @@ frappe.ui.form.on(doctypeName, {
                 freeze_message: "Processing...",
                 callback: (response) => {
                   frappe.msgprint(
-                    "Submit request queued. Please check in later."
+                    "Submit request queued. Please check in later.",
                   );
                 },
                 error: (r) => {
@@ -57,7 +57,7 @@ frappe.ui.form.on(doctypeName, {
                     freeze_message: "Processing...",
                     callback: (response) => {
                       frappe.msgprint(
-                        "Processing request queued. Please check in later."
+                        "Processing request queued. Please check in later.",
                       );
                     },
                     error: (r) => {
@@ -65,7 +65,7 @@ frappe.ui.form.on(doctypeName, {
                     },
                   });
                 },
-                __("eTims Actions")
+                __("eTims Actions"),
               );
             } else if (!frm.doc.custom_inventory_submitted_successfully) {
               frm.add_custom_button(
@@ -81,7 +81,7 @@ frappe.ui.form.on(doctypeName, {
                     freeze_message: "Processing...",
                     callback: (response) => {
                       frappe.msgprint(
-                        "Submit line request queued. Please check in later."
+                        "Submit line request queued. Please check in later.",
                       );
                     },
                     error: (r) => {
@@ -89,7 +89,7 @@ frappe.ui.form.on(doctypeName, {
                     },
                   });
                 },
-                __("eTims Actions")
+                __("eTims Actions"),
               );
             }
           }
@@ -106,7 +106,7 @@ frappe.ui.form.on(doctypeName, {
                 freeze_message: "Processing...",
                 callback: (response) => {
                   frappe.msgprint(
-                    "Status check request queued. Please check in later."
+                    "Status check request queued. Please check in later.",
                   );
                 },
                 error: (r) => {
@@ -114,7 +114,7 @@ frappe.ui.form.on(doctypeName, {
                 },
               });
             },
-            __("eTims Actions")
+            __("eTims Actions"),
           );
         }
       }

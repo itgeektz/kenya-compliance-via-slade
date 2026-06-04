@@ -29,10 +29,10 @@ frappe.ui.form.on(purchaseParentDoctype, {
                   settings_name: settings_name,
                 },
                 success_msg: "Purchase invoice submission queued",
-              })
+              }),
             );
           },
-          __("eTims Actions")
+          __("eTims Actions"),
         );
       }
     }

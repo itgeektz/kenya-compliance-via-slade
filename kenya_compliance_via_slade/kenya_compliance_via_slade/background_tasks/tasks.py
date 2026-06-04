@@ -100,8 +100,8 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
     successful_without_scu_data = fetch_sales_invoices(
         {
             "docstatus": 1,
-            "custom_successfully_submitted": 1,
-            "custom_qr_code": ["is", "not set"],
+            "sent_to_etims": 1,
+            "qr_code_url": ["is", "not set"],
             "creation": [">=", timeframe_ago],
         }
     )
