@@ -8,7 +8,6 @@ from ...doctype.doctype_names_mapping import (
     SETTINGS_DOCTYPE_NAME,
 )
 from ...utils import (
-    get_next_run,
     reset_auth_password,
     update_navari_settings_with_token,
 )
@@ -67,35 +66,36 @@ class NavariKRAeTimsSettings(Document):
         update_navari_settings_with_token(self.name, True)
 
     def initialize_next_runs(self):
-        if self.sales_auto_submission_enabled and not self.sales_next_run:
-            self.sales_next_run = get_next_run(
-                self.sales_information_submission,
-                self.sales_info_cron_format,
-            )
+        pass
+        # if self.sales_auto_submission_enabled and not self.sales_next_run:
+        #     self.sales_next_run = get_next_run(
+        #         self.sales_information_submission,
+        #         self.sales_info_cron_format,
+        #     )
 
-        if self.purchase_auto_submission_enabled and not self.purchases_next_run:
-            self.purchases_next_run = get_next_run(
-                self.purchase_information_submission,
-                self.purchase_info_cron_format,
-            )
+        # if self.purchase_auto_submission_enabled and not self.purchases_next_run:
+        #     self.purchases_next_run = get_next_run(
+        #         self.purchase_information_submission,
+        #         self.purchase_info_cron_format,
+        #     )
 
-        if self.stock_auto_submission_enabled and not self.stock_next_run:
-            self.stock_next_run = get_next_run(
-                self.stock_information_submission,
-                self.stock_info_cron_format,
-            )
+        # if self.stock_auto_submission_enabled and not self.stock_next_run:
+        #     self.stock_next_run = get_next_run(
+        #         self.stock_information_submission,
+        #         self.stock_info_cron_format,
+        #     )
 
-        if self.notices_refresh_frequency and not self.notices_next_run:
-            self.notices_next_run = get_next_run(
-                self.notices_refresh_frequency,
-                self.notices_refresh_freq_cron_format,
-            )
+        # if self.notices_refresh_frequency and not self.notices_next_run:
+        #     self.notices_next_run = get_next_run(
+        #         self.notices_refresh_frequency,
+        #         self.notices_refresh_freq_cron_format,
+        #     )
 
-        if self.codes_refresh_frequency and not self.codes_next_run:
-            self.codes_next_run = get_next_run(
-                self.codes_refresh_frequency,
-                self.codes_refresh_freq_cron_format,
-            )
+        # if self.codes_refresh_frequency and not self.codes_next_run:
+        #     self.codes_next_run = get_next_run(
+        #         self.codes_refresh_frequency,
+        #         self.codes_refresh_freq_cron_format,
+        #     )
 
     def cleanup_legacy_scheduled_jobs(self):
         """Remove old Scheduled Job Types created by this settings doc"""
