@@ -17,10 +17,36 @@ Verification") }} {% endblock %} {% block header %}
 
   <div id="state-loading" class="invoice-card">
     <div class="loader"></div>
-    <h2>{{ _("Verifying Invoice") }}</h2>
-    <p>
+    <h2 id="loading-title">{{ _("Verifying Invoice") }}</h2>
+    <p id="loading-text">
       {{ _("Please wait while we verify the invoice and submission status.") }}
     </p>
+  </div>
+
+  <div
+    id="state-success"
+    class="invoice-card success-card"
+    style="display: none"
+  >
+    <div class="status-icon success">✓</div>
+    <h1>{{ _("Verification Successful") }}</h1>
+    <p>
+      {{ _("The invoice has been verified. The eTIMS link has been opened in a
+      new tab.") }}
+    </p>
+    <p class="subtitle">
+      {{ _("If the window did not open, please click the button below:") }}
+    </p>
+    <a
+      id="success-redirect-btn"
+      href="#"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="primary-button"
+      style="text-decoration: none; display: inline-block; text-align: center"
+    >
+      {{ _("Open KRA eTIMS Link") }}
+    </a>
   </div>
 
   <div id="state-error" class="invoice-card error-card" style="display: none">

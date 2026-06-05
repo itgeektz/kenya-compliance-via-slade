@@ -2,15 +2,24 @@ document.addEventListener("DOMContentLoaded", function () {
   document.body.classList.add("invoice-verification-page");
 
   const loadingState = document.getElementById("state-loading");
+  const successState = document.getElementById("state-success");
   const errorState = document.getElementById("state-error");
   const pendingState = document.getElementById("state-pending");
   const errorMessage = document.getElementById("error-message");
+  const successBtn = document.getElementById("success-redirect-btn");
 
   const initialRedirect = document.getElementById("initial_redirect")?.value;
   const initialError = document.getElementById("initial_error")?.value;
 
+  function handleSuccess(url) {
+    loadingState.style.display = "none";
+    successBtn.href = url;
+    successState.style.display = "block";
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   if (initialRedirect) {
-    window.location.replace(initialRedirect);
+    handleSuccess(initialRedirect);
     return;
   }
 
@@ -36,24 +45,26 @@ document.addEventListener("DOMContentLoaded", function () {
       "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.check_invoice_submission_status",
     args: { id, key },
     callback: function (r) {
-      loadingState.style.display = "none";
-
       if (!r.message) {
+        loadingState.style.display = "none";
         errorMessage.innerText = "Unable to verify invoice.";
         errorState.style.display = "block";
         return;
       }
 
       if (r.message.error) {
+        loadingState.style.display = "none";
         errorMessage.innerText = r.message.error;
         errorState.style.display = "block";
         return;
       }
 
       if (r.message.etims_qr_code_url) {
-        window.location.replace(r.message.etims_qr_code_url);
+        handleSuccess(r.message.etims_qr_code_url);
         return;
       }
+
+      loadingState.style.display = "none";
 
       document.getElementById("detail-name").innerText = r.message.name || "";
       document.getElementById("detail-customer").innerText =
