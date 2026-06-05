@@ -1,5 +1,9 @@
 import frappe
 
+from ..utils import (
+    build_verification_url,
+)
+
 
 def execute():
     migrate_etims_id_mapping()
@@ -105,6 +109,8 @@ def execute():
         "eTims Customer Field Migration Failed",
     )
 
+    generate_invoice_verification_urls()
+
 
 def get_valid_field_map(doctype, field_map):
     if not frappe.db.exists("DocType", doctype):
@@ -205,5 +211,32 @@ def migrate_etims_id_mapping():
         except Exception:
             frappe.log_error(
                 title="eTims ID Mapping Migration Failed",
+                message=frappe.get_traceback(),
+            )
+
+
+def generate_invoice_verification_urls():
+    invoices = frappe.get_all(
+        "Sales Invoice",
+        filters={"docstatus": 1, "etims_verification_url": ("is", None)},
+        fields=["name"],
+        limit_page_length=0,
+    )
+
+    for invoice in invoices:
+        try:
+            doc = frappe.get_doc("Sales Invoice", invoice.name)
+            url = build_verification_url(doc)
+            if url:
+                frappe.db.set_value(
+                    "Sales Invoice",
+                    invoice.name,
+                    "etims_verification_url",
+                    url,
+                    update_modified=False,
+                )
+        except Exception:
+            frappe.log_error(
+                title="Invoice Verification URL Generation Failed",
                 message=frappe.get_traceback(),
             )
