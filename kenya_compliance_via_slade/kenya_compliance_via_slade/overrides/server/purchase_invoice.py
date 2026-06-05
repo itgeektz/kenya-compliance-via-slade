@@ -1,14 +1,13 @@
 import frappe
-from frappe.model.document import Document
-
 from erpnext.controllers.taxes_and_totals import get_itemised_tax_breakup_data
+from frappe.model.document import Document
 
 from ...apis.api_builder import EndpointsBuilder
 from ...apis.process_request import process_request
 from ...apis.remote_response_status_handlers import (
     purchase_invoice_submission_on_success,
 )
-from ...utils import get_taxation_types, get_settings
+from ...utils import get_settings, get_taxation_types
 
 endpoints_builder = EndpointsBuilder()
 
@@ -18,7 +17,7 @@ def validate(doc: Document, method: str = None) -> None:
     if not doc.taxes:
         vat_acct = frappe.get_value(
             "Account",
-            {"account_type": "Tax", "tax_rate": "16", "company": doc.company},
+            {"account_type": "Tax", "etims_tax_rate": "16", "company": doc.company},
             ["name"],
             as_dict=True,
         )
@@ -95,10 +94,10 @@ def build_purchase_invoice_payload(doc: Document, company_name: str) -> dict:
         "can_send_to_etims": True,
         "paid_invoice_amount": round(doc.grand_total - doc.outstanding_amount, 2),
         "total_amount": round(doc.grand_total, 2),
-        "taxable_rate_A": taxation_type.get("A", {}).get("tax_rate", 0),
-        "taxable_rate_B": taxation_type.get("B", {}).get("tax_rate", 0),
-        "taxable_rate_C": taxation_type.get("C", {}).get("tax_rate", 0),
-        "taxable_rate_D": taxation_type.get("D", {}).get("tax_rate", 0),
+        "taxable_rate_A": taxation_type.get("A", {}).get("etims_tax_rate", 0),
+        "taxable_rate_B": taxation_type.get("B", {}).get("etims_tax_rate", 0),
+        "taxable_rate_C": taxation_type.get("C", {}).get("etims_tax_rate", 0),
+        "taxable_rate_D": taxation_type.get("D", {}).get("etims_tax_rate", 0),
         "total_taxable_amount": round(doc.base_total, 2),
         "total_tax_amount": round(doc.total_taxes_and_charges, 2),
         "supplier_name": doc.supplier_name,

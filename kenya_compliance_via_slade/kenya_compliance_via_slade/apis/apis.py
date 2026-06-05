@@ -347,19 +347,19 @@ def perform_item_registration(item_name: str, settings_name: str) -> dict | None
 
 def is_item_eligible_for_registration(item) -> bool:
     """Check if item meets basic registration criteria"""
-    return not (item.prevent_etims_registration or item.disabled)
+    return not (item.etims_prevent_etims_registration or item.disabled)
 
 
 def validate_required_fields(item) -> List[str]:
     """Validate required fields for item registration"""
     required_fields = [
-        "item_classification",
-        "product_type",
-        "item_type",
+        "etims_item_classification",
+        "etims_product_type",
+        "etims_item_type",
         "etims_country_of_origin",
-        "packaging_unit",
-        "unit_of_quantity",
-        "taxation_type",
+        "etims_packaging_unit",
+        "etims_unit_of_quantity",
+        "etims_taxation_type",
     ]
     return [field for field in required_fields if not item.get(field)]
 
@@ -531,7 +531,8 @@ def send_branch_customer_details(
     data = frappe.get_doc(doctype, name)
 
     if (hasattr(data, "disabled") and data.disabled) or (
-        hasattr(data, "prevent_etims_registration") and data.prevent_etims_registration
+        hasattr(data, "etims_prevent_etims_registration")
+        and data.etims_prevent_etims_registration
     ):
         return
 
@@ -919,13 +920,13 @@ def create_item(item: dict | frappe._dict) -> Document:
     new_item.item_code = item["item_code"]
     new_item.item_name = item["item_name"]
     new_item.item_group = "All Item Groups"
-    if "item_classification_code" in item:
-        new_item.item_classification = item["item_classification_code"]
-    new_item.packaging_unit = item["packaging_unit_code"]
-    new_item.unit_of_quantity = (
-        item.get("quantity_unit_code", None) or item["unit_of_quantity_code"]
+    if "etims_item_classification_code" in item:
+        new_item.etims_item_classification = item["etims_item_classification_code"]
+    new_item.etims_packaging_unit = item["etims_packaging_unit_code"]
+    new_item.etims_unit_of_quantity = (
+        item.get("quantity_unit_code", None) or item["etims_unit_of_quantity_code"]
     )
-    new_item.taxation_type = item["taxation_type_code"]
+    new_item.etims_taxation_type = item["taxation_type_code"]
     new_item.etims_country_of_origin = (
         frappe.get_doc(
             COUNTRIES_DOCTYPE_NAME,
@@ -935,7 +936,7 @@ def create_item(item: dict | frappe._dict) -> Document:
         if item_code
         else None
     )
-    new_item.product_type = item_code[2:3] if item_code else None
+    new_item.etims_product_type = item_code[2:3] if item_code else None
 
     if item_code and int(item_code[2:3]) != 3:
         new_item.is_stock_item = 1
@@ -1036,12 +1037,12 @@ def create_purchase_invoice_from_request(request_data: str) -> Document:
             item_doc["discount_amount"] = item["discount_amount"]
         if item.get("total_amount") not in (None, ""):
             item_doc["net_amount"] = item["total_amount"]
-        if item.get("tax_amount") not in (None, ""):
-            tax_amount = float(item.get("tax_amount") or 0.0)
+        if item.get("etims_tax_amount") not in (None, ""):
+            tax_amount = float(item.get("etims_tax_amount") or 0.0)
             total_amount = float(item.get("total_amount") or 0.0) - tax_amount
             net_rate = total_amount / float(item_doc["qty"]) if item_doc["qty"] else 0.0
             tax_rate = (tax_amount / total_amount * 100.0) if total_amount else 0.0
-            item_doc["tax_rate"] = tax_rate
+            item_doc["etims_tax_rate"] = tax_rate
             item_doc["net_amount"] = total_amount
             item_doc["rate"] = net_rate
 
@@ -1448,7 +1449,7 @@ def check_invoice_submission_status(id: str, key: str) -> dict:
             "grand_total",
             "creation",
             "sent_to_etims",
-            "qr_code_url",
+            "etims_qr_code_url",
         ],
         as_dict=True,
     )
@@ -1461,8 +1462,8 @@ def check_invoice_submission_status(id: str, key: str) -> dict:
     if expected_key != key:
         return {"error": _("Invalid verification link.")}
 
-    if invoice.sent_to_etims and invoice.qr_code_url:
-        return {"qr_code_url": invoice.qr_code_url}
+    if invoice.sent_to_etims and invoice.etims_qr_code_url:
+        return {"etims_qr_code_url": invoice.etims_qr_code_url}
 
     return {
         "name": invoice.name,

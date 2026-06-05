@@ -48,7 +48,7 @@ frappe.ui.form.on(doctypeName, {
 
 frappe.ui.form.on(childDoctypeName, {
   packaging_unit: async function (frm, cdt, cdn) {
-    const packagingUnit = locals[cdt][cdn].packaging_unit;
+    const packagingUnit = locals[cdt][cdn].etims_packaging_unit;
 
     if (packagingUnit) {
       const response = await frappe.db.get_value(
@@ -60,12 +60,12 @@ frappe.ui.form.on(childDoctypeName, {
       );
 
       const code = response.message?.code;
-      locals[cdt][cdn].packaging_unit_code = code;
-      frm.refresh_field("packaging_unit_code");
+      locals[cdt][cdn].etims_packaging_unit_code = code;
+      frm.refresh_field("etims_packaging_unit_code");
     }
   },
   unit_of_quantity: async function (frm, cdt, cdn) {
-    const unitOfQuantity = locals[cdt][cdn].unit_of_quantity;
+    const unitOfQuantity = locals[cdt][cdn].etims_unit_of_quantity;
 
     if (unitOfQuantity) {
       const response = await frappe.db.get_value(
@@ -77,12 +77,12 @@ frappe.ui.form.on(childDoctypeName, {
       );
 
       const code = response.message?.code;
-      locals[cdt][cdn].unit_of_quantity_code = code;
-      frm.refresh_field("unit_of_quantity_code");
+      locals[cdt][cdn].etims_unit_of_quantity_code = code;
+      frm.refresh_field("etims_unit_of_quantity_code");
     }
   },
   taxation_type: async function (frm, cdt, cdn) {
-    const taxationType = locals[cdt][cdn].taxation_type;
+    const taxationType = locals[cdt][cdn].etims_taxation_type;
 
     if (taxationType) {
       const response = await frappe.db.get_value(
@@ -94,7 +94,7 @@ frappe.ui.form.on(childDoctypeName, {
       );
 
       const code = response.message?.cd;
-      locals[cdt][cdn].taxation_type_code = code;
+      locals[cdt][cdn].etims_taxation_type_code = code;
       frm.refresh_field("taxation_type_code");
     }
   },

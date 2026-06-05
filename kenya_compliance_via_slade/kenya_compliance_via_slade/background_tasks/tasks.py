@@ -101,7 +101,7 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
         {
             "docstatus": 1,
             "sent_to_etims": 1,
-            "qr_code_url": ["is", "not set"],
+            "etims_qr_code_url": ["is", "not set"],
             "creation": [">=", timeframe_ago],
         }
     )
@@ -138,7 +138,7 @@ def handle_invoice_submission(invoices: list, action_func: callable) -> None:
     for sales_invoice in invoices:
         doc = frappe.get_doc("Sales Invoice", sales_invoice.name, for_update=False)
         max_tries = get_max_submission_attempts(company=doc.company)
-        tries = int(doc.submission_attempts or 0)
+        tries = int(doc.etims_submission_attempts or 0)
 
         if tries >= max_tries:
             continue
@@ -148,7 +148,7 @@ def handle_invoice_submission(invoices: list, action_func: callable) -> None:
             frappe.db.set_value(
                 "Sales Invoice",
                 sales_invoice.name,
-                "submission_attempts",
+                "etims_submission_attempts",
                 tries + 1,
             )
         except Exception as e:
@@ -156,7 +156,7 @@ def handle_invoice_submission(invoices: list, action_func: callable) -> None:
             frappe.db.set_value(
                 "Sales Invoice",
                 sales_invoice.name,
-                "submission_attempts",
+                "etims_submission_attempts",
                 tries + 1,
             )
             continue
@@ -195,7 +195,7 @@ def fetch_scu_data(invoices: list) -> None:
     for sales_invoice in invoices:
         try:
             doc = frappe.get_doc("Sales Invoice", sales_invoice.name, for_update=False)
-            tries = int(doc.submission_attempts or 0)
+            tries = int(doc.etims_submission_attempts or 0)
             max_tries = get_max_submission_attempts(company=doc.company)
             if tries >= max_tries:
                 continue
@@ -203,7 +203,7 @@ def fetch_scu_data(invoices: list) -> None:
             frappe.db.set_value(
                 "Sales Invoice",
                 sales_invoice.name,
-                "submission_attempts",
+                "etims_submission_attempts",
                 tries + 1,
             )
         except Exception as e:
@@ -213,7 +213,7 @@ def fetch_scu_data(invoices: list) -> None:
             frappe.db.set_value(
                 "Sales Invoice",
                 sales_invoice.name,
-                "submission_attempts",
+                "etims_submission_attempts",
                 tries + 1,
             )
             continue
@@ -449,7 +449,7 @@ def send_stock_information(settings_name: str) -> None:
         "Stock Ledger Entry", company=settings.company
     )
     for entry in entries:
-        if int(entry.submission_attempts) >= max_tries:
+        if int(entry.etims_submission_attempts) >= max_tries:
             continue
         fetch_current_stock_balance(entry)
 
@@ -465,7 +465,7 @@ def fetch_stock_ledgers(timeframe_ago: datetime) -> List[Document]:
             "docstatus": 1,
             "sent_to_etims": 0,
             "creation": [">=", timeframe_ago],
-            "submission_attempts": ["<", max_tries],
+            "etims_submission_attempts": ["<", max_tries],
         },
         fields=["name", "item_code"],
         order_by="creation asc",

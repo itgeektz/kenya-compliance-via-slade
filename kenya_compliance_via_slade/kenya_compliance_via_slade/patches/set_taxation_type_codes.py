@@ -62,7 +62,7 @@ def update_item_tax_templates():
         if doc.etims_taxation_type:
             continue
 
-        total_rate = sum(float(tax.tax_rate or 0) for tax in doc.taxes)
+        total_rate = sum(float(tax.etims_tax_rate or 0) for tax in doc.taxes)
 
         taxation_code = _determine_logic_based_code(total_rate)
 

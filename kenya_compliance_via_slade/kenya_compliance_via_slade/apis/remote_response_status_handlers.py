@@ -309,7 +309,7 @@ def sales_information_submission_on_success(
     updates = {
         "sent_to_etims": 1,
         "etims_id": response.get("sales_invoice_id"),
-        "qr_code_url": response.get("signature_link"),
+        "etims_qr_code_url": response.get("signature_link"),
     }
 
     frappe.db.set_value(doctype, document_name, updates)
@@ -421,7 +421,7 @@ def process_invoice_items(
     conversion_rate = invoice.conversion_rate or 1
 
     for item in items:
-        tax_amount = item.get("tax_amount", 0) or 0
+        tax_amount = item.get("etims_tax_amount", 0) or 0
 
         converted_tax_amount = (
             round(tax_amount * conversion_rate, 4) if tax_amount else 0
@@ -595,7 +595,7 @@ def process_invoice_response(
 
     updates = {
         "etims_id": etims_id,
-        **map_scu_fields(data, etims_id, doctype, qr_key="qr_code_url"),
+        **map_scu_fields(data, etims_id, doctype, qr_key="etims_qr_code_url"),
     }
 
     # if document_name:
@@ -1066,17 +1066,17 @@ def create_purchase_from_search_details(fetched_purchase: dict) -> str:
     doc.taxable_amount_d = fetched_purchase.get("taxable_amount_D", 0.0)
     doc.taxable_amount_e = fetched_purchase.get("taxable_amount_E", 0.0)
 
-    doc.tax_rate_a = fetched_purchase.get("tax_rate_A", 0.0)
-    doc.tax_rate_b = fetched_purchase.get("tax_rate_B", 0.0)
-    doc.tax_rate_c = fetched_purchase.get("tax_rate_C", 0.0)
-    doc.tax_rate_d = fetched_purchase.get("tax_rate_D", 0.0)
-    doc.tax_rate_e = fetched_purchase.get("tax_rate_E", 0.0)
+    doc.etims_tax_rate_a = fetched_purchase.get("tax_rate_A", 0.0)
+    doc.etims_tax_rate_b = fetched_purchase.get("tax_rate_B", 0.0)
+    doc.etims_tax_rate_c = fetched_purchase.get("tax_rate_C", 0.0)
+    doc.etims_tax_rate_d = fetched_purchase.get("tax_rate_D", 0.0)
+    doc.etims_tax_rate_e = fetched_purchase.get("tax_rate_E", 0.0)
 
-    doc.tax_amount_a = fetched_purchase.get("tax_amount_A", 0.0)
-    doc.tax_amount_b = fetched_purchase.get("tax_amount_B", 0.0)
-    doc.tax_amount_c = fetched_purchase.get("tax_amount_C", 0.0)
-    doc.tax_amount_d = fetched_purchase.get("tax_amount_D", 0.0)
-    doc.tax_amount_e = fetched_purchase.get("tax_amount_E", 0.0)
+    doc.etims_tax_amount_a = fetched_purchase.get("tax_amount_A", 0.0)
+    doc.etims_tax_amount_b = fetched_purchase.get("tax_amount_B", 0.0)
+    doc.etims_tax_amount_c = fetched_purchase.get("tax_amount_C", 0.0)
+    doc.etims_tax_amount_d = fetched_purchase.get("tax_amount_D", 0.0)
+    doc.etims_tax_amount_e = fetched_purchase.get("tax_amount_E", 0.0)
 
     doc.workflow_state = fetched_purchase["workflow_state"]
     doc.branch = (get_link_value("Branch", "slade_id", fetched_purchase["branch"]),)
@@ -1130,25 +1130,27 @@ def create_and_link_purchase_item(response: dict, document_name: str, **kwargs) 
         registered_item.product_name = item["product_name"]
         registered_item.product_code = item["product_code"]
         registered_item.item_code = item["item_code"]
-        registered_item.item_classification_code_data = item["item_classification_code"]
-        registered_item.item_classification_code = get_or_create_link(
+        registered_item.etims_item_classification_code_data = item[
+            "etims_item_classification_code"
+        ]
+        registered_item.etims_item_classification_code = get_or_create_link(
             ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
             "itemclscd",
-            item["item_classification_code"],
+            item["etims_item_classification_code"],
         )
         registered_item.item_sequence = item["item_sequence_number"]
         registered_item.barcode = item["barcode"]
         registered_item.package = item["package"]
-        registered_item.packaging_unit_code = item["package_unit_code"]
+        registered_item.etims_packaging_unit_code = item["package_unit_code"]
         registered_item.quantity = item["quantity"]
         registered_item.quantity_unit_code = item["quantity_unit_code"]
         registered_item.unit_price = item["unit_price"]
         registered_item.supply_amount = item["supply_amount"]
         registered_item.discount_rate = item["discount_rate"]
         registered_item.discount_amount = item["discount_amount"]
-        registered_item.taxation_type_code = item["taxation_type_code"]
+        registered_item.etims_taxation_type_code = item["taxation_type_code"]
         registered_item.taxable_amount = item["taxable_amount"]
-        registered_item.tax_amount = item["tax_amount"]
+        registered_item.etims_tax_amount = item["etims_tax_amount"]
         registered_item.total_amount = item["total_amount"]
         registered_item.save(ignore_permissions=True)
 
@@ -1246,8 +1248,10 @@ def imported_items_search_on_success(
                     COUNTRIES_DOCTYPE_NAME, "code", item.get("export_nation_code")
                 ),
                 "package": item.get("package"),
-                "packaging_unit_code": get_or_create_link(
-                    PACKAGING_UNIT_DOCTYPE_NAME, "code", item.get("packaging_unit_code")
+                "etims_packaging_unit_code": get_or_create_link(
+                    PACKAGING_UNIT_DOCTYPE_NAME,
+                    "code",
+                    item.get("etims_packaging_unit_code"),
                 ),
                 "quantity": item.get("quantity"),
                 "quantity_unit_code": get_or_create_link(
@@ -1324,7 +1328,7 @@ def imported_items_search_on_success(
                         product = frappe.new_doc("Item")
                         product.item_name = item_name
                         product.item_code = product_code or item_name
-                        product.prevent_etims_registration = 1
+                        product.etims_prevent_etims_registration = 1
                         default_item_group = frappe.get_all(
                             "Item Group",
                             filters={"is_group": 1},
@@ -1620,6 +1624,7 @@ def invoice_bulk_submission_on_success(
     response: dict, document_name: str, settings_name: str, **kwargs
 ) -> None:
     pass
+
 
 def fetch_matching_items_on_success(
     response: dict, document_name: str, settings_name: str, **kwargs

@@ -35,8 +35,8 @@ def get_context(context):
             context.error = response.get("error")
             return
 
-        if isinstance(response, dict) and response.get("qr_code_url"):
-            context.redirect_url = response.get("qr_code_url")
+        if isinstance(response, dict) and response.get("etims_qr_code_url"):
+            context.redirect_url = response.get("etims_qr_code_url")
             return
 
         context.invoice = response

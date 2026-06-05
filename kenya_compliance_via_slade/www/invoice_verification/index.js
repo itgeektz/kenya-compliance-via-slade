@@ -50,8 +50,8 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
 
-      if (r.message.qr_code_url) {
-        window.location.replace(r.message.qr_code_url);
+      if (r.message.etims_qr_code_url) {
+        window.location.replace(r.message.etims_qr_code_url);
         return;
       }
 

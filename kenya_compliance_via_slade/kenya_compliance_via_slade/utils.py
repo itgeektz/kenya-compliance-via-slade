@@ -427,14 +427,14 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
     currency = invoice.currency
     company_currency = frappe.get_value("Company", invoice.company, "default_currency")
     convertion_rate = 1
-    rate_field, tax_field = "net_rate", "tax_amount"
+    rate_field, tax_field = "net_rate", "etims_tax_amount"
 
     if currency == "KES":
         rate_field = "net_rate"
-        tax_field = "tax_amount"
+        tax_field = "etims_tax_amount"
     elif company_currency == "KES":
         rate_field = "base_net_rate"
-        tax_field = "base_tax_amount"
+        tax_field = "etims_base_tax_amount"
     else:
         convertion_rate, used_rate = get_kes_conversion_rate(
             currency=currency,
@@ -443,7 +443,7 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
         )
         if used_rate != "net":
             rate_field = "base_net_rate"
-            tax_field = "base_tax_amount"
+            tax_field = "etims_base_tax_amount"
 
     reference_number = get_invoice_reference_number(invoice)
     date_str = f"{invoice.posting_date} {invoice.posting_time or '00:00:00'}"
@@ -550,7 +550,7 @@ def get_invoice_items_list(invoice: Document) -> list[dict[str, str | int | None
         # actual_tax_amount = 0
         # tax_head = invoice.taxes[0].description  # Fetch tax head from taxes table
 
-        # actual_tax_amount = item_taxes[index][tax_head]["tax_amount"]
+        # actual_tax_amount = item_taxes[index][tax_head]["etims_tax_amount"]
 
         # tax_amount = round(actual_tax_amount, 2)
 
@@ -689,7 +689,7 @@ def _calculate_taxes_by_hierarchy(doc: "Document") -> dict:
         elif template_rate > 0:
             rate = template_rate
         elif not has_item_templates and doc.get("taxes") and total_net > 0:
-            total_doc_tax = sum(float(t.tax_amount or 0) for t in doc.taxes)
+            total_doc_tax = sum(float(t.etims_tax_amount or 0) for t in doc.taxes)
             item_tax = total_doc_tax * (base_net / total_net)
             rate = (item_tax / base_net) * 100 if base_net else 0.0
 
@@ -737,9 +737,9 @@ def _prepare_tax_entry(
     tax_amount = base_tax / conv_rate if is_foreign else base_tax
 
     return {
-        "tax_amount": round(tax_amount, 2),
-        "base_tax_amount": round(base_tax, 2),
-        "tax_rate": round(rate, 2),
+        "etims_tax_amount": round(tax_amount, 2),
+        "etims_base_tax_amount": round(base_tax, 2),
+        "etims_tax_rate": round(rate, 2),
         "taxation_type_code": _determine_taxation_code(item, rate),
     }
 
@@ -762,7 +762,7 @@ def _get_item_tax_template_rate(template_name: str) -> float:
     """
     tax_template = frappe.get_doc("Item Tax Template", template_name)
     return (
-        sum(float(tax.tax_rate or 0) for tax in tax_template.taxes)
+        sum(float(tax.etims_tax_rate or 0) for tax in tax_template.taxes)
         if tax_template.taxes
         else 0.0
     )
@@ -802,18 +802,18 @@ def apply_item_taxes_and_codes(doc: "Document") -> None:
         if not data:
             continue
 
-        item.tax_amount = data["tax_amount"]
-        item.base_tax_amount = data["base_tax_amount"]
-        item.tax_rate = data["tax_rate"]
-        item.taxation_type_code = data["taxation_type_code"]
+        item.etims_tax_amount = data["etims_tax_amount"]
+        item.etims_base_tax_amount = data["etims_base_tax_amount"]
+        item.etims_tax_rate = data["etims_tax_rate"]
+        item.etims_taxation_type_code = data["taxation_type_code"]
 
         frappe.db.set_value(
             "Sales Invoice Item",
             item.name,
             {
-                "tax_amount": data["tax_amount"],
-                "base_tax_amount": data["base_tax_amount"],
-                "tax_rate": data["tax_rate"],
+                "etims_tax_amount": data["etims_tax_amount"],
+                "etims_base_tax_amount": data["etims_base_tax_amount"],
+                "etims_tax_rate": data["etims_tax_rate"],
                 "taxation_type_code": data["taxation_type_code"],
             },
             update_modified=False,
@@ -885,9 +885,11 @@ def get_taxation_types(doc: dict) -> dict:
     # Loop through each item in the Sales Invoice
     for item in doc.items:
         # Fetch the taxation type using item_code
-        taxation_type = frappe.db.get_value("Item", item.item_code, "taxation_type")
+        taxation_type = frappe.db.get_value(
+            "Item", item.item_code, "etims_taxation_type"
+        )
         taxable_amount = item.net_amount
-        tax_amount = item.tax_amount
+        tax_amount = item.etims_tax_amount
 
         # Fetch the tax rate for the current taxation type from the specified doctype
         tax_rate = frappe.db.get_value(
@@ -896,12 +898,12 @@ def get_taxation_types(doc: dict) -> dict:
         # If the taxation type already exists in the dictionary, update the totals
         if taxation_type in taxation_totals:
             taxation_totals[taxation_type]["taxable_amount"] += taxable_amount
-            taxation_totals[taxation_type]["tax_amount"] += tax_amount
+            taxation_totals[taxation_type]["etims_tax_amount"] += tax_amount
 
         else:
             taxation_totals[taxation_type] = {
-                "tax_rate": tax_rate,
-                "tax_amount": tax_amount,
+                "etims_tax_rate": tax_rate,
+                "etims_tax_amount": tax_amount,
                 "taxable_amount": taxable_amount,
             }
 
@@ -1336,7 +1338,7 @@ def process_dynamic_url(route_path: str, request_data: dict | str) -> str:
 
 def generate_custom_item_code_etims(doc: Document) -> str:
     """Generate custom item code ETIMS based on the document fields"""
-    new_prefix = f"{doc.etims_country_of_origin}{doc.product_type}{doc.packaging_unit_code}{doc.unit_of_quantity_code}"
+    new_prefix = f"{doc.etims_country_of_origin}{doc.etims_product_type}{doc.etims_packaging_unit_code}{doc.etims_unit_of_quantity_code}"
 
     if doc.custom_item_code_etims:
         existing_suffix = doc.custom_item_code_etims[-7:]
@@ -1349,7 +1351,7 @@ def generate_custom_item_code_etims(doc: Document) -> str:
             ORDER BY CAST(SUBSTRING(custom_item_code_etims, -7) AS UNSIGNED) DESC
             LIMIT 1
             """,
-            (doc.item_classification,),
+            (doc.etims_item_classification,),
         )
         last_code = last_code[0][0] if last_code else None
         if last_code:
@@ -1757,7 +1759,7 @@ def build_item_payload(item, settings_name: str, slade_id: str = None) -> dict:
     selling_price = round(item.get("valuation_rate", 1), 2) or 1
     purchasing_price = round(item.get("last_purchase_rate", 1), 2)
     tax = get_etims_id(
-        TAXATION_TYPE_DOCTYPE_NAME, item.get("taxation_type"), settings_name
+        TAXATION_TYPE_DOCTYPE_NAME, item.get("etims_taxation_type"), settings_name
     )
     id = slade_id or next(
         (
@@ -1782,22 +1784,22 @@ def build_item_payload(item, settings_name: str, slade_id: str = None) -> dict:
         "code": item.item_code,
         "scu_item_classification": get_etims_id(
             ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
-            item.item_classification,
+            item.etims_item_classification,
             settings_name,
         ),
-        "product_type": item.product_type,
-        "item_type": item.item_type,
+        "product_type": item.etims_product_type,
+        "item_type": item.etims_item_type,
         "preferred_name": item.item_name,
         "country_of_origin": country_of_origin,
         "selling_price": selling_price,
         "packaging_unit": get_etims_id(
             PACKAGING_UNIT_DOCTYPE_NAME,
-            item.packaging_unit,
+            item.etims_packaging_unit,
             settings_name,
         ),
         "quantity_unit": get_etims_id(
             UNIT_OF_QUANTITY_DOCTYPE_NAME,
-            item.unit_of_quantity,
+            item.etims_unit_of_quantity,
             settings_name,
         ),
         "purchasing_price": purchasing_price,
@@ -1939,14 +1941,14 @@ def build_return_invoice_payload(
     currency = invoice.currency
     company_currency = frappe.get_value("Company", invoice.company, "default_currency")
     convertion_rate = 1
-    rate_field, tax_field = "net_rate", "tax_amount"
+    rate_field, tax_field = "net_rate", "etims_tax_amount"
 
     if currency == "KES":
         rate_field = "net_rate"
-        tax_field = "tax_amount"
+        tax_field = "etims_tax_amount"
     elif company_currency == "KES":
         rate_field = "base_net_rate"
-        tax_field = "base_tax_amount"
+        tax_field = "etims_base_tax_amount"
     else:
         convertion_rate, used_rate = get_kes_conversion_rate(
             currency=currency,
@@ -1955,7 +1957,7 @@ def build_return_invoice_payload(
         )
         if used_rate != "net":
             rate_field = "base_net_rate"
-            tax_field = "base_tax_amount"
+            tax_field = "etims_base_tax_amount"
 
     original_invoice = frappe.get_doc("Sales Invoice", invoice.return_against)
     original_invoice_total = abs(
@@ -2217,22 +2219,22 @@ def update_sales_invoice_etims_details(name: str) -> None:
         [
             "name",
             "etims_id",
-            "qr_code_url",
+            "etims_qr_code_url",
         ],
         as_dict=True,
         order_by="creation desc",
     )
 
     values = {
-        "qr_code_url": None,
+        "etims_qr_code_url": None,
         "etims_id": None,
         "sent_to_etims": 0,
     }
 
-    if etims_ledger and etims_ledger.qr_code_url:
+    if etims_ledger and etims_ledger.etims_qr_code_url:
         values.update(
             {
-                "qr_code_url": etims_ledger.qr_code_url,
+                "etims_qr_code_url": etims_ledger.etims_qr_code_url,
                 "etims_id": etims_ledger.etims_id,
                 "sent_to_etims": 1,
             }

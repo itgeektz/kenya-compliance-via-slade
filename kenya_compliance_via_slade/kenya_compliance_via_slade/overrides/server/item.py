@@ -30,12 +30,12 @@ def on_update(doc: Document, method: str = None) -> None:
 
 
 def validate(doc: Document, method: str = None) -> None:
-    is_tax_type_changed = doc.has_value_changed("taxation_type")
-    if doc.taxation_type and is_tax_type_changed:
+    is_tax_type_changed = doc.has_value_changed("etims_taxation_type")
+    if doc.etims_taxation_type and is_tax_type_changed:
         relevant_tax_templates = frappe.get_all(
             "Item Tax Template",
             ["*"],
-            {"etims_taxation_type": doc.taxation_type},
+            {"etims_taxation_type": doc.etims_taxation_type},
         )
 
         if relevant_tax_templates:
@@ -43,17 +43,17 @@ def validate(doc: Document, method: str = None) -> None:
             for template in relevant_tax_templates:
                 doc.append("taxes", {"item_tax_template": template.name})
 
-    if doc.prevent_etims_registration != 1:
+    if doc.etims_prevent_etims_registration != 1:
         defaults = autofill_item_etims_fields(item_group=doc.item_group)
 
         required_fields = {
             "etims_country_of_origin": "Country of Origin Code",
-            "product_type": "Product Type",
-            "item_type": "Item Type",
-            "packaging_unit": "Packaging Unit Code",
-            "unit_of_quantity": "Unit of Quantity Code",
-            "item_classification": "Item Classification",
-            "taxation_type": "Taxation Type",
+            "etims_product_type": "Product Type",
+            "etims_item_type": "Item Type",
+            "etims_packaging_unit": "Packaging Unit Code",
+            "etims_unit_of_quantity": "Unit of Quantity Code",
+            "etims_item_classification": "Item Classification",
+            "etims_taxation_type": "Taxation Type",
         }
 
         missing_fields = []
@@ -92,13 +92,13 @@ def autofill_item_etims_fields(item_group=None, settings_name=None):
     """
 
     FIELD_LIST = [
-        "taxation_type",
-        "item_classification",
+        "etims_taxation_type",
+        "etims_item_classification",
         "etims_country_of_origin",
-        "packaging_unit",
-        "unit_of_quantity",
-        "product_type",
-        "item_type",
+        "etims_packaging_unit",
+        "etims_unit_of_quantity",
+        "etims_product_type",
+        "etims_item_type",
     ]
 
     item_group_doc = None

@@ -53,8 +53,8 @@ export function App() {
           return;
         }
 
-        if (message.qr_code_url) {
-          window.location.replace(message.qr_code_url);
+        if (message.etims_qr_code_url) {
+          window.location.replace(message.etims_qr_code_url);
           return;
         }
 

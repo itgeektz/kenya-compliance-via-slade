@@ -40,11 +40,11 @@ frappe.ui.form.on(doctypeName, {
               item_name: frm.doc.item_name || undefined,
               item_group: "All Item Groups",
               is_stock_item: frm.doc.task_code !== "3" ? 1 : 0,
-              packaging_unit: frm.doc.packaging_unit_code || undefined,
+              packaging_unit: frm.doc.etims_packaging_unit_code || undefined,
               unit_of_quantity: frm.doc.quantity_unit_code || undefined,
-              taxation_type: frm.doc.taxation_type_code || undefined,
+              taxation_type: frm.doc.etims_taxation_type_code || undefined,
               item_classification:
-                frm.doc.item_classification_code || undefined,
+                frm.doc.etims_item_classification_code || undefined,
               custom_item_code_etims: frm.doc.item_code || undefined,
               valuation_rate:
                 frm.doc.invoice_foreign_currency_amount && frm.doc.quantity

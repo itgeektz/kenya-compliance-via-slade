@@ -17,7 +17,7 @@ frappe.ui.form.on(itemDoctypName, {
   product_type_name: function (frm) {
     frm.set_value(
       "is_stock_item",
-      frm.doc.product_type_name !== "Service" ? 1 : 0,
+      frm.doc.etims_product_type_name !== "Service" ? 1 : 0,
     );
   },
 });
@@ -40,7 +40,7 @@ async function getEtimsSettings(frm) {
 }
 
 async function applyEtimsAutofillFields(frm) {
-  if (frm.doc.prevent_etims_registration == 1) return;
+  if (frm.doc.etims_prevent_etims_registration == 1) return;
   const fallbackSetting = frm.etims?.allSettings?.length
     ? frm.etims.allSettings[0].name
     : null;
@@ -83,8 +83,8 @@ function setupButtons(frm) {
   if (!allSettings.length || frm.is_new()) return;
 
   const canRegister =
-    frm.doc.item_classification &&
-    frm.doc.taxation_type &&
+    frm.doc.etims_item_classification &&
+    frm.doc.etims_taxation_type &&
     unregisteredSettings.length;
 
   if (canRegister) {
