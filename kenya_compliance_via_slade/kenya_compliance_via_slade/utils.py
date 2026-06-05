@@ -24,7 +24,6 @@ from frappe.query_builder import DocType
 from frappe.utils import (
     add_to_date,
     get_datetime,
-    get_request_site_address,
     now_datetime,
 )
 
@@ -517,14 +516,18 @@ def build_bulk_invoice_payload(
 
 
 def build_callback_url(endpoint: str) -> str:
-    base_url = get_request_site_address(True)
+    base_url = frappe.utils.get_url()
+
     parsed_url = urlparse(base_url)
 
-    if not (
-        parsed_url.hostname == "localhost"
-        or parsed_url.hostname.replace(".", "").isdigit()
-    ):
-        base_url = f"{parsed_url.scheme}://{parsed_url.hostname}"
+    if parsed_url.hostname:
+        if not (
+            parsed_url.hostname == "localhost"
+            or parsed_url.hostname.replace(".", "").isdigit()
+        ):
+            base_url = f"{parsed_url.scheme}://{parsed_url.hostname}"
+
+    base_url = "https://ae33-196-96-35-223.ngrok-free.app"
 
     return f"{base_url}/api/method/{endpoint}"
 
