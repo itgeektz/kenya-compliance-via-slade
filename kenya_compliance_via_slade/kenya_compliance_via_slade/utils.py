@@ -2350,3 +2350,67 @@ def build_verification_url(doc) -> str:
     key = creation.strftime("%Y%m%d%H%M%S%f") if creation else ""
 
     return f"/invoice-verification?id={quote(str(doc.name))}&key={quote(key)}"
+
+
+@frappe.whitelist()
+def check_hanging_custom_fields():
+    doctypes = [
+        "Item",
+        "Item Group",
+        "Customer",
+        "Sales Invoice",
+        "Sales Invoice Item",
+        "Item Tax Template",
+        "Supplier",
+        "Stock Ledger Entry",
+        "Sales Taxes and Charges Template",
+    ]
+
+    hanging_fields = frappe.get_all(
+        "Custom Field",
+        filters={
+            "dt": ["in", doctypes],
+            "module": "Kenya Compliance Via Slade",
+        },
+        fields=["name", "dt", "fieldname", "label"],
+    )
+
+    return hanging_fields
+
+
+@frappe.whitelist()
+def delete_hanging_custom_fields():
+    doctypes = [
+        "Item",
+        "Item Group",
+        "Customer",
+        "Sales Invoice",
+        "Sales Invoice Item",
+        "Item Tax Template",
+        "Supplier",
+        "Stock Ledger Entry",
+        "Sales Taxes and Charges Template",
+    ]
+
+    hanging_fields = frappe.get_all(
+        "Custom Field",
+        filters={
+            "dt": ["in", doctypes],
+            "module": "Kenya Compliance Via Slade",
+        },
+        fields=["name", "dt"],
+    )
+
+    if not hanging_fields:
+        return {"success": True, "message": "No hanging custom fields found."}
+
+    for field in hanging_fields:
+        frappe.delete_doc("Custom Field", field.name, force=True)
+
+    for dt in doctypes:
+        frappe.clear_cache(doctype=dt)
+
+    return {
+        "success": True,
+        "message": f"Successfully deleted {len(hanging_fields)} hanging custom fields.",
+    }

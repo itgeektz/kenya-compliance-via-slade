@@ -286,6 +286,55 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
       __("eTims Actions"),
     );
 
+    frappe.call({
+      method:
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.check_hanging_custom_fields",
+      callback: function (r) {
+        let fields = r.message || [];
+        if (fields.length > 0) {
+          frm.add_custom_button(
+            __("Clear Hanging Custom Fields"),
+            function () {
+              let field_list_html = fields
+                .map(
+                  (f) =>
+                    `<li><b>${f.dt}</b>: ${f.label || f.fieldname} (${f.fieldname})</li>`,
+                )
+                .join("");
+
+              frappe.confirm(
+                __(
+                  `Are you sure you want to delete the following hanging custom fields?<br><br><ul style="max-height: 200px; overflow-y: auto;">${field_list_html}</ul>`,
+                ),
+                function () {
+                  frappe.call({
+                    method:
+                      "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.delete_hanging_custom_fields",
+                    freeze: true,
+                    freeze_message: __("Deleting custom fields..."),
+                    callback: function (res) {
+                      if (res.message && res.message.success) {
+                        frappe.msgprint({
+                          title: __("Success"),
+                          indicator: "green",
+                          message: __(res.message.message),
+                        });
+                        frm.remove_custom_button(
+                          __("Clear Hanging Custom Fields"),
+                          __("eTims Actions"),
+                        );
+                      }
+                    },
+                  });
+                },
+              );
+            },
+            __("eTims Actions"),
+          );
+        }
+      },
+    });
+
     frm.set_query("bhfid", function () {
       return {
         filters: [["Branch", "custom_is_etims_branch", "=", 1]],
