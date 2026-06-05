@@ -96,7 +96,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             },
           });
         },
-        __("eTims Actions")
+        __("eTims Actions"),
       );
 
       frm.add_custom_button(
@@ -154,7 +154,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             },
           });
         },
-        __("eTims Actions")
+        __("eTims Actions"),
       );
       frm.add_custom_button(
         __("Sync Organisation Units"),
@@ -183,7 +183,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             },
           });
         },
-        __("eTims Actions")
+        __("eTims Actions"),
       );
     }
 
@@ -205,7 +205,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
                   message: __("User details synced successfully"),
                   indicator: "green",
                 },
-                5
+                5,
               );
 
               frm.refresh();
@@ -219,7 +219,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
           },
         });
       },
-      __("eTims Actions")
+      __("eTims Actions"),
     );
 
     frm.add_custom_button(
@@ -250,7 +250,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
           },
         });
       },
-      __("eTims Actions")
+      __("eTims Actions"),
     );
 
     frm.add_custom_button(
@@ -283,7 +283,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
           },
         });
       },
-      __("eTims Actions")
+      __("eTims Actions"),
     );
 
     frm.set_query("bhfid", function () {
@@ -401,7 +401,7 @@ function showClusterMatchingModal(clusterData, form) {
                   title: __("Success"),
                   indicator: "green",
                   message: __(
-                    "Clusters matched successfully. System will now fetch branches, departments and workstations in the background."
+                    "Clusters matched successfully. System will now fetch branches, departments and workstations in the background.",
                   ),
                 });
                 dialog.hide();
