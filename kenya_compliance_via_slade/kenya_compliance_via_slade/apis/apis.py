@@ -166,6 +166,11 @@ def bulk_invoice_callback():
         message=frappe.as_json(data),
     )
 
+    frappe.enqueue(
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_ledger_scheduler",
+        queue="long",
+    )
+
     return {
         "status": "success",
     }

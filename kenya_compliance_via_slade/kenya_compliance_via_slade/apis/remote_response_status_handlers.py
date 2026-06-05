@@ -1,3 +1,4 @@
+import re
 import time
 from datetime import datetime
 
@@ -1620,10 +1621,60 @@ def operation_type_create_on_success(
     )
 
 
+def normalize_reference(ref: str) -> str:
+    if not ref:
+        return ref
+    return re.sub(r"-REV\d+$", "", ref)
+
+
 def invoice_bulk_submission_on_success(
     response: dict, document_name: str, settings_name: str, **kwargs
 ) -> None:
-    pass
+
+    try:
+        if not isinstance(response, dict):
+            return
+
+        invoices = response.get("invoices", [])
+        if not invoices:
+            return
+
+        for inv in invoices:
+            try:
+                reference_number = normalize_reference(inv.get("reference_number"))
+                etims_id = inv.get("id")
+
+                if not reference_number or not etims_id:
+                    continue
+
+                invoice_name = frappe.db.get_value(
+                    "Sales Invoice", {"name": reference_number}, "name"
+                )
+
+                if not invoice_name:
+                    continue
+
+                frappe.db.set_value(
+                    "Sales Invoice",
+                    invoice_name,
+                    "etims_id",
+                    etims_id,
+                    update_modified=False,
+                )
+
+            except Exception:
+                frappe.log_error(
+                    title="eTims Bulk Invoice Update Item Failed",
+                    message=frappe.get_traceback(),
+                )
+
+        frappe.db.commit()
+
+    except Exception:
+        frappe.log_error(
+            title="eTims Bulk Invoice Update Failed",
+            message=frappe.get_traceback(),
+        )
 
 
 def fetch_matching_items_on_success(
