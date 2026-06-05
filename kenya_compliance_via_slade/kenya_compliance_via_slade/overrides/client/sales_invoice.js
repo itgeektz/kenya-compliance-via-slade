@@ -15,10 +15,9 @@ frappe.realtime.on("refresh_form", function (name) {
 frappe.ui.form.on(parentDoctype, {
   refresh: async function (frm) {
     await updateTaxAmountLabel(frm);
-
-    const summaryData = await renderEtimsSummary(frm);
-
     if (frm.is_new()) return;
+
+    await renderEtimsEligibilityBanner(frm);
 
     const { message: activeSetting } = await frappe.call({
       method:
@@ -31,7 +30,8 @@ frappe.ui.form.on(parentDoctype, {
       frm.doc.docstatus !== 0 &&
       !frm.doc.prevent_etims_submission
     ) {
-      if (!frm.doc.custom_successfully_submitted) {
+      const summaryData = await renderEtimsSummary(frm);
+      if (!frm.doc.sent_to_etims) {
         frm.add_custom_button(
           __("Send Invoice"),
           function () {
@@ -51,6 +51,21 @@ frappe.ui.form.on(parentDoctype, {
           },
           __("eTims Actions"),
         );
+      } else {
+        frm.add_custom_button(
+          __("eTIMS Sales Ledger"),
+          function () {
+            frappe.route_options = {
+              company: frm.doc.company,
+              sales_invoice: frm.doc.name,
+              show_details: 1,
+              from_date: frm.doc.posting_date,
+              to_date: moment(frm.doc.modified).format("YYYY-MM-DD"),
+            };
+            frappe.set_route("query-report", "eTIMS Sales Ledger");
+          },
+          __("View"),
+        );
       }
 
       frm.add_custom_button(
@@ -68,7 +83,6 @@ frappe.ui.form.on(parentDoctype, {
                 settings_name: settings_name,
                 company: frm.doc.company,
               },
-              success_msg: "Invoice sync queued",
             }),
           );
 
@@ -79,13 +93,10 @@ frappe.ui.form.on(parentDoctype, {
               method:
                 "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_data",
               args: {
-                request_data: {
-                  reference_number: frm.doc.is_return
-                    ? frm.doc.return_against
-                    : frm.doc.name,
-                },
                 settings_name: settings_name,
-                invoice_type: "Sales Invoice",
+                invoice_type: "Both",
+                document_name: frm.doc.name,
+                request_data: { reference_number: frm.doc.name },
               },
               success_msg: "Invoice status fetch queued",
             }),
@@ -94,10 +105,20 @@ frappe.ui.form.on(parentDoctype, {
         __("eTims Actions"),
       );
 
-      if (
-        frm.doc.custom_successfully_submitted &&
-        summaryData?.hasSignificantMismatch
-      ) {
+      frm.add_custom_button(
+        __("View Invoice Status"),
+        () => {
+          const key = frm.doc.creation.replace(/[-:\s]/g, "").replace(".", "");
+
+          window.open(
+            `/invoice-verification?id=${encodeURIComponent(frm.doc.name)}&key=${encodeURIComponent(key)}`,
+            "_blank",
+          );
+        },
+        __("eTims Actions"),
+      );
+
+      if (frm.doc.sent_to_etims && summaryData?.hasSignificantMismatch) {
         frm.add_custom_button(
           __("Correction Credit Note on eTIMS"),
           function () {
@@ -262,7 +283,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #e2e8f0;
                     background:#ffffff;
                   ">
@@ -282,7 +303,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #e2e8f0;
                     background:#ffffff;
                   ">
@@ -302,7 +323,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #bfdbfe;
                     background:#eff6ff;
                   ">
@@ -322,7 +343,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #bfdbfe;
                     background:#eff6ff;
                   ">
@@ -342,7 +363,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #fecaca;
                     background:#fef2f2;
                   ">
@@ -362,7 +383,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #fecaca;
                     background:#fef2f2;
                   ">
@@ -382,7 +403,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #e5e7eb;
                     background:#ffffff;
                   ">
@@ -402,7 +423,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #e5e7eb;
                     background:#ffffff;
                   ">
@@ -422,7 +443,7 @@ frappe.ui.form.on(parentDoctype, {
 
                   <div style="
                     padding:16px;
-                    border-radius:14px;
+                    border-radius:10px;
                     border:1px solid #fcd34d;
                     background:#fffbeb;
                   ">
@@ -572,24 +593,24 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
 frappe.ui.form.on(childDoctype, {
   item_code: function (frm, cdt, cdn) {
     const item = locals[cdt][cdn].item_code;
-    const taxationType = locals[cdt][cdn].custom_taxation_type;
+    const taxationType = locals[cdt][cdn].etims_taxation_type;
 
     if (!taxationType) {
       frappe.db.get_value(
         "Item",
         { item_code: item },
-        ["custom_taxation_type"],
+        ["etims_taxation_type"],
         (response) => {
-          locals[cdt][cdn].custom_taxation_type = response.custom_taxation_type;
-          locals[cdt][cdn].custom_taxation_type_code =
-            response.custom_taxation_type;
+          locals[cdt][cdn].etims_taxation_type = response.etims_taxation_type;
+          locals[cdt][cdn].etims_taxation_type_code =
+            response.etims_taxation_type;
         },
       );
     }
   },
 
-  custom_packaging_unit: async function (frm, cdt, cdn) {
-    const packagingUnit = locals[cdt][cdn].custom_packaging_unit;
+  packaging_unit: async function (frm, cdt, cdn) {
+    const packagingUnit = locals[cdt][cdn].etims_packaging_unit;
 
     if (packagingUnit) {
       frappe.db.get_value(
@@ -600,15 +621,15 @@ frappe.ui.form.on(childDoctype, {
         ["code"],
         (response) => {
           const code = response.code;
-          locals[cdt][cdn].custom_packaging_unit_code = code;
-          frm.refresh_field("custom_packaging_unit_code");
+          locals[cdt][cdn].etims_packaging_unit_code = code;
+          frm.refresh_field("etims_packaging_unit_code");
         },
       );
     }
   },
 
-  custom_unit_of_quantity: function (frm, cdt, cdn) {
-    const unitOfQuantity = locals[cdt][cdn].custom_unit_of_quantity;
+  unit_of_quantity: function (frm, cdt, cdn) {
+    const unitOfQuantity = locals[cdt][cdn].etims_unit_of_quantity;
 
     if (unitOfQuantity) {
       frappe.db.get_value(
@@ -619,8 +640,8 @@ frappe.ui.form.on(childDoctype, {
         ["code"],
         (response) => {
           const code = response.code;
-          locals[cdt][cdn].custom_unit_of_quantity_code = code;
-          frm.refresh_field("custom_unit_of_quantity_code");
+          locals[cdt][cdn].etims_unit_of_quantity_code = code;
+          frm.refresh_field("etims_unit_of_quantity_code");
         },
       );
     }
@@ -643,7 +664,7 @@ async function updateTaxAmountLabel(frm) {
       const currency = companyDoc.default_currency;
 
       frm.fields_dict.items.grid.update_docfield_property(
-        "custom_tax_amount",
+        "etims_tax_amount",
         "label",
         `Tax Amount (${currency})`,
       );
@@ -827,12 +848,13 @@ async function renderEtimsSummary(frm) {
         display:flex;
         flex-direction:column;
         gap:16px;
+        margin-bottom:15px;
       ">
 
         <div style="
           border:1px solid #dbeafe;
           background:linear-gradient(135deg,#eff6ff 0%,#ffffff 100%);
-          border-radius:16px;
+          border-radius:5px;
           padding:20px;
         ">
           <div style="
@@ -862,7 +884,7 @@ async function renderEtimsSummary(frm) {
 
             <div style="
               padding:10px 16px;
-              border-radius:999px;
+              border-radius:10px;
               background:${hasSignificantMismatch ? "#fee2e2" : "#dcfce7"};
               color:${hasSignificantMismatch ? "#991b1b" : "#166534"};
               font-weight:700;
@@ -880,7 +902,7 @@ async function renderEtimsSummary(frm) {
         ">
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #e2e8f0;
             background:#ffffff;
@@ -900,7 +922,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #e2e8f0;
             background:#ffffff;
@@ -920,7 +942,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #e2e8f0;
             background:#ffffff;
@@ -940,7 +962,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #bfdbfe;
             background:#eff6ff;
@@ -960,7 +982,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #bfdbfe;
             background:#eff6ff;
@@ -980,7 +1002,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #bfdbfe;
             background:#eff6ff;
@@ -1000,7 +1022,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #fecaca;
             background:#fef2f2;
@@ -1023,7 +1045,7 @@ async function renderEtimsSummary(frm) {
           </div>
 
           <div style="
-            border-radius:14px;
+            border-radius:10px;
             padding:18px;
             border:1px solid #fecaca;
             background:#fef2f2;
@@ -1151,5 +1173,182 @@ async function renderEtimsSummary(frm) {
     `);
 
     return null;
+  }
+}
+
+async function renderEtimsEligibilityBanner(frm) {
+  if (frm.is_new()) return;
+
+  const htmlField = frm.fields_dict.etims_summary;
+
+  if (!htmlField) return;
+
+  frm.$wrapper.find(".etims-top-alert").remove();
+  htmlField.$wrapper.find(".etims-validation-banner").remove();
+
+  try {
+    const { message } = await frappe.call({
+      method:
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.analyze_etims_eligibility",
+      args: {
+        invoice_name: frm.doc.name,
+      },
+    });
+
+    const errors = message?.errors || [];
+    const warnings = message?.warnings || [];
+    const lastError = message?.last_error;
+
+    if (!errors.length && !warnings.length && !lastError) {
+      return;
+    }
+
+    if (errors.length || warnings.length) {
+      const alertHtml = `
+        <div class="etims-top-alert alert alert-danger" style="
+          margin:12px 15px;
+          cursor:pointer;
+          display:flex;
+          justify-content:space-between;
+          align-items:flex-start;
+          gap:12px;
+        ">
+          <div>
+            <div style="font-weight:700;">
+              eTIMS Validation Issues Detected
+            </div>
+
+            <div style="margin-top:4px;">
+              This invoice may not be eligible for eTIMS submission.
+              Click here to review the eTIMS Details section.
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="btn-close etims-alert-close"
+            style="
+              border:none;
+              background:transparent;
+              font-size:18px;
+              cursor:pointer;
+            "
+          >
+            ×
+          </button>
+        </div>
+      `;
+
+      frm.$wrapper.find(".layout-main-section").first().prepend(alertHtml);
+
+      frm.$wrapper.find(".etims-top-alert").on("click", function (e) {
+        if ($(e.target).closest(".etims-alert-close").length) {
+          return;
+        }
+
+        frm.scroll_to_field("etims_summary");
+      });
+
+      frm.$wrapper.find(".etims-alert-close").on("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        $(this).closest(".etims-top-alert").remove();
+      });
+    }
+
+    const html = `
+      <div class="etims-validation-banner" style="
+        margin-bottom:16px;
+        border-radius:12px;
+        overflow:hidden;
+      ">
+
+        ${
+          lastError
+            ? `
+          <div style="
+            padding:14px 18px;
+            background:#7f1d1d;
+            color:white;
+          ">
+            <div style="
+              font-weight:700;
+              margin-bottom:6px;
+            ">
+              Last eTIMS Submission Failed
+            </div>
+
+            <div>
+              ${frappe.utils.escape_html(lastError)}
+            </div>
+          </div>
+        `
+            : ""
+        }
+
+        ${
+          errors.length
+            ? `
+          <div style="
+            padding:14px 18px;
+            background:#fef2f2;
+            border:1px solid #fecaca;
+            color:#991b1b;
+          ">
+            <div style="
+              font-weight:700;
+              margin-bottom:8px;
+            ">
+              eTIMS Submission Blockers
+            </div>
+
+            <ul style="
+              margin:0;
+              padding-left:20px;
+            ">
+              ${errors
+                .map((d) => `<li>${frappe.utils.escape_html(d)}</li>`)
+                .join("")}
+            </ul>
+          </div>
+        `
+            : ""
+        }
+
+        ${
+          warnings.length
+            ? `
+          <div style="
+            padding:14px 18px;
+            background:#fffbeb;
+            border:1px solid #fde68a;
+            color:#92400e;
+          ">
+            <div style="
+              font-weight:700;
+              margin-bottom:8px;
+            ">
+              eTIMS Warnings
+            </div>
+
+            <ul style="
+              margin:0;
+              padding-left:20px;
+            ">
+              ${warnings
+                .map((d) => `<li>${frappe.utils.escape_html(d)}</li>`)
+                .join("")}
+            </ul>
+          </div>
+        `
+            : ""
+        }
+
+      </div>
+    `;
+
+    htmlField.$wrapper.prepend(html);
+  } catch (error) {
+    console.error("Failed to render eTIMS eligibility banner:", error);
   }
 }

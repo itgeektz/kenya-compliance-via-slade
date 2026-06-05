@@ -1,7 +1,16 @@
 const doctypeName = "Sales Invoice";
 const settingsDoctypeName = "Navari KRA eTims Settings";
 
+frappe.listview_settings[doctypeName] =
+  frappe.listview_settings[doctypeName] || {};
+
+const existingOnload = frappe.listview_settings[doctypeName].onload;
+
 frappe.listview_settings[doctypeName].onload = async function (listview) {
+  if (existingOnload) {
+    await existingOnload(listview);
+  }
+
   const { message: activeSetting } = await frappe.call({
     method:
       "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_active_settings",
@@ -19,66 +28,13 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
             method: "bulk_submit_sales_invoices",
             args: {
               docs_list: listview.get_checked_items().map((item) => item.name),
-              settings_name: settings_name,
+              settings_name,
             },
             success_msg: "Bulk submission to eTims queued.",
-          })
+          }),
         );
       },
-      __("eTims Actions")
-    );
-
-    listview.page.add_inner_button(
-      __("Submit All Invoices"),
-      function () {
-        showSettingsModalAndExecute(
-          "Submit All Invoices",
-          activeSetting,
-          (settings_name) => ({
-            method: "bulk_submit_sales_invoices",
-            args: { docs_list: null, settings_name: settings_name },
-            success_msg: "Bulk submission to eTims queued.",
-          })
-        );
-      },
-      __("eTims Actions")
-    );
-
-    listview.page.add_action_item(
-      __("Verify & Resend to eTims"),
-      function () {
-        showSettingsModalAndExecute(
-          "Verify & Resend to eTims",
-          activeSetting,
-          (settings_name) => ({
-            method: "bulk_verify_and_resend_invoices",
-            args: {
-              docs_list: listview.get_checked_items().map((item) => item.name),
-              settings_name: settings_name,
-            },
-            success_msg:
-              "Bulk verification queued. Incorrect invoices will be resent to eTims.",
-          })
-        );
-      },
-      __("eTims Actions")
-    );
-
-    listview.page.add_inner_button(
-      __("Verify & Resend All Invoices"),
-      function () {
-        showSettingsModalAndExecute(
-          "Verify & Resend All Invoices",
-          activeSetting,
-          (settings_name) => ({
-            method: "bulk_verify_and_resend_invoices",
-            args: { docs_list: null, settings_name: settings_name },
-            success_msg:
-              "Bulk verification queued. Incorrect invoices will be resent to eTims.",
-          })
-        );
-      },
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 };
@@ -103,7 +59,7 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
             label: __("Select eTims Settings"),
             fieldname: "settings_name",
             fieldtype: "Select",
-            options: options,
+            options,
             reqd: 1,
             default: options[0]?.value,
           },
@@ -111,12 +67,15 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
         primary_action_label: __("Proceed"),
         primary_action: ({ settings_name }) => {
           dialog.hide();
+
           const { method, args, success_msg } = getCallArgs(settings_name);
+
           executeEtimsAction(method, args, success_msg);
         },
       });
+
       dialog.show();
-    }
+    },
   );
 }
 
@@ -125,16 +84,19 @@ function executeWithSingleOrDialog(settings, actionFn, buildDialog) {
     actionFn(settings[0].name);
     return;
   }
+
   buildDialog();
 }
 
 function executeEtimsAction(method, args, successMsg) {
   frappe.call({
     method: `kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.${method}`,
-    args: args,
+    args,
     freeze: true,
-    freeze_message: "Processing...",
-    callback: () => frappe.msgprint(__(successMsg)),
+    freeze_message: __("Processing..."),
+    callback: () => {
+      frappe.msgprint(__(successMsg));
+    },
     error: (err) => {
       console.error(err);
       frappe.msgprint(__("An error occurred during the request."));

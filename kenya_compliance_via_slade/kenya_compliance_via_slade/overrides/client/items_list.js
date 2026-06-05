@@ -1,7 +1,16 @@
 const doctypeName = "Item";
 const settingsDoctypeName = "Navari KRA eTims Settings";
 
+frappe.listview_settings[doctypeName] =
+  frappe.listview_settings[doctypeName] || {};
+
+const existingOnload = frappe.listview_settings[doctypeName].onload;
+
 frappe.listview_settings[doctypeName].onload = async function (listview) {
+  if (existingOnload) {
+    await existingOnload(listview);
+  }
+
   const { message: data } = await frappe.call({
     method:
       "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_etims_action_data",
@@ -11,7 +20,10 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
   });
 
   const allSettings = data?.settings || [];
-  if (!allSettings.length) return;
+
+  if (!allSettings.length) {
+    return;
+  }
 
   addItemListActions(listview, allSettings);
 
@@ -19,6 +31,7 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
     const itemsToRegister = listview
       .get_checked_items()
       .map((item) => item.name);
+
     if (!itemsToRegister.length) {
       frappe.msgprint(__("Please select items to register"));
       return;
@@ -31,10 +44,10 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
         method: "bulk_register_items",
         args: {
           docs_list: itemsToRegister,
-          settings_name: settings_name,
+          settings_name,
         },
         success_msg: "Bulk registration queued",
-      })
+      }),
     );
   });
 };
@@ -45,40 +58,11 @@ function addItemListActions(listview, allSettings) {
       label: __("Get Imported Items"),
       getCallArgs: (settings_name) => ({
         method: "perform_import_item_search",
-        args: { settings_name: settings_name, request_data: {} },
+        args: {
+          settings_name,
+          request_data: {},
+        },
         success_msg: "Import items search queued",
-      }),
-    },
-    {
-      label: __("Get Registered Items"),
-      getCallArgs: (settings_name) => ({
-        method: "perform_item_search",
-        args: { settings_name: settings_name, request_data: {} },
-        success_msg: "Registered items search queued",
-      }),
-    },
-    {
-      label: __("Submit Inventory"),
-      getCallArgs: (settings_name) => ({
-        method: "send_entire_stock_balance",
-        args: { settings_name: settings_name },
-        success_msg: "Inventory submission queued",
-      }),
-    },
-    {
-      label: __("Update all Items"),
-      getCallArgs: (settings_name) => ({
-        method: "update_all_items",
-        args: { settings_name: settings_name },
-        success_msg: "Items update queued",
-      }),
-    },
-    {
-      label: __("Register all Items"),
-      getCallArgs: (settings_name) => ({
-        method: "register_all_items",
-        args: { settings_name: settings_name },
-        success_msg: "Items registration queued",
       }),
     },
   ];
@@ -90,10 +74,10 @@ function addItemListActions(listview, allSettings) {
         showSettingsModalAndExecute(
           action.label,
           allSettings,
-          (settings_name) => action.getCallArgs(settings_name)
+          (settings_name) => action.getCallArgs(settings_name),
         );
       },
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   });
 }
@@ -103,6 +87,7 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
     settings,
     (settingsName) => {
       const { method, args, success_msg } = getCallArgs(settingsName);
+
       executeEtimsAction(method, args, success_msg);
     },
     () => {
@@ -124,12 +109,15 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
         primary_action_label: __("Proceed"),
         primary_action: ({ settings_name }) => {
           dialog.hide();
+
           const { method, args, success_msg } = getCallArgs(settings_name);
+
           executeEtimsAction(method, args, success_msg);
         },
       });
+
       dialog.show();
-    }
+    },
   );
 }
 
@@ -138,16 +126,19 @@ function executeWithSingleOrDialog(settings, actionFn, buildDialog) {
     actionFn(settings[0].name);
     return;
   }
+
   buildDialog();
 }
 
 function executeEtimsAction(method, args, successMsg) {
   frappe.call({
     method: `kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.${method}`,
-    args: args,
+    args,
     freeze: true,
-    freeze_message: "Processing...",
-    callback: () => frappe.msgprint(__(successMsg)),
+    freeze_message: __("Processing..."),
+    callback: () => {
+      frappe.msgprint(__(successMsg));
+    },
     error: (err) => {
       console.error(err);
       frappe.msgprint(__("An error occurred during the request."));

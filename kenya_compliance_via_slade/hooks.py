@@ -4,7 +4,7 @@ app_publisher = "Navari Ltd"
 app_description = "This app works to integrate ERPNext with KRA's eTIMS via Slade360 Advantage to allow for the sharing of information with the revenue authority."
 app_email = "support@navari.co.ke"
 app_license = "GNU Affero General Public License v3.0"
-required_apps = ["erpnext"]
+required_apps = ["erpnext", "csf_ke"]
 
 
 # Fixtures
@@ -46,21 +46,22 @@ fixtures = [
 # include js in doctype views
 doctype_js = {
     "Sales Invoice": "kenya_compliance_via_slade/overrides/client/sales_invoice.js",
-    "Purchase Invoice": "kenya_compliance_via_slade/overrides/client/purchase_invoice.js",
+    # "Purchase Invoice": "kenya_compliance_via_slade/overrides/client/purchase_invoice.js",
     "Customer": "kenya_compliance_via_slade/overrides/client/customer.js",
     "Supplier": "kenya_compliance_via_slade/overrides/client/supplier.js",
     "Item": "kenya_compliance_via_slade/overrides/client/items.js",
-    "BOM": "kenya_compliance_via_slade/overrides/client/bom.js",
-    "Branch": "kenya_compliance_via_slade/overrides/client/branch.js",
-    "Stock Ledger Entry": "kenya_compliance_via_slade/overrides/client/stock_ledger_entry.js",
+    # "BOM": "kenya_compliance_via_slade/overrides/client/bom.js",
+    # "Branch": "kenya_compliance_via_slade/overrides/client/branch.js",
+    # "Stock Ledger Entry": "kenya_compliance_via_slade/overrides/client/stock_ledger_entry.js",
 }
 
 doctype_list_js = {
     "Item": "kenya_compliance_via_slade/overrides/client/items_list.js",
     "Sales Invoice": "kenya_compliance_via_slade/overrides/client/sales_invoice_list.js",
-    "Branch": "kenya_compliance_via_slade/overrides/client/branch_list.js",
+    # "Branch": "kenya_compliance_via_slade/overrides/client/branch_list.js",
     "Customer": "kenya_compliance_via_slade/overrides/client/customer_list.js",
     "Supplier": "kenya_compliance_via_slade/overrides/client/supplier_list.js",
+    "eTIMS Sales Ledger Entry": "kenya_compliance_via_slade/overrides/client/etims_sales_ledger_entry_list.js",
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -150,6 +151,7 @@ doctype_list_js = {
 
 override_doctype_class = {
     "Scheduled Job Type": "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.scheduled_job_type.CustomScheduledJobType",
+    "eTims Job Queue": "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.etims_job_queue.CustomETimsJobQueue",
 }
 # Document Events
 # ---------------
@@ -171,6 +173,9 @@ doc_events = {
         "validate": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.shared_overrides.validate"
         ],
+        "before_submit": [
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.shared_overrides.before_submit"
+        ],
         "before_cancel": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.before_cancel"
         ],
@@ -178,20 +183,20 @@ doc_events = {
             "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.after_save_"
         ],
     },
-    "Purchase Invoice": {
-        "on_update": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.after_save_"
-        ],
-        "on_submit": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.purchase_invoice.on_submit"
-        ],
-        "validate": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.purchase_invoice.validate"
-        ],
-        "before_cancel": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.before_cancel"
-        ],
-    },
+    # "Purchase Invoice": {
+    #     "on_update": [
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.after_save_"
+    #     ],
+    #     "on_submit": [
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.purchase_invoice.on_submit"
+    #     ],
+    #     "validate": [
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.purchase_invoice.validate"
+    #     ],
+    #     "before_cancel": [
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.before_cancel"
+    #     ],
+    # },
     "Item": {
         "validate": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.item.validate"
@@ -201,11 +206,11 @@ doc_events = {
         ],
         "on_trash": "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.item.prevent_item_deletion",
     },
-    "BOM": {
-        "on_submit": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.bom.on_submit"
-        ]
-    },
+    # "BOM": {
+    #     "on_submit": [
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.bom.on_submit"
+    #     ]
+    # },
     "Supplier": {
         "before_save": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.supplier.before_save"
@@ -228,11 +233,11 @@ doc_events = {
             "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.customer.after_insert"
         ],
     },
-    "Stock Ledger Entry": {
-        "on_update": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.stock_ledger_entry.on_update"
-        ],
-    },
+    # "Stock Ledger Entry": {
+    #     "on_update": [
+    #         "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.stock_ledger_entry.on_update"
+    #     ],
+    # },
 }
 
 # Scheduled Tasks
@@ -240,15 +245,16 @@ doc_events = {
 
 scheduler_events = {
     "cron": {
-        "0/5 * * * *": [
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_autosubmission_scheduler",
-        ],
         "*/1 * * * *": [
             "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.queue_maintenance.run_etims_queue_maintenance",
         ],
     },
+    "hourly": [
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_autosubmission_scheduler_hourly",
+    ],
     "daily": [
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_ledger_scheduler",
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_autosubmission_scheduler_daily",
     ],
     "weekly": [
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.update_setting_passwords",
@@ -327,3 +333,8 @@ after_migrate = (
 # auth_hooks = [
 # 	"kenya_compliance_via_slade.auth.validate"
 # ]
+
+
+website_route_rules = [
+    {"from_route": "/invoice-verification", "to_route": "invoice_verification"}
+]

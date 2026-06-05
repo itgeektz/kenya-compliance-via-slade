@@ -6,12 +6,6 @@ frappe.ui.form.on(doctype, {
 
     if (frm.is_new()) return;
 
-    let grid = frm.get_field("etims_setup_mapping").grid;
-    grid.cannot_add_rows = true;
-    grid.cannot_delete_rows = true;
-    grid.only_sortable();
-    frm.refresh_field("etims_setup_mapping");
-
     const { message: data } = await frappe.call({
       method:
         "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.get_etims_action_data",
@@ -64,8 +58,8 @@ function addCustomerActionButtons(frm, data) {
           frm,
           "search_customer",
           registeredMappings.map((r) => ({
-            name: r.etims_setup,
-            company: getCompanyName(allSettings, r.etims_setup),
+            name: r.setup_docname,
+            company: getCompanyName(allSettings, r.setup_docname),
           })),
         ),
       __("eTims Actions"),
@@ -89,8 +83,8 @@ function addCustomerActionButtons(frm, data) {
           frm,
           "update_customer",
           registeredMappings.map((r) => ({
-            name: r.etims_setup,
-            company: getCompanyName(allSettings, r.etims_setup),
+            name: r.setup_docname,
+            company: getCompanyName(allSettings, r.setup_docname),
           })),
         ),
       __("eTims Actions"),
@@ -105,8 +99,8 @@ function addCustomerActionButtons(frm, data) {
   //         frm,
   //         "get_customer_details",
   //         registeredMappings.map((r) => ({
-  //           name: r.etims_setup,
-  //           company: getCompanyName(allSettings, r.etims_setup),
+  //           name: r.setup_docname,
+  //           company: getCompanyName(allSettings, r.setup_docname),
   //         }))
   //       ),
   //     __("eTims Actions")
@@ -160,11 +154,11 @@ function showCompanySelectionModal(frm, actionType, availableSettings) {
 function executeCustomerAction(frm, actionType, settingsName) {
   let method, args, successMessage;
   let sladeId = "";
-  if (frm.doc.etims_setup_mapping) {
-    const mappingRow = frm.doc.etims_setup_mapping.find(
-      (row) => row.etims_setup === settingsName,
+  if (frm.doc.etims_id_mapping) {
+    const mappingRow = frm.doc.etims_id_mapping.find(
+      (row) => row.setup_docname === settingsName,
     );
-    sladeId = mappingRow ? mappingRow.slade360_id : "";
+    sladeId = mappingRow ? mappingRow.etims_id : "";
   }
 
   switch (actionType) {

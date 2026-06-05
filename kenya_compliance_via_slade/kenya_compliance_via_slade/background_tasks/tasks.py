@@ -15,7 +15,7 @@ from ..doctype.doctype_names_mapping import (
     SETTINGS_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_max_submission_attempts, get_next_run
+from ..utils import get_max_submission_attempts
 from .task_response_handlers import (
     fetch_etims_credit_notes_on_success,
     fetch_etims_sales_invoices_on_success,
@@ -90,7 +90,7 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
     all_submitted_unsent = fetch_sales_invoices(
         {
             "docstatus": 1,
-            "custom_successfully_submitted": 0,
+            "sent_to_etims": 0,
             "creation": [">=", timeframe_ago],
         }
     )
@@ -100,8 +100,8 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
     successful_without_scu_data = fetch_sales_invoices(
         {
             "docstatus": 1,
-            "custom_successfully_submitted": 1,
-            "custom_qr_code": ["is", "not set"],
+            "sent_to_etims": 1,
+            "etims_qr_code_url": ["is", "not set"],
             "creation": [">=", timeframe_ago],
         }
     )
@@ -111,8 +111,8 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
     # sent_unprocessed = fetch_sales_invoices(
     #     {
     #         "docstatus": 1,
-    #         "custom_slade_id": ["is", "set"],
-    #         "custom_successfully_submitted": 0,
+    #         "etims_id": ["is", "set"],
+    #         "sent_to_etims": 0,
     #         "custom_transition_successful": 0,
     #         "creation": [">=", timeframe_ago],
     #     }
@@ -123,7 +123,7 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
     # processed_unsent_to_etims = fetch_sales_invoices(
     #     {
     #         "docstatus": 1,
-    #         "custom_successfully_submitted": 0,
+    #         "sent_to_etims": 0,
     #         "custom_transition_successful": 1,
     #         "creation": [">=", timeframe_ago],
     #         "is_opening":"No"
@@ -138,7 +138,7 @@ def handle_invoice_submission(invoices: list, action_func: callable) -> None:
     for sales_invoice in invoices:
         doc = frappe.get_doc("Sales Invoice", sales_invoice.name, for_update=False)
         max_tries = get_max_submission_attempts(company=doc.company)
-        tries = int(doc.custom_submission_attempts or 0)
+        tries = int(doc.etims_submission_attempts or 0)
 
         if tries >= max_tries:
             continue
@@ -148,7 +148,7 @@ def handle_invoice_submission(invoices: list, action_func: callable) -> None:
             frappe.db.set_value(
                 "Sales Invoice",
                 sales_invoice.name,
-                "custom_submission_attempts",
+                "etims_submission_attempts",
                 tries + 1,
             )
         except Exception as e:
@@ -156,7 +156,7 @@ def handle_invoice_submission(invoices: list, action_func: callable) -> None:
             frappe.db.set_value(
                 "Sales Invoice",
                 sales_invoice.name,
-                "custom_submission_attempts",
+                "etims_submission_attempts",
                 tries + 1,
             )
             continue
@@ -175,7 +175,7 @@ def sign_processed_invoices(invoices: list) -> None:
     from ..apis.remote_response_status_handlers import process_sales_sign
 
     def action_func(doc: Document) -> None:
-        process_sales_sign(doc.name, "Sales Invoice", doc.custom_slade_id)
+        process_sales_sign(doc.name, "Sales Invoice", doc.etims_id)
 
     handle_invoice_submission(invoices, action_func)
 
@@ -184,7 +184,7 @@ def process_sent_invoices(invoices: list) -> None:
     from ..apis.remote_response_status_handlers import process_invoice_items
 
     def action_func(doc: Document) -> None:
-        process_invoice_items(doc.name, "Sales Invoice", doc.custom_slade_id)
+        process_invoice_items(doc.name, "Sales Invoice", doc.etims_id)
 
     handle_invoice_submission(invoices, action_func)
 
@@ -195,15 +195,15 @@ def fetch_scu_data(invoices: list) -> None:
     for sales_invoice in invoices:
         try:
             doc = frappe.get_doc("Sales Invoice", sales_invoice.name, for_update=False)
-            tries = int(doc.custom_submission_attempts or 0)
+            tries = int(doc.etims_submission_attempts or 0)
             max_tries = get_max_submission_attempts(company=doc.company)
             if tries >= max_tries:
                 continue
-            get_invoice_details(id=doc.custom_slade_id, document_name=doc.name)
+            get_invoice_details(id=doc.etims_id, document_name=doc.name)
             frappe.db.set_value(
                 "Sales Invoice",
                 sales_invoice.name,
-                "custom_submission_attempts",
+                "etims_submission_attempts",
                 tries + 1,
             )
         except Exception as e:
@@ -213,7 +213,7 @@ def fetch_scu_data(invoices: list) -> None:
             frappe.db.set_value(
                 "Sales Invoice",
                 sales_invoice.name,
-                "custom_submission_attempts",
+                "etims_submission_attempts",
                 tries + 1,
             )
             continue
@@ -277,6 +277,7 @@ def search_organisations_request(request_data: str | dict, settings_name: str) -
 @frappe.whitelist()
 def search_clusters(request_data: str | dict, settings_name: str) -> str:
     """Search clusters and return data for modal matching"""
+
     if isinstance(request_data, str):
         try:
             request_data = json.loads(request_data)
@@ -289,10 +290,24 @@ def search_clusters(request_data: str | dict, settings_name: str) -> str:
         update_clusters,
         settings_name=settings_name,
         doctype=SETTINGS_DOCTYPE_NAME,
+        queue=False,
     )
 
+    if isinstance(response, str):
+        try:
+            response = json.loads(response)
+        except Exception:
+            return response
+
+    if isinstance(response, list):
+        results = response
+    elif isinstance(response, dict):
+        results = response.get("results", [response])
+    else:
+        results = [response]
+
     return get_cluster_company_matches(
-        response if isinstance(response, list) else response.get("results", [response]),
+        results,
         settings_name,
     )
 
@@ -346,7 +361,7 @@ def get_company_from_existing_cluster_mapping(
     """
     return frappe.db.get_value(
         "eTims Company Setup Mapping",
-        {"cluster": cluster_id, "etims_setup": settings_name, "is_active": 1},
+        {"cluster": cluster_id, "setup_docname": settings_name, "is_active": 1},
         "parent",
     )
 
@@ -434,7 +449,7 @@ def send_stock_information(settings_name: str) -> None:
         "Stock Ledger Entry", company=settings.company
     )
     for entry in entries:
-        if int(entry.custom_submission_tries) >= max_tries:
+        if int(entry.etims_submission_attempts) >= max_tries:
             continue
         fetch_current_stock_balance(entry)
 
@@ -448,9 +463,9 @@ def fetch_stock_ledgers(timeframe_ago: datetime) -> List[Document]:
         "Stock Ledger Entry",
         filters={
             "docstatus": 1,
-            "custom_submitted_successfully": 0,
+            "sent_to_etims": 0,
             "creation": [">=", timeframe_ago],
-            "custom_submission_tries": ["<", max_tries],
+            "etims_submission_attempts": ["<", max_tries],
         },
         fields=["name", "item_code"],
         order_by="creation asc",
@@ -487,7 +502,7 @@ def send_purchase_information(settings_name: str = None) -> None:
         "Purchase Invoice",
         {
             "docstatus": 1,
-            "custom_submitted_successfully": 0,
+            "sent_to_etims": 0,
             "creation": [">=", timeframe_ago],
         },
         ["name"],
@@ -538,7 +553,18 @@ def search_branch_request(request_data: str | dict, settings_name: str) -> None:
     )
 
 
-def run_etims_autosubmission_scheduler():
+def should_run(schedule_value: str, mode: str) -> bool:
+    """
+    schedule_value: "Hourly", "Daily", "Both"
+    mode: "Hourly" or "Daily"
+    """
+    if not schedule_value:
+        return False
+
+    return schedule_value == mode or schedule_value == "Both"
+
+
+def run_etims_autosubmission_scheduler_hourly():
     settings_list = frappe.get_all(
         SETTINGS_DOCTYPE_NAME,
         filters={"is_active": 1},
@@ -548,104 +574,72 @@ def run_etims_autosubmission_scheduler():
     for s in settings_list:
         try:
             doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, s.name)
-            process_etims_autosubmission(doc)
+
+            if should_run(doc.sales_information_submission, "Hourly"):
+                frappe.enqueue(
+                    send_sales_invoices_information,
+                    queue="long",
+                    settings_name=doc.name,
+                )
+
+            if should_run(doc.purchase_information_submission, "Hourly"):
+                frappe.enqueue(
+                    send_purchase_information,
+                    queue="long",
+                    settings_name=doc.name,
+                )
+
+            if should_run(doc.stock_information_submission, "Hourly"):
+                frappe.enqueue(
+                    send_stock_information,
+                    queue="long",
+                    settings_name=doc.name,
+                )
+
         except Exception:
             frappe.log_error(
-                f"eTims Autosubmission Scheduler Failed for {s.name}",
+                f"Hourly eTims Autosubmission Failed: {s.name}",
                 frappe.get_traceback(),
             )
 
 
-def process_etims_autosubmission(doc):
-    now = now_datetime()
-    updated = False
+def run_etims_autosubmission_scheduler_daily():
+    settings_list = frappe.get_all(
+        SETTINGS_DOCTYPE_NAME,
+        filters={"is_active": 1},
+        fields=["name"],
+    )
 
-    if (
-        doc.sales_auto_submission_enabled
-        and doc.sales_next_run
-        and doc.sales_next_run <= now
-    ):
-        frappe.enqueue(
-            send_sales_invoices_information,
-            queue="long",
-            settings_name=doc.name,
-        )
-        doc.sales_last_run = now
-        doc.sales_next_run = get_next_run(
-            doc.sales_information_submission,
-            doc.sales_info_cron_format,
-        )
-        updated = True
+    for s in settings_list:
+        try:
+            doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, s.name)
 
-    if (
-        doc.purchase_auto_submission_enabled
-        and doc.purchases_next_run
-        and doc.purchases_next_run <= now
-    ):
-        frappe.enqueue(
-            send_purchase_information,
-            queue="long",
-            settings_name=doc.name,
-        )
-        doc.purchases_last_run = now
-        doc.purchases_next_run = get_next_run(
-            doc.purchase_information_submission,
-            doc.purchase_info_cron_format,
-        )
-        updated = True
+            if should_run(doc.sales_information_submission, "Daily"):
+                frappe.enqueue(
+                    send_sales_invoices_information,
+                    queue="long",
+                    settings_name=doc.name,
+                )
 
-    if (
-        doc.stock_auto_submission_enabled
-        and doc.stock_next_run
-        and doc.stock_next_run <= now
-    ):
-        frappe.enqueue(
-            send_stock_information,
-            queue="long",
-            settings_name=doc.name,
-        )
-        doc.stock_last_run = now
-        doc.stock_next_run = get_next_run(
-            doc.stock_information_submission,
-            doc.stock_info_cron_format,
-        )
-        updated = True
+            if should_run(doc.purchase_information_submission, "Daily"):
+                frappe.enqueue(
+                    send_purchase_information,
+                    queue="long",
+                    settings_name=doc.name,
+                )
 
-    if doc.notices_next_run and doc.notices_next_run <= now:
-        frappe.enqueue(
-            refresh_notices,
-            queue="long",
-            settings_name=doc.name,
-        )
-        doc.notices_last_run = now
-        doc.notices_next_run = get_next_run(
-            doc.notices_refresh_frequency,
-            doc.notices_refresh_freq_cron_format,
-        )
-        updated = True
+            if should_run(doc.stock_information_submission, "Daily"):
+                frappe.enqueue(
+                    send_stock_information,
+                    queue="long",
+                    settings_name=doc.name,
+                )
 
-    if doc.codes_next_run and doc.codes_next_run <= now:
-        frappe.enqueue(
-            refresh_code_lists,
-            queue="long",
-            settings_name=doc.name,
-            request_data={},
-        )
-        frappe.enqueue(
-            get_item_classification_codes,
-            queue="long",
-            settings_name=doc.name,
-            request_data={},
-        )
-        doc.codes_last_run = now
-        doc.codes_next_run = get_next_run(
-            doc.codes_refresh_frequency,
-            doc.codes_refresh_freq_cron_format,
-        )
-        updated = True
-
-    if updated:
-        doc.save(ignore_permissions=True)
+        except Exception:
+            frappe.log_error(
+                f"Daily eTims Autosubmission Failed: {s.name}",
+                frappe.get_traceback(),
+            )
 
 
 def run_etims_ledger_scheduler():
@@ -658,7 +652,7 @@ def run_etims_ledger_scheduler():
     for s in settings_list:
         try:
             invoice_date_before = now_datetime().date()
-            invoice_date_after = invoice_date_before - timedelta(days=2)
+            invoice_date_after = invoice_date_before - timedelta(days=30)
             request_data = {
                 "invoice_date_after": invoice_date_after.isoformat(),
                 "invoice_date_before": invoice_date_before.isoformat(),
@@ -673,31 +667,77 @@ def run_etims_ledger_scheduler():
 
 @frappe.whitelist()
 def fetch_etims_sales_data(
-    request_data: str | dict, settings_name: str, invoice_type: str = "Both"
+    request_data: str | dict = None,
+    settings_name: str = None,
+    invoice_type: str = "Both",
+    document_name: str = None,
 ) -> None:
-    if invoice_type == "Sales Invoice" or invoice_type == "Both":
-        fetch_etims_sales_invoices(request_data, settings_name)
-    if invoice_type == "Credit Note" or invoice_type == "Both":
-        fetch_etims_credit_notes(request_data, settings_name)
+    request_data = parse_request_data(request_data)
+
+    if invoice_type in ("Sales Invoice", "Both"):
+        fetch_etims_sales_invoices(
+            request_data, settings_name, document_name=document_name
+        )
+
+    if invoice_type in ("Credit Note", "Both"):
+        fetch_etims_credit_notes(
+            request_data, settings_name, document_name=document_name
+        )
 
 
 @frappe.whitelist()
-def fetch_etims_sales_invoices(request_data: str | dict, settings_name: str) -> None:
+def fetch_etims_sales_invoices(
+    request_data: str | dict = None,
+    settings_name: str = None,
+    document_name: str = None,
+) -> None:
+    request_data = parse_request_data(request_data)
+
+    if document_name:
+        request_data["reference_number"] = document_name
+
     process_request(
         request_data,
         "TrnsSalesSaveWrReq",
         request_method="GET",
+        doctype="Sales Invoice",
         settings_name=settings_name,
+        document_name=document_name,
         handler_function=fetch_etims_sales_invoices_on_success,
     )
 
 
 @frappe.whitelist()
-def fetch_etims_credit_notes(request_data: str | dict, settings_name: str) -> None:
+def fetch_etims_credit_notes(
+    request_data: str | dict = None,
+    settings_name: str = None,
+    document_name: str = None,
+) -> None:
+    request_data = parse_request_data(request_data)
+
+    if document_name:
+        doc = frappe.get_doc("Sales Invoice", document_name)
+
+        request_data["reference_number"] = (
+            document_name if not doc.is_return else doc.return_against
+        )
+
     process_request(
         request_data,
         "SalesCreditNoteSaveReq",
         request_method="GET",
+        doctype="Sales Invoice",
         settings_name=settings_name,
+        document_name=document_name,
         handler_function=fetch_etims_credit_notes_on_success,
     )
+
+
+def parse_request_data(request_data):
+    if not request_data:
+        return {}
+
+    if isinstance(request_data, str):
+        return json.loads(request_data)
+
+    return request_data
