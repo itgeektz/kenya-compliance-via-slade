@@ -7,8 +7,7 @@ import frappe.defaults
 from csf_ke.etims.doctype.etims_job_queue.etims_job_queue import eTimsJobQueue
 from frappe.model.document import Document
 
-from ...apis.api_builder import EndpointsBuilder
-from ...apis.process_request import extract_metadata
+from ...apis.process_request import execute_remote_request, extract_metadata
 from ...doctype.doctype_names_mapping import SETTINGS_DOCTYPE_NAME
 from ...utils import (
     build_headers,
@@ -18,8 +17,6 @@ from ...utils import (
     parse_request_data,
     process_dynamic_url,
 )
-
-endpoints_builder = EndpointsBuilder()
 
 
 class CustomETimsJobQueue(eTimsJobQueue):
@@ -150,60 +147,3 @@ def process_job_request(
         settings=settings,
         job_queue=job_queue,
     )
-
-
-def execute_remote_request(
-    headers: dict,
-    url: str,
-    route_path: str,
-    data: dict,
-    route_key: str,
-    handler: Callable | None,
-    error_handler: Callable | None,
-    request_method: str,
-    doctype: str,
-    document_name: str,
-    settings: dict,
-    job_queue: Document | None,
-) -> None:
-    """
-    Configure ``EndpointsBuilder`` and issue the remote HTTP call.
-
-    After the call returns, check whether the response contains a ``next``
-    field indicating additional pages.  If so, ask the job to enqueue a
-    follow-up job for the next page.
-
-    Args:
-        headers: HTTP request headers (including ``Authorization``).
-        url: Fully-resolved target URL.
-        route_path: Relative path portion of the URL (used for logging).
-        data: Parsed request payload dict.
-        route_key: Identifier for the route / endpoint.
-        handler: Success callback.
-        error_handler: Error callback, or ``None``.
-        request_method: HTTP method string.
-        doctype: Reference doctype.
-        document_name: Reference document name.
-        settings: eTims Settings dict.
-        job_queue: The driving ``eTimsJobQueue`` document, or ``None``.
-    """
-    endpoints_builder.headers = headers
-    endpoints_builder.url = url
-    endpoints_builder.route_path = route_path
-    endpoints_builder.payload = data
-    endpoints_builder.request_description = route_key
-    endpoints_builder.method = request_method
-    endpoints_builder.success_callback = handler
-    endpoints_builder.error_callback = error_handler
-    endpoints_builder.settings = settings
-    endpoints_builder.job_queue = job_queue
-    endpoints_builder.doctype = doctype
-    endpoints_builder.document_name = document_name
-
-    response = endpoints_builder.make_remote_call()
-
-    if job_queue and isinstance(response, dict) and response.get("next"):
-        next_url: str = response["next"]
-        job_queue.enqueue_next_page(next_url)
-
-    frappe.db.commit()
