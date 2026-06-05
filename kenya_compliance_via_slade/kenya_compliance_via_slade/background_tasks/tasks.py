@@ -277,6 +277,7 @@ def search_organisations_request(request_data: str | dict, settings_name: str) -
 @frappe.whitelist()
 def search_clusters(request_data: str | dict, settings_name: str) -> str:
     """Search clusters and return data for modal matching"""
+
     if isinstance(request_data, str):
         try:
             request_data = json.loads(request_data)
@@ -289,10 +290,24 @@ def search_clusters(request_data: str | dict, settings_name: str) -> str:
         update_clusters,
         settings_name=settings_name,
         doctype=SETTINGS_DOCTYPE_NAME,
+        queue=False,
     )
 
+    if isinstance(response, str):
+        try:
+            response = json.loads(response)
+        except Exception:
+            return response
+
+    if isinstance(response, list):
+        results = response
+    elif isinstance(response, dict):
+        results = response.get("results", [response])
+    else:
+        results = [response]
+
     return get_cluster_company_matches(
-        response if isinstance(response, list) else response.get("results", [response]),
+        results,
         settings_name,
     )
 
