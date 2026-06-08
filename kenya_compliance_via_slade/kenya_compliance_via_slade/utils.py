@@ -1883,7 +1883,8 @@ def build_partner_payload(
 
     currency_name = get_etims_id(
         "Currency",
-        payload.get("currency"),
+        # payload.get("currency"),
+        "KES",
         settings_name,
     )
 
