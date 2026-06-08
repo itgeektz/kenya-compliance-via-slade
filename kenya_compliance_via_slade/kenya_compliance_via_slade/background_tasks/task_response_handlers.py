@@ -848,6 +848,7 @@ def fetch_etims_sales_invoices_on_success(response: dict, **kwargs) -> None:
             )
 
 
+
 def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
     data = response.get("results")
 
@@ -994,3 +995,5 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
                 title=f"eTIMS Sync Error - {doc_ref}",
                 message=f"Error: {str(e)}\nTraceback: {frappe.get_traceback()}",
             )
+
+
