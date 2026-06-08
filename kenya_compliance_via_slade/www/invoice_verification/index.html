@@ -31,17 +31,16 @@ Verification") }} {% endblock %} {% block header %}
     <div class="status-icon success">✓</div>
     <h1>{{ _("Verification Successful") }}</h1>
     <p>
-      {{ _("The invoice has been verified. The eTIMS link has been opened in a
-      new tab.") }}
+      {{ _("The invoice has been verified. You will be redirected to the KRA
+      eTIMS page in 3 seconds.") }}
     </p>
     <p class="subtitle">
-      {{ _("If the window did not open, please click the button below:") }}
+      {{ _("If you are not redirected automatically, please click the button
+      below:") }}
     </p>
     <a
       id="success-redirect-btn"
       href="#"
-      target="_blank"
-      rel="noopener noreferrer"
       class="primary-button"
       style="text-decoration: none; display: inline-block; text-align: center"
     >

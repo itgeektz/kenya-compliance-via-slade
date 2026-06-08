@@ -110,6 +110,7 @@ def execute():
     )
 
     generate_invoice_verification_urls()
+    set_etims_submission_modes()
 
 
 def get_valid_field_map(doctype, field_map):
@@ -238,5 +239,34 @@ def generate_invoice_verification_urls():
         except Exception:
             frappe.log_error(
                 title="Invoice Verification URL Generation Failed",
+                message=frappe.get_traceback(),
+            )
+
+
+def set_etims_submission_modes():
+    if not frappe.db.exists("DocType", "Navari KRA eTims Settings"):
+        return
+
+    settings = frappe.get_all(
+        "Navari KRA eTims Settings",
+        fields=["name"],
+        limit_page_length=0,
+    )
+
+    for row in settings:
+        try:
+            frappe.db.set_value(
+                "Navari KRA eTims Settings",
+                row.name,
+                {
+                    "sales_information_submission": "Both",
+                    "purchase_information_submission": "Both",
+                    "stock_information_submission": "Both",
+                },
+                update_modified=False,
+            )
+        except Exception:
+            frappe.log_error(
+                title="eTims Settings Submission Mode Update Failed",
                 message=frappe.get_traceback(),
             )

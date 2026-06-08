@@ -839,7 +839,8 @@ def after_save_(doc: "Document", method: str | None = None) -> None:
                 )
 
             if (
-                doc.enable_background_invoice_submission
+                hasattr(doc, "enable_background_invoice_submission")
+                and doc.enable_background_invoice_submission
                 and url
                 and not doc.etims_qr_image
             ):
@@ -1027,12 +1028,21 @@ def update_navari_settings_with_token(docname: str, skip_checks: bool = False) -
         if not token_details:
             return None
 
-        settings_doc.access_token = token_details["access_token"]
-        settings_doc.refresh_token = token_details["refresh_token"]
-        settings_doc.token_expiry = datetime.now() + timedelta(
-            seconds=token_details["expires_in"]
+        frappe.db.set_value(
+            SETTINGS_DOCTYPE_NAME,
+            docname,
+            {
+                "access_token": token_details["access_token"],
+                "refresh_token": token_details["refresh_token"],
+                "token_expiry": datetime.now()
+                + timedelta(seconds=token_details["expires_in"]),
+            },
+            update_modified=False,
         )
-        settings_doc.save(ignore_permissions=True)
+
+        frappe.db.commit()
+
+        settings_doc.reload()
 
         # user_details_fetch(docname)
 
@@ -1873,7 +1883,8 @@ def build_partner_payload(
 
     currency_name = get_etims_id(
         "Currency",
-        payload.get("currency"),
+        # payload.get("currency"),
+        "KES",
         settings_name,
     )
 

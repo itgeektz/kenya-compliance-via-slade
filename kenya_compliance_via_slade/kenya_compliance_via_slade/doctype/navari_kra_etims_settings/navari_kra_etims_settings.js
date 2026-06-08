@@ -343,7 +343,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
   },
   sandbox: function (frm) {
     const sandboxFieldValue = parseInt(frm.doc.sandbox);
-    const sandboxServerUrl = "https://api.erp.release.slade360edi.com";
+    const sandboxServerUrl = "https://api-dev.slade360edi.com/erp";
     const productionServerUrl = "https://api.erp.slade360.co.ke";
     const sandboxAuthUrl = "https://accounts.multitenant.slade360.co.ke";
     const productionAuthUrl = "https://accounts.edi.slade360.co.ke";
