@@ -11,11 +11,24 @@ document.addEventListener("DOMContentLoaded", function () {
   const initialRedirect = document.getElementById("initial_redirect")?.value;
   const initialError = document.getElementById("initial_error")?.value;
 
+  let redirectTimer = null;
+
   function handleSuccess(url) {
     loadingState.style.display = "none";
     successBtn.href = url;
     successState.style.display = "block";
-    window.open(url, "_blank", "noopener,noreferrer");
+
+    redirectTimer = setTimeout(function () {
+      window.location.href = url;
+    }, 3000);
+  }
+
+  if (successBtn) {
+    successBtn.addEventListener("click", function (e) {
+      if (redirectTimer) {
+        clearTimeout(redirectTimer);
+      }
+    });
   }
 
   if (initialRedirect) {
