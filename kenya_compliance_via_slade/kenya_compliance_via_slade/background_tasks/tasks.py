@@ -663,6 +663,7 @@ def run_etims_ledger_scheduler():
                 f"eTims Ledger Scheduler Failed for {s.name}",
                 frappe.get_traceback(),
             )
+    purge_invalid_etims_ledger_records()
 
 
 @frappe.whitelist()
@@ -741,3 +742,20 @@ def parse_request_data(request_data):
         return json.loads(request_data)
 
     return request_data
+
+
+def purge_invalid_etims_ledger_records():
+    try:
+        invalid_records = frappe.get_all(
+            "eTIMS Sales Ledger Entry",
+            filters=[["etims_id", "in", ["", None]]],
+            pluck="name",
+        )
+
+        for record_name in invalid_records:
+            frappe.delete_doc("eTIMS Sales Ledger Entry", record_name, force=True)
+
+        frappe.db.commit()
+    except Exception:
+        frappe.db.rollback()
+        frappe.log_error("eTIMS Ledger Cleanup Failed", frappe.get_traceback())
