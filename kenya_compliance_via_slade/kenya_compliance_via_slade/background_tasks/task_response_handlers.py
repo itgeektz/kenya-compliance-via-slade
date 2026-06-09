@@ -874,10 +874,10 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
 
             sales_credit_note_lines = invoice_data.get("sales_credit_note_lines") or []
             if not sales_credit_note_lines:
-                frappe.log_error(
-                    title="eTIMS Skip Empty Credit Note",
-                    message=f"Skipping credit note {invoice_data.get('document_number')} - No sales credit note lines found",
-                )
+                # frappe.log_error(
+                #     title="eTIMS Skip Empty Credit Note",
+                #     message=f"Skipping credit note {invoice_data.get('document_number')} - No sales credit note lines found",
+                # )
                 continue
 
             existing_name = frappe.db.get_value(
