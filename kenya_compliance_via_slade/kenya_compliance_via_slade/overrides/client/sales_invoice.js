@@ -226,17 +226,17 @@ frappe.ui.form.on(parentDoctype, {
             <div style="
               display:flex;
               flex-direction:column;
-              gap:18px;
+              gap:14px;
             ">
 
               <div style="
                 padding:22px;
-                border-radius:18px;
+                border-radius:14px;
                 background:#fef2f2;
                 border:1px solid #fecaca;
               ">
                 <div style="
-                  font-size:20px;
+                  font-size:16px;
                   font-weight:700;
                   color:#991b1b;
                   margin-bottom:14px;
@@ -259,12 +259,12 @@ frappe.ui.form.on(parentDoctype, {
 
               <div style="
                 border:1px solid #e5e7eb;
-                border-radius:18px;
+                border-radius:14px;
                 overflow:hidden;
                 background:#ffffff;
               ">
                 <div style="
-                  padding:16px 20px;
+                  padding:16px 16px;
                   background:#f8fafc;
                   border-bottom:1px solid #e5e7eb;
                   font-size:17px;
@@ -276,9 +276,9 @@ frappe.ui.form.on(parentDoctype, {
 
                 <div style="
                   display:grid;
-                  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+                  grid-template-columns:repeat(auto-fit,minmax(216px,1fr));
                   gap:14px;
-                  padding:18px;
+                  padding:14px;
                 ">
 
                   <div style="
@@ -466,8 +466,8 @@ frappe.ui.form.on(parentDoctype, {
               <div style="
                 border:1px solid #fde68a;
                 background:#fffbeb;
-                border-radius:18px;
-                padding:20px;
+                border-radius:14px;
+                padding:16px;
               ">
                 <div style="
                   font-size:17px;
@@ -480,7 +480,7 @@ frappe.ui.form.on(parentDoctype, {
 
                 <ul style="
                   margin:0;
-                  padding-left:20px;
+                  padding-left:16px;
                   color:#78350f;
                   font-size:14px;
                   line-height:1.8;
