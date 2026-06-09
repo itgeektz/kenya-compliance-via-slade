@@ -532,7 +532,9 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             )
 
         if self.method == "PATCH":
-            patch_id = self.payload.pop("id", None)
+            patch_id = (
+                self.payload.pop("id", None) if isinstance(self.payload, dict) else None
+            )
 
             if patch_id and f"/{patch_id}/" not in request_url:
                 request_url = f"{request_url.rstrip('/')}/{patch_id}/"
@@ -546,7 +548,9 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             )
 
         if self.method == "PUT":
-            put_id = self.payload.pop("id", None)
+            put_id = (
+                self.payload.pop("id", None) if isinstance(self.payload, dict) else None
+            )
 
             if put_id and f"/{put_id}/" not in request_url:
                 request_url = f"{request_url.rstrip('/')}/{put_id}/"
