@@ -2236,14 +2236,16 @@ def update_sales_invoice_etims_details(name: str) -> None:
         order_by="creation desc",
     )
 
-    values = {
+    updates = {
         "etims_qr_code_url": None,
         "etims_id": None,
         "sent_to_etims": 0,
+        "etims_verification_url": sales_invoice.get("etims_verification_url"),
+        "etims_qr_image": sales_invoice.get("etims_qr_image"),
     }
 
     if etims_ledger and etims_ledger.etims_qr_code_url:
-        values.update(
+        updates.update(
             {
                 "etims_qr_code_url": etims_ledger.etims_qr_code_url,
                 "etims_id": etims_ledger.etims_id,
@@ -2251,7 +2253,15 @@ def update_sales_invoice_etims_details(name: str) -> None:
             }
         )
 
-    sales_invoice.db_set(values, update_modified=False)
+    if not updates["etims_verification_url"]:
+        updates["etims_verification_url"] = build_verification_url(sales_invoice)
+
+    if not updates["etims_qr_image"] and updates["etims_verification_url"]:
+        updates["etims_qr_image"] = generate_and_attach_qr_code(
+            updates["etims_verification_url"], sales_invoice.name, sales_invoice.doctype
+        )
+
+    sales_invoice.db_set(updates, update_modified=False)
 
 
 def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:

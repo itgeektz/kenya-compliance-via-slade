@@ -71,6 +71,23 @@ def generic_invoices_on_submit_override(
             )
             return
 
+    updates = {}
+
+    if not doc.get("etims_verification_url"):
+        updates["etims_verification_url"] = build_verification_url(doc)
+
+    current_verification_url = updates.get("etims_verification_url") or doc.get(
+        "etims_verification_url"
+    )
+
+    if not doc.get("etims_qr_image") and current_verification_url:
+        updates["etims_qr_image"] = generate_and_attach_qr_code(
+            current_verification_url, doc.name, doc.doctype
+        )
+
+    if updates:
+        frappe.db.set_value(doc.doctype, doc.name, updates, update_modified=False)
+
     if doc.is_return:
         return_invoice = frappe.get_doc(invoice_type, doc.return_against)
         if not return_invoice.sent_to_etims:
