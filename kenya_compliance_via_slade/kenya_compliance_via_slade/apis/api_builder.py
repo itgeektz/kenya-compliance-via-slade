@@ -144,6 +144,8 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         builder.job_queue = job_doc
         builder.doctype = "Sales Invoice"
         builder.document_name = "SI-001"
+        builder.page_size = 500
+        builder.page = 2
         response = builder.make_remote_call()
 
     The builder is typically reused (module-level singleton in ``etims_job_queue.py``)
@@ -163,6 +165,8 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         self._success_callback_handler: Callable[..., None] | None = None
         self._error_callback_handler: Callable[..., None] | None = None
         self._job_queue: Document | None = None
+        self._page_size: int | None = None
+        self._page: int | None = None
 
         self.attach(ErrorObserver())
 
@@ -255,6 +259,24 @@ class EndpointsBuilder(BaseEndpointsBuilder):
     @job_queue.setter
     def job_queue(self, value: Document | None) -> None:
         self._job_queue = value
+
+    @property
+    def page_size(self) -> int | None:
+        """Page size for paginated GET requests."""
+        return self._page_size
+
+    @page_size.setter
+    def page_size(self, value: int | None) -> None:
+        self._page_size = value
+
+    @property
+    def page(self) -> int | None:
+        """Page number for paginated GET requests."""
+        return self._page
+
+    @page.setter
+    def page(self, value: int | None) -> None:
+        self._page = value
 
     def make_remote_call(
         self,
@@ -460,14 +482,31 @@ class EndpointsBuilder(BaseEndpointsBuilder):
 
         if self.method == "GET":
             page_size = (
-                self.job_queue.page_size
-                if self.job_queue and self.job_queue.page_size
-                else 1000
+                self.page_size
+                if self.page_size is not None
+                else (
+                    self.job_queue.page_size
+                    if self.job_queue and self.job_queue.page_size
+                    else 1000
+                )
+            )
+
+            page = (
+                self.page
+                if self.page is not None
+                else (
+                    self.job_queue.page
+                    if self.job_queue
+                    and hasattr(self.job_queue, "page")
+                    and self.job_queue.page
+                    else 1
+                )
             )
 
             params = {
                 **(self.payload or {}),
                 "page_size": page_size,
+                "page": page,
             }
 
             prepared = requests.Request(
