@@ -714,7 +714,8 @@ def fetch_etims_credit_notes(
     settings_name: str = None,
     document_name: str = None,
 ) -> None:
-    request_data = parse_request_data(request_data)
+    # request_data = parse_request_data(request_data)
+    request_data = {}
 
     if document_name:
         doc = frappe.get_doc("Sales Invoice", document_name)
