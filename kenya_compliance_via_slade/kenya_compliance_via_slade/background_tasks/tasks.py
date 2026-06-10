@@ -15,7 +15,7 @@ from ..doctype.doctype_names_mapping import (
     SETTINGS_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_max_submission_attempts
+from ..utils import get_etims_id, get_max_submission_attempts
 from .task_response_handlers import (
     fetch_etims_credit_notes_on_success,
     fetch_etims_sales_invoices_on_success,
@@ -720,9 +720,7 @@ def fetch_etims_credit_notes(
     if document_name:
         doc = frappe.get_doc("Sales Invoice", document_name)
 
-        request_data["reference_number"] = (
-            document_name if not doc.is_return else doc.return_against
-        )
+        request_data["customer"] = get_etims_id("Customer", doc.customer, settings_name)
 
     process_request(
         request_data,
@@ -732,6 +730,7 @@ def fetch_etims_credit_notes(
         settings_name=settings_name,
         document_name=document_name,
         handler_function=fetch_etims_credit_notes_on_success,
+        page_size=50,
     )
 
 

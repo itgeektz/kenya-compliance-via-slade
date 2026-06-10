@@ -31,6 +31,8 @@ def process_request(
     settings_name: str = None,
     company: str = None,
     queue: bool = True,
+    page_size: int = 100,
+    page: int = 1,
 ) -> str | None:
     """Create eTims Job Queue entry only. No execution is performed."""
 
@@ -88,6 +90,8 @@ def process_request(
                         else None
                     ),
                     "url": url,
+                    "page_size": page_size,
+                    "page": page,
                 }
             )
 
@@ -113,6 +117,8 @@ def process_request(
                     document_name=document_name,
                     settings=settings,
                     job_queue=None,
+                    page_size=page_size,
+                    page=page,
                 )
 
     except Exception:
@@ -173,6 +179,8 @@ def execute_remote_request(
     document_name: str,
     settings: dict,
     job_queue: Document | None,
+    page_size: int = 100,
+    page: int = 1,
 ) -> None:
     """
     Configure ``EndpointsBuilder`` and issue the remote HTTP call.
@@ -207,6 +215,8 @@ def execute_remote_request(
     endpoints_builder.job_queue = job_queue
     endpoints_builder.doctype = doctype
     endpoints_builder.document_name = document_name
+    endpoints_builder.page_size = page_size
+    endpoints_builder.page = page
 
     response = endpoints_builder.make_remote_call()
 
