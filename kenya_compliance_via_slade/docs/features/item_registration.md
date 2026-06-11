@@ -15,15 +15,15 @@ The **eTims Details tab** will be present for each item during and after loading
 
 #### 🚫 Prevent eTIMS Registration
 
-**custom_prevent_etims_registration**: Enable this option to exclude the item from being sent to eTIMS. When checked, this item will not be registered or used in eTIMS transactions.
+**prevent_etims_registration**: Enable this option to exclude the item from being sent to eTIMS. When checked, this item will not be registered or used in eTIMS transactions.
 
 #### 📤 Imported Item Submitted?
 
-**custom_imported_item_submitted**: Indicates whether this imported item has been successfully submitted to eTIMS servers through the "send imported item" button.
+**custom_imported_item_submitted**: Indicates whether this imported item has been Sent to eTims to eTIMS servers through the "send imported item" button.
 
 #### 🆔 Slade ID
 
-**custom_slade_id**: The unique identifier assigned to the item by Slade 360's servers.
+**etims_id**: The unique identifier assigned to the item by Slade 360's servers.
 
 #### 🔄 Submission Tries
 

@@ -1,13 +1,12 @@
 from typing import Any, Dict, List, Optional, Tuple
 
-from pypika.functions import Avg, Max, Min
-
 import frappe
 from frappe.query_builder import DocType
+from pypika.functions import Avg, Max, Min
 
 
 def execute(
-    filters: Optional[Dict[str, Any]] = None
+    filters: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], None, Dict[str, Any]]:
     return DocumentSubmissionTimeAnalytics(filters).run()
 
@@ -67,23 +66,19 @@ class DocumentSubmissionTimeAnalytics:
                 "Sales Invoice" if doc_name in ["Invoice", "Credit Note"] else doc_name
             )
             has_fields = {
-                "custom_slade_id": meta.has_field("custom_slade_id"),
-                "custom_successfully_submitted": meta.has_field(
-                    "custom_successfully_submitted"
-                ),
-                "custom_submitted_successfully": meta.has_field(
-                    "custom_submitted_successfully"
-                ),
+                "etims_id": meta.has_field("etims_id"),
+                "sent_to_etims": meta.has_field("sent_to_etims"),
+                "sent_to_etims": meta.has_field("sent_to_etims"),
                 "custom_sent_to_slade": meta.has_field("custom_sent_to_slade"),
             }
 
             completion_conditions: List[Any] = []
             if has_fields["custom_sent_to_slade"]:
                 completion_conditions.append(doctype.custom_sent_to_slade)
-            if has_fields["custom_successfully_submitted"]:
-                completion_conditions.append(doctype.custom_successfully_submitted)
-            if has_fields["custom_submitted_successfully"]:
-                completion_conditions.append(doctype.custom_submitted_successfully)
+            if has_fields["sent_to_etims"]:
+                completion_conditions.append(doctype.sent_to_etims)
+            if has_fields["sent_to_etims"]:
+                completion_conditions.append(doctype.sent_to_etims)
 
             completion_condition: Optional[Any] = None
             if completion_conditions:

@@ -1,0 +1,25 @@
+{
+  "name": "kenya_compliance_via_slade",
+  "version": "1.0.0",
+  "description": "This application integrates **ERPNext** with **Kenya Revenue Authority's (KRA) eTIMS** through the **Virtual Sales Control Unit (VSCU)**, facilitating seamless tax compliance and data synchronization. With this integration, businesses can:",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/navariltd/kenya-compliance-via-slade.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/navariltd/kenya-compliance-via-slade/issues"
+  },
+  "homepage": "https://github.com/navariltd/kenya-compliance-via-slade#readme",
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  }
+}

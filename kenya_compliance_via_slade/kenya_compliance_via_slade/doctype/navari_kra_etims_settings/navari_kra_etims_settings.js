@@ -96,7 +96,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             },
           });
         },
-        __("eTims Actions")
+        __("eTims Actions"),
       );
 
       frm.add_custom_button(
@@ -154,7 +154,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             },
           });
         },
-        __("eTims Actions")
+        __("eTims Actions"),
       );
       frm.add_custom_button(
         __("Sync Organisation Units"),
@@ -183,7 +183,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
             },
           });
         },
-        __("eTims Actions")
+        __("eTims Actions"),
       );
     }
 
@@ -205,7 +205,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
                   message: __("User details synced successfully"),
                   indicator: "green",
                 },
-                5
+                5,
               );
 
               frm.refresh();
@@ -219,7 +219,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
           },
         });
       },
-      __("eTims Actions")
+      __("eTims Actions"),
     );
 
     frm.add_custom_button(
@@ -250,7 +250,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
           },
         });
       },
-      __("eTims Actions")
+      __("eTims Actions"),
     );
 
     frm.add_custom_button(
@@ -283,8 +283,57 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
           },
         });
       },
-      __("eTims Actions")
+      __("eTims Actions"),
     );
+
+    frappe.call({
+      method:
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.check_hanging_custom_fields",
+      callback: function (r) {
+        let fields = r.message || [];
+        if (fields.length > 0) {
+          frm.add_custom_button(
+            __("Clear Hanging Custom Fields"),
+            function () {
+              let field_list_html = fields
+                .map(
+                  (f) =>
+                    `<li><b>${f.dt}</b>: ${f.label || f.fieldname} (${f.fieldname})</li>`,
+                )
+                .join("");
+
+              frappe.confirm(
+                __(
+                  `Are you sure you want to delete the following hanging custom fields?<br><br><ul style="max-height: 200px; overflow-y: auto;">${field_list_html}</ul>`,
+                ),
+                function () {
+                  frappe.call({
+                    method:
+                      "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.delete_hanging_custom_fields",
+                    freeze: true,
+                    freeze_message: __("Deleting custom fields..."),
+                    callback: function (res) {
+                      if (res.message && res.message.success) {
+                        frappe.msgprint({
+                          title: __("Success"),
+                          indicator: "green",
+                          message: __(res.message.message),
+                        });
+                        frm.remove_custom_button(
+                          __("Clear Hanging Custom Fields"),
+                          __("eTims Actions"),
+                        );
+                      }
+                    },
+                  });
+                },
+              );
+            },
+            __("eTims Actions"),
+          );
+        }
+      },
+    });
 
     frm.set_query("bhfid", function () {
       return {
@@ -294,7 +343,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
   },
   sandbox: function (frm) {
     const sandboxFieldValue = parseInt(frm.doc.sandbox);
-    const sandboxServerUrl = "https://api.erp.release.slade360edi.com";
+    const sandboxServerUrl = "https://api-dev.slade360edi.com/erp";
     const productionServerUrl = "https://api.erp.slade360.co.ke";
     const sandboxAuthUrl = "https://accounts.multitenant.slade360.co.ke";
     const productionAuthUrl = "https://accounts.edi.slade360.co.ke";
@@ -401,7 +450,7 @@ function showClusterMatchingModal(clusterData, form) {
                   title: __("Success"),
                   indicator: "green",
                   message: __(
-                    "Clusters matched successfully. System will now fetch branches, departments and workstations in the background."
+                    "Clusters matched successfully. System will now fetch branches, departments and workstations in the background.",
                   ),
                 });
                 dialog.hide();

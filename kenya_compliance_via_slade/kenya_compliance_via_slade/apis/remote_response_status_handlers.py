@@ -1,10 +1,9 @@
+import re
 import time
 from datetime import datetime
-from io import BytesIO
 
 import deprecation
 import frappe
-import qrcode
 
 from ... import __version__
 from ..doctype.doctype_names_mapping import (
@@ -30,10 +29,11 @@ from ..utils import (
     build_item_payload,
     build_partner_payload,
     build_return_invoice_payload,
+    generate_and_attach_qr_code,
+    get_etims_id,
     get_link_value,
     get_or_create_link,
-    get_parent_by_slade360_id,
-    get_slade360_id,
+    get_parent_by_etims_id,
     parse_response_data,
     prepare_credit_note_payload,
 )
@@ -99,13 +99,14 @@ def update_document_mapping(
         doc.require_tax_id = 0
 
     found = False
-    for row in doc.get("etims_setup_mapping", []):
-        if row.etims_setup == settings_name:
+    for row in doc.get("etims_id_mapping", []):
+        if row.setup_docname == settings_name:
             frappe.db.set_value(
                 SLADE_ID_MAPPING_DOCTYPE_NAME,
                 row.name,
                 {
-                    "slade360_id": slade_id,
+                    "etims_id": slade_id,
+                    "setup_doctype": SETTINGS_DOCTYPE_NAME,
                 },
             )
             found = True
@@ -113,10 +114,11 @@ def update_document_mapping(
 
     if not found:
         doc.append(
-            "etims_setup_mapping",
+            "etims_id_mapping",
             {
-                "etims_setup": settings_name,
-                "slade360_id": slade_id,
+                "setup_docname": settings_name,
+                "setup_doctype": SETTINGS_DOCTYPE_NAME,
+                "etims_id": slade_id,
                 "is_active": 1,
             },
         )
@@ -208,9 +210,7 @@ def user_details_fetch_on_success(response: dict, document_name: str, **kwargs) 
         "users_full_names": result.get("full_name"),
         "email": email,
         "workstation": workstation,
-        "company": get_link_value(
-            "Company", "custom_slade_id", result.get("organisation_id")
-        ),
+        "company": get_link_value("Company", "etims_id", result.get("organisation_id")),
         "branch": get_link_value("Branch", "slade_id", branch_id),
         "system_user": user.name,
     }
@@ -255,7 +255,7 @@ def submit_inventory_on_success(
 
     request_data = {
         "document_name": document_name,
-        "product": get_slade360_id("Item", document_name, settings_name),
+        "product": get_etims_id("Item", document_name, settings_name),
         "quantity": sum([float(stock.get("actual_qty", 0)) for stock in stock_levels]),
         "inventory_adjustment": response.get("id"),
     }
@@ -265,6 +265,7 @@ def submit_inventory_on_success(
         queue="default",
         is_async=True,
         doctype="Item",
+        document_name=document_name,
         request_data=request_data,
         route_key="StockMasterLineReq",
         handler_function=submit_inventory_item_on_success,
@@ -287,6 +288,7 @@ def submit_inventory_item_on_success(
         process_request,
         queue="default",
         doctype="Item",
+        document_name=document_name,
         request_data=request_data,
         route_key="StockAdjustmentTransitionReq",
         handler_function=process_inventory_transition,
@@ -306,16 +308,19 @@ def sales_information_submission_on_success(
     Callback after successful submission. Maps SCU data and signature_link.
     """
     updates = {
-        "custom_successfully_submitted": 1,
+        "sent_to_etims": 1,
+        "etims_id": response.get("sales_invoice_id"),
+        "etims_qr_code_url": response.get("signature_link"),
     }
 
     frappe.db.set_value(doctype, document_name, updates)
 
     frappe.enqueue(
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_data",
         document_name=document_name,
         invoice_type=doctype,
         settings_name=settings_name,
+        request_data={"reference_number": document_name},
         queue="long",
     )
 
@@ -378,7 +383,7 @@ def sales_information_submission_on_error(
 #         doctype,
 #         document_name,
 #         {
-#             "custom_slade_id": response.get("id"),
+#             "etims_id": response.get("id"),
 #         },
 #     )
 #     frappe.enqueue(
@@ -417,7 +422,7 @@ def process_invoice_items(
     conversion_rate = invoice.conversion_rate or 1
 
     for item in items:
-        tax_amount = item.get("custom_tax_amount", 0) or 0
+        tax_amount = item.get("etims_tax_amount", 0) or 0
 
         converted_tax_amount = (
             round(tax_amount * conversion_rate, 4) if tax_amount else 0
@@ -429,7 +434,7 @@ def process_invoice_items(
 
         payload = {
             "product": get_link_value(
-                "Item", "name", item.get("item_code"), "custom_slade_id"
+                "Item", "name", item.get("item_code"), "etims_id"
             ),
             "quantity": round(qty, 4),
             "new_price": round(
@@ -442,9 +447,9 @@ def process_invoice_items(
         }
 
         request_method = "POST"
-        if item.get("custom_slade_id"):
+        if item.get("etims_id"):
             request_method = "PATCH"
-            payload["id"] = item.get("custom_slade_id")
+            payload["id"] = item.get("etims_id")
 
         process_request(
             payload,
@@ -452,6 +457,7 @@ def process_invoice_items(
             sales_item_submission_on_success,
             doctype=items_table_doctype,
             request_method=request_method,
+            document_name=document_name,
         )
 
     process_sales_transition(document_name, doctype, invoice_slade_id)
@@ -485,6 +491,7 @@ def process_sales_transition(
         handle_transition_success,
         request_method="PATCH",
         doctype=doctype,
+        document_name=document_name,
     )
 
 
@@ -496,9 +503,7 @@ def process_sales_sign(document_name: str, doctype: str, invoice_slade_id: str) 
     def handle_invoice_sign_success(
         response: dict, document_name: str, **kwargs
     ) -> None:
-        frappe.db.set_value(
-            doctype, document_name, {"custom_successfully_submitted": 1}
-        )
+        frappe.db.set_value(doctype, document_name, {"sent_to_etims": 1})
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
             id=invoice_slade_id,
@@ -518,6 +523,7 @@ def process_sales_sign(document_name: str, doctype: str, invoice_slade_id: str) 
         handle_invoice_sign_success,
         request_method="POST",
         doctype=doctype,
+        document_name=document_name,
     )
 
 
@@ -528,6 +534,7 @@ def update_invoice_info(
     settings_name: str | None = None,
     **kwargs,
 ) -> None:
+
     process_invoice_response(response, document_name, doctype, settings_name)
 
 
@@ -550,8 +557,8 @@ def verify_and_fix_invoice_info(
         return
 
     elif not data.get("scu_data"):
-        if doc.custom_slade_id:
-            process_sales_sign(document_name, doctype, doc.custom_slade_id)
+        if doc.etims_id:
+            process_sales_sign(document_name, doctype, doc.etims_id)
             return
 
     invoice_data = (
@@ -573,14 +580,14 @@ def process_invoice_response(
     data = get_response_data(response)
     if not data:
         return
-    custom_slade_id = data.get("id")
-    slade_id = frappe.get_value(doctype, document_name, "custom_slade_id")
+    etims_id = data.get("id")
+    slade_id = frappe.get_value(doctype, document_name, "etims_id")
 
-    if not slade_id and custom_slade_id and not data.get("scu_data"):
+    if not slade_id and etims_id and not data.get("scu_data"):
         company = frappe.get_value(doctype, document_name, "company")
         frappe.enqueue(
             "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
-            id=custom_slade_id,
+            id=etims_id,
             document_name=document_name,
             invoice_type=doctype,
             settings_name=settings_name,
@@ -588,13 +595,13 @@ def process_invoice_response(
         )
 
     updates = {
-        "custom_slade_id": custom_slade_id,
-        **map_scu_fields(data, custom_slade_id, doctype, qr_key="qr_code_url"),
+        "etims_id": etims_id,
+        **map_scu_fields(data, etims_id, doctype, qr_key="etims_qr_code_url"),
     }
 
-    if document_name:
-        frappe.db.set_value(doctype, document_name, updates)
-        frappe.publish_realtime("refresh_form", document_name)
+    # if document_name:
+    #     frappe.db.set_value(doctype, document_name, updates)
+    #     frappe.publish_realtime("refresh_form", document_name)
 
 
 def verify_and_fix_invoice_revisions(
@@ -798,6 +805,7 @@ def sign_credit_note(
         handler_function=credit_note_on_success,
         request_method="POST",
         doctype=doctype,
+        document_name=document_name,
         settings_name=settings_name,
         company=doc.company,
     )
@@ -868,36 +876,6 @@ def is_invoice_data_matching(payload: dict, response_data: dict) -> bool:
     return True
 
 
-def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=10,
-        border=4,
-    )
-    qr.add_data(url)
-    qr.make(fit=True)
-
-    img = qr.make_image(fill_color="black", back_color="white")
-    buffer = BytesIO()
-    img.save(buffer, format="PNG")
-    buffer.seek(0)
-
-    file_doc = frappe.get_doc(
-        {
-            "doctype": "File",
-            "file_name": f"QR-{docname}.png",
-            "is_private": 0,
-            "content": buffer.read(),
-            "attached_to_doctype": doctype,
-            "attached_to_name": docname,
-        }
-    )
-    file_doc.save(ignore_permissions=True)
-
-    return file_doc.file_url
-
-
 def map_scu_fields(data: dict, docname: str, doctype: str, qr_key: str) -> dict:
     if not data.get("scu_data"):
         return {}
@@ -926,7 +904,7 @@ def sales_item_submission_on_success(
     response: dict, document_name: str, doctype: str, **kwargs
 ) -> None:
     updates = {
-        "custom_slade_id": response.get("id"),
+        "etims_id": response.get("id"),
         "custom_sent_to_slade": 1,
     }
     frappe.db.set_value(doctype, document_name, updates)
@@ -942,7 +920,7 @@ def item_composition_submission_on_success(
         document_name,
         {
             "custom_item_composition_submitted_successfully": 1,
-            "custom_slade_id": response.get("id"),
+            "etims_id": response.get("id"),
         },
     )
 
@@ -954,9 +932,7 @@ def item_composition_submission_on_success(
             "active": True,
             "quantity": item.qty,
             "bom": response.get("id"),
-            "raw_product": get_link_value(
-                "Item", "name", item.item_code, "custom_slade_id"
-            ),
+            "raw_product": get_link_value("Item", "name", item.item_code, "etims_id"),
         }
         frappe.enqueue(
             process_request,
@@ -976,8 +952,8 @@ def bom_item_submission_on_success(
         "BOM Item",
         document_name,
         {
-            "custom_slade_id": response.get("id"),
-            "custom_submitted_successfully": 1,
+            "etims_id": response.get("id"),
+            "sent_to_etims": 1,
         },
     )
 
@@ -989,8 +965,8 @@ def purchase_invoice_submission_on_success(
         "Purchase Invoice",
         document_name,
         {
-            "custom_slade_id": response.get("id"),
-            "custom_submitted_successfully": 1,
+            "etims_id": response.get("id"),
+            "sent_to_etims": 1,
         },
     )
 
@@ -1028,6 +1004,7 @@ def fetch_purchase_items(registered_purchase: str, settings_name: str) -> None:
         request_method="GET",
         doctype=REGISTERED_PURCHASES_DOCTYPE_NAME,
         settings_name=settings_name,
+        document_name=registered_purchase,
     )
 
 
@@ -1090,17 +1067,17 @@ def create_purchase_from_search_details(fetched_purchase: dict) -> str:
     doc.taxable_amount_d = fetched_purchase.get("taxable_amount_D", 0.0)
     doc.taxable_amount_e = fetched_purchase.get("taxable_amount_E", 0.0)
 
-    doc.tax_rate_a = fetched_purchase.get("tax_rate_A", 0.0)
-    doc.tax_rate_b = fetched_purchase.get("tax_rate_B", 0.0)
-    doc.tax_rate_c = fetched_purchase.get("tax_rate_C", 0.0)
-    doc.tax_rate_d = fetched_purchase.get("tax_rate_D", 0.0)
-    doc.tax_rate_e = fetched_purchase.get("tax_rate_E", 0.0)
+    doc.etims_tax_rate_a = fetched_purchase.get("tax_rate_A", 0.0)
+    doc.etims_tax_rate_b = fetched_purchase.get("tax_rate_B", 0.0)
+    doc.etims_tax_rate_c = fetched_purchase.get("tax_rate_C", 0.0)
+    doc.etims_tax_rate_d = fetched_purchase.get("tax_rate_D", 0.0)
+    doc.etims_tax_rate_e = fetched_purchase.get("tax_rate_E", 0.0)
 
-    doc.tax_amount_a = fetched_purchase.get("tax_amount_A", 0.0)
-    doc.tax_amount_b = fetched_purchase.get("tax_amount_B", 0.0)
-    doc.tax_amount_c = fetched_purchase.get("tax_amount_C", 0.0)
-    doc.tax_amount_d = fetched_purchase.get("tax_amount_D", 0.0)
-    doc.tax_amount_e = fetched_purchase.get("tax_amount_E", 0.0)
+    doc.etims_tax_amount_a = fetched_purchase.get("tax_amount_A", 0.0)
+    doc.etims_tax_amount_b = fetched_purchase.get("tax_amount_B", 0.0)
+    doc.etims_tax_amount_c = fetched_purchase.get("tax_amount_C", 0.0)
+    doc.etims_tax_amount_d = fetched_purchase.get("tax_amount_D", 0.0)
+    doc.etims_tax_amount_e = fetched_purchase.get("tax_amount_E", 0.0)
 
     doc.workflow_state = fetched_purchase["workflow_state"]
     doc.branch = (get_link_value("Branch", "slade_id", fetched_purchase["branch"]),)
@@ -1154,25 +1131,27 @@ def create_and_link_purchase_item(response: dict, document_name: str, **kwargs) 
         registered_item.product_name = item["product_name"]
         registered_item.product_code = item["product_code"]
         registered_item.item_code = item["item_code"]
-        registered_item.item_classification_code_data = item["item_classification_code"]
-        registered_item.item_classification_code = get_or_create_link(
+        registered_item.etims_item_classification_code_data = item[
+            "etims_item_classification_code"
+        ]
+        registered_item.etims_item_classification_code = get_or_create_link(
             ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
             "itemclscd",
-            item["item_classification_code"],
+            item["etims_item_classification_code"],
         )
         registered_item.item_sequence = item["item_sequence_number"]
         registered_item.barcode = item["barcode"]
         registered_item.package = item["package"]
-        registered_item.packaging_unit_code = item["package_unit_code"]
+        registered_item.etims_packaging_unit_code = item["package_unit_code"]
         registered_item.quantity = item["quantity"]
         registered_item.quantity_unit_code = item["quantity_unit_code"]
         registered_item.unit_price = item["unit_price"]
         registered_item.supply_amount = item["supply_amount"]
         registered_item.discount_rate = item["discount_rate"]
         registered_item.discount_amount = item["discount_amount"]
-        registered_item.taxation_type_code = item["taxation_type_code"]
+        registered_item.etims_taxation_type_code = item["taxation_type_code"]
         registered_item.taxable_amount = item["taxable_amount"]
-        registered_item.tax_amount = item["tax_amount"]
+        registered_item.etims_tax_amount = item["etims_tax_amount"]
         registered_item.total_amount = item["total_amount"]
         registered_item.save(ignore_permissions=True)
 
@@ -1270,8 +1249,10 @@ def imported_items_search_on_success(
                     COUNTRIES_DOCTYPE_NAME, "code", item.get("export_nation_code")
                 ),
                 "package": item.get("package"),
-                "packaging_unit_code": get_or_create_link(
-                    PACKAGING_UNIT_DOCTYPE_NAME, "code", item.get("packaging_unit_code")
+                "etims_packaging_unit_code": get_or_create_link(
+                    PACKAGING_UNIT_DOCTYPE_NAME,
+                    "code",
+                    item.get("etims_packaging_unit_code"),
                 ),
                 "quantity": item.get("quantity"),
                 "quantity_unit_code": get_or_create_link(
@@ -1319,13 +1300,16 @@ def imported_items_search_on_success(
                 product_name = None
                 if frappe.db.exists(
                     SLADE_ID_MAPPING_DOCTYPE_NAME,
-                    {"slade360_id": item.get("product"), "etims_setup": settings_name},
+                    {
+                        "etims_id": item.get("product"),
+                        "setup_docname": settings_name,
+                    },
                 ):
                     product_name = frappe.db.get_value(
                         SLADE_ID_MAPPING_DOCTYPE_NAME,
                         {
-                            "slade360_id": item.get("product"),
-                            "etims_setup": settings_name,
+                            "etims_id": item.get("product"),
+                            "setup_docname": settings_name,
                         },
                         "parent",
                         order_by="creation desc",
@@ -1345,7 +1329,7 @@ def imported_items_search_on_success(
                         product = frappe.new_doc("Item")
                         product.item_name = item_name
                         product.item_code = product_code or item_name
-                        product.custom_prevent_etims_registration = 1
+                        product.etims_prevent_etims_registration = 1
                         default_item_group = frappe.get_all(
                             "Item Group",
                             filters={"is_group": 1},
@@ -1364,9 +1348,10 @@ def imported_items_search_on_success(
                             "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
                             "parent": product.name,
                             "parenttype": "Item",
-                            "parentfield": "etims_setup_mapping",
-                            "slade360_id": item.get("product"),
-                            "etims_setup": settings_name,
+                            "parentfield": "etims_id_mapping",
+                            "setup_doctype": SETTINGS_DOCTYPE_NAME,
+                            "etims_id": item.get("product"),
+                            "setup_docname": settings_name,
                         }
                     ).insert(ignore_permissions=True)
 
@@ -1474,7 +1459,7 @@ def item_search_on_success(response: dict, settings_name: str, **kwargs) -> None
             slade_id = item_data.get("id")
             existing_item = frappe.db.get_value(
                 SLADE_ID_MAPPING_DOCTYPE_NAME,
-                {"slade360_id": slade_id, "etims_setup": settings_name},
+                {"etims_id": slade_id, "setup_docname": settings_name},
                 "parent",
                 order_by="creation desc",
             )
@@ -1497,37 +1482,36 @@ def item_search_on_success(response: dict, settings_name: str, **kwargs) -> None
                 "is_sales_item": item_data.get("can_be_sold", False),
                 "is_purchase_item": item_data.get("can_be_purchased", False),
                 "custom_item_code_etims": item_data.get("scu_item_code", ""),
-                "custom_etims_country_of_origin_code": country_of_origin_code or "",
                 "valuation_rate": round(item_data.get("selling_price", 0.0), 2),
                 "last_purchase_rate": round(item_data.get("purchasing_price", 0.0), 2),
-                "custom_etims_country_of_origin": country_of_origin or "",
-                "custom_item_type": item_data.get("item_type", ""),
-                "custom_product_type": item_data.get("product_type", ""),
+                "etims_country_of_origin": country_of_origin or "",
+                "item_type": item_data.get("item_type", ""),
+                "product_type": item_data.get("product_type", ""),
             }
 
             if item_data.get("scu_item_classification"):
-                request_data["custom_item_classification"] = get_parent_by_slade360_id(
+                request_data["item_classification"] = get_parent_by_etims_id(
                     ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
                     item_data.get("scu_item_classification"),
                     settings_name,
                 )
 
             if item_data.get("packaging_unit"):
-                request_data["custom_packaging_unit"] = get_parent_by_slade360_id(
+                request_data["packaging_unit"] = get_parent_by_etims_id(
                     PACKAGING_UNIT_DOCTYPE_NAME,
                     item_data.get("packaging_unit"),
                     settings_name,
                 )
 
             if item_data.get("quantity_unit"):
-                request_data["custom_unit_of_quantity"] = get_parent_by_slade360_id(
+                request_data["unit_of_quantity"] = get_parent_by_etims_id(
                     UNIT_OF_QUANTITY_DOCTYPE_NAME,
                     item_data.get("quantity_unit"),
                     settings_name,
                 )
 
             if item_data.get("sale_taxes") and len(item_data.get("sale_taxes", [])) > 0:
-                request_data["custom_taxation_type"] = get_parent_by_slade360_id(
+                request_data["taxation_type"] = get_parent_by_etims_id(
                     TAXATION_TYPE_DOCTYPE_NAME,
                     item_data.get("sale_taxes")[0],
                     settings_name,
@@ -1556,8 +1540,8 @@ def item_search_on_success(response: dict, settings_name: str, **kwargs) -> None
                 {
                     "parent": item_doc.name,
                     "parenttype": "Item",
-                    "parentfield": "etims_setup_mapping",
-                    "etims_setup": settings_name,
+                    "parentfield": "etims_id_mapping",
+                    "setup_docname": settings_name,
                 },
             )
 
@@ -1565,7 +1549,7 @@ def item_search_on_success(response: dict, settings_name: str, **kwargs) -> None
                 frappe.db.set_value(
                     SLADE_ID_MAPPING_DOCTYPE_NAME,
                     existing_mapping,
-                    {"slade360_id": slade_id},
+                    {"etims_id": slade_id},
                 )
             else:
                 frappe.get_doc(
@@ -1573,9 +1557,10 @@ def item_search_on_success(response: dict, settings_name: str, **kwargs) -> None
                         "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
                         "parent": item_doc.name,
                         "parenttype": "Item",
-                        "parentfield": "etims_setup_mapping",
-                        "slade360_id": slade_id,
-                        "etims_setup": settings_name,
+                        "parentfield": "etims_id_mapping",
+                        "setup_doctype": SETTINGS_DOCTYPE_NAME,
+                        "etims_id": slade_id,
+                        "setup_docname": settings_name,
                     }
                 ).insert(ignore_permissions=True)
 
@@ -1625,9 +1610,7 @@ def customers_search_on_success(response: dict, **kwargs) -> None:
 
 
 def location_update_on_success(response: dict, document_name: str, **kwargs) -> None:
-    frappe.db.set_value(
-        "Warehouse", document_name, {"custom_slade_id": response.get("id")}
-    )
+    frappe.db.set_value("Warehouse", document_name, {"etims_id": response.get("id")})
 
 
 def operation_type_create_on_success(
@@ -1636,6 +1619,62 @@ def operation_type_create_on_success(
     frappe.db.set_value(
         OPERATION_TYPE_DOCTYPE_NAME, document_name, {"slade_id": response.get("id")}
     )
+
+
+def normalize_reference(ref: str) -> str:
+    if not ref:
+        return ref
+    return re.sub(r"-REV\d+$", "", ref)
+
+
+def invoice_bulk_submission_on_success(
+    response: dict, document_name: str, settings_name: str, **kwargs
+) -> None:
+
+    try:
+        if not isinstance(response, dict):
+            return
+
+        invoices = response.get("invoices", [])
+        if not invoices:
+            return
+
+        for inv in invoices:
+            try:
+                reference_number = normalize_reference(inv.get("reference_number"))
+                etims_id = inv.get("id")
+
+                if not reference_number or not etims_id:
+                    continue
+
+                invoice_name = frappe.db.get_value(
+                    "Sales Invoice", {"name": reference_number}, "name"
+                )
+
+                if not invoice_name:
+                    continue
+
+                frappe.db.set_value(
+                    "Sales Invoice",
+                    invoice_name,
+                    "etims_id",
+                    etims_id,
+                    update_modified=False,
+                )
+
+            except Exception:
+                frappe.log_error(
+                    title="eTims Bulk Invoice Update Item Failed",
+                    message=frappe.get_traceback(),
+                )
+
+        frappe.db.commit()
+
+    except Exception:
+        frappe.log_error(
+            title="eTims Bulk Invoice Update Failed",
+            message=frappe.get_traceback(),
+        )
 
 
 def fetch_matching_items_on_success(
@@ -1647,22 +1686,23 @@ def fetch_matching_items_on_success(
     item_doc = frappe.get_doc("Item", document_name)
     existing_id = next(
         (
-            row.slade360_id
-            for row in item_doc.etims_setup_mapping
-            if row.etims_setup == settings_name
+            row.etims_id
+            for row in item_doc.etims_id_mapping
+            if row.setup_docname == settings_name
         ),
         None,
     )
     if len(items) > 0:
-        if not item_doc.etims_setup_mapping:
+        if not item_doc.etims_id_mapping:
             frappe.get_doc(
                 {
                     "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
                     "parent": item_doc.name,
                     "parenttype": "Item",
-                    "parentfield": "etims_setup_mapping",
-                    "slade360_id": items[0].get("id"),
-                    "etims_setup": settings_name,
+                    "setup_doctype": SETTINGS_DOCTYPE_NAME,
+                    "parentfield": "etims_id_mapping",
+                    "etims_id": items[0].get("id"),
+                    "setup_docname": settings_name,
                 }
             ).insert(ignore_permissions=True)
 
@@ -1680,6 +1720,7 @@ def fetch_matching_items_on_success(
                         "id": item.get("id"),
                         "active": False,
                     },
+                    document_name=item_doc.name,
                     route_key="ItemsSearchReq",
                     handler_function=item_archive_on_success,
                     request_method="PATCH",
@@ -1712,22 +1753,23 @@ def fetch_matching_partner_on_success(
     partner_doc = frappe.get_doc(doctype, document_name)
     existing_id = next(
         (
-            row.slade360_id
-            for row in partner_doc.etims_setup_mapping
-            if row.etims_setup == settings_name
+            row.etims_id
+            for row in partner_doc.etims_id_mapping
+            if row.setup_docname == settings_name
         ),
         None,
     )
     if len(partners) > 0:
-        if not partner_doc.etims_setup_mapping:
+        if not partner_doc.etims_id_mapping:
             frappe.get_doc(
                 {
                     "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
                     "parent": partner_doc.name,
                     "parenttype": doctype,
-                    "parentfield": "etims_setup_mapping",
-                    "slade360_id": partners[0].get("id"),
-                    "etims_setup": settings_name,
+                    "parentfield": "etims_id_mapping",
+                    "setup_doctype": SETTINGS_DOCTYPE_NAME,
+                    "etims_id": partners[0].get("id"),
+                    "setup_docname": settings_name,
                 }
             ).insert(ignore_permissions=True)
 
@@ -1746,6 +1788,7 @@ def fetch_matching_partner_on_success(
                         "id": partner.get("id"),
                         "active": False,
                     },
+                    document_name=partner_doc.name,
                     route_key="BhfCustSaveReq",
                     handler_function=partner_archive_on_success,
                     request_method="PATCH",
@@ -1763,6 +1806,7 @@ def fetch_matching_partner_on_success(
         queue="default",
         doctype=doctype,
         request_data=request_data,
+        document_name=partner_doc.name,
         route_key="BhfCustSaveReq",
         handler_function=customer_branch_details_submission_on_success,
         request_method=request_method,

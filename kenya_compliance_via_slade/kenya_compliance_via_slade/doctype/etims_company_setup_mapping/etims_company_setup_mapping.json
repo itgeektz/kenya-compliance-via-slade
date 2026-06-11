@@ -1,70 +1,70 @@
 {
- "actions": [],
- "allow_rename": 1,
- "creation": "2025-07-07 08:50:22.058574",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "field_order": [
-  "is_active",
-  "etims_setup",
-  "column_break_ytqw",
-  "organisation",
-  "cluster"
- ],
- "fields": [
-  {
-   "fieldname": "etims_setup",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "eTims Setup",
-   "options": "Navari KRA eTims Settings",
-   "reqd": 1
-  },
-  {
-   "fieldname": "column_break_ytqw",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "1",
-   "fieldname": "is_active",
-   "fieldtype": "Check",
-   "in_filter": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Is Active"
-  },
-  {
-   "fieldname": "organisation",
-   "fieldtype": "Data",
-   "in_filter": 1,
-   "in_list_view": 1,
-   "in_preview": 1,
-   "in_standard_filter": 1,
-   "label": "Organisation"
-  },
-  {
-   "fieldname": "cluster",
-   "fieldtype": "Data",
-   "in_filter": 1,
-   "in_list_view": 1,
-   "in_preview": 1,
-   "in_standard_filter": 1,
-   "label": "Cluster"
-  }
- ],
- "grid_page_length": 50,
- "index_web_pages_for_search": 1,
- "istable": 1,
- "links": [],
- "modified": "2026-03-17 09:56:03.672942",
- "modified_by": "Administrator",
- "module": "Kenya Compliance Via Slade",
- "name": "eTims Company Setup Mapping",
- "owner": "Administrator",
- "permissions": [],
- "row_format": "Dynamic",
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": []
+  "actions": [],
+  "allow_rename": 1,
+  "creation": "2025-07-07 08:50:22.058574",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "is_active",
+    "setup_docname",
+    "column_break_ytqw",
+    "organisation",
+    "cluster"
+  ],
+  "fields": [
+    {
+      "fieldname": "setup_docname",
+      "fieldtype": "Link",
+      "in_list_view": 1,
+      "label": "eTims Setup",
+      "options": "Navari KRA eTims Settings",
+      "reqd": 1
+    },
+    {
+      "fieldname": "column_break_ytqw",
+      "fieldtype": "Column Break"
+    },
+    {
+      "default": "1",
+      "fieldname": "is_active",
+      "fieldtype": "Check",
+      "in_filter": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "label": "Is Active"
+    },
+    {
+      "fieldname": "organisation",
+      "fieldtype": "Data",
+      "in_filter": 1,
+      "in_list_view": 1,
+      "in_preview": 1,
+      "in_standard_filter": 1,
+      "label": "Organisation"
+    },
+    {
+      "fieldname": "cluster",
+      "fieldtype": "Data",
+      "in_filter": 1,
+      "in_list_view": 1,
+      "in_preview": 1,
+      "in_standard_filter": 1,
+      "label": "Cluster"
+    }
+  ],
+  "grid_page_length": 50,
+  "index_web_pages_for_search": 1,
+  "istable": 1,
+  "links": [],
+  "modified": "2026-03-17 09:56:03.672942",
+  "modified_by": "Administrator",
+  "module": "Kenya Compliance Via Slade",
+  "name": "eTims Company Setup Mapping",
+  "owner": "Administrator",
+  "permissions": [],
+  "row_format": "Dynamic",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": []
 }
