@@ -1,6 +1,6 @@
-const doctype = "Customer";
+const doctypeName = "Customer";
 
-frappe.ui.form.on(doctype, {
+frappe.ui.form.on(doctypeName, {
   refresh: async function (frm) {
     let currency = frm.doc.default_currency || "KES";
 

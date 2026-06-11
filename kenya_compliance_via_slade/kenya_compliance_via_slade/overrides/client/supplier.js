@@ -1,7 +1,7 @@
-const doctype = "Supplier";
+const supplierDoctype = "Supplier";
 const settingsDoctypeName = "Navari KRA eTims Settings";
 
-frappe.ui.form.on(doctype, {
+frappe.ui.form.on(supplierDoctype, {
   refresh: async function (frm) {
     if (frm.is_new()) return;
     const { message: data } = await frappe.call({
@@ -19,7 +19,6 @@ frappe.ui.form.on(doctype, {
 
     if (!allSettings.length) return;
 
-    // Add action buttons based on registration status
     addSupplierActionButtons(frm, {
       allSettings,
       registeredMappings,
@@ -71,22 +70,6 @@ function addSupplierActionButtons(frm, data) {
       __("eTims Actions"),
     );
   }
-
-  // if (registeredMappings.length > 0) {
-  //   frm.add_custom_button(
-  //     __("Get Supplier Details"),
-  //     () =>
-  //       showCompanySelectionModal(
-  //         frm,
-  //         "get_supplier_details",
-  //         registeredMappings.map((r) => ({
-  //           name: r.setup_docname,
-  //           company: getCompanyName(allSettings, r.setup_docname),
-  //         }))
-  //       ),
-  //     __("eTims Actions")
-  //   );
-  // }
 }
 
 function getCompanyName(allSettings, settingName) {
@@ -101,7 +84,7 @@ function showCompanySelectionModal(frm, actionType, availableSettings) {
   }
 
   if (availableSettings.length === 1) {
-    executeCustomerAction(frm, actionType, availableSettings[0].name);
+    executeSupplierAction(frm, actionType, availableSettings[0].name);
     return;
   }
 
