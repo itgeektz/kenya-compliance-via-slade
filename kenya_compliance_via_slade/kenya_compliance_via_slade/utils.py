@@ -2323,6 +2323,15 @@ def analyze_etims_eligibility(invoice_name):
     if not settings_doc:
         errors.append(f"No active eTIMS settings found for company {doc.company}.")
 
+    if (
+        settings_doc
+        and not settings_doc.sales_auto_submission_enabled
+        and not doc.etims_verification_url
+    ):
+        errors.append(
+            "Sales auto submission to eTIMS is disabled and invoice has not been submitted yet."
+        )
+
     if settings_doc:
         customer_slade_id = get_etims_id(
             "Customer",
