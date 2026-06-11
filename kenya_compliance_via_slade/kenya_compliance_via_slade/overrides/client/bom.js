@@ -1,7 +1,7 @@
-const doctype = "BOM";
+const doctypeName = "BOM";
 const settingsDoctypeName = "Navari KRA eTims Settings";
 
-frappe.ui.form.on(doctype, {
+frappe.ui.form.on(doctypeName, {
   refresh: async function (frm) {
     const companyName = frappe.boot.sysdefaults.company;
     const { message: activeSetting } = await frappe.call({
@@ -41,7 +41,7 @@ frappe.ui.form.on(doctype, {
               },
             });
           },
-          __("eTims Actions")
+          __("eTims Actions"),
         );
       }
     }

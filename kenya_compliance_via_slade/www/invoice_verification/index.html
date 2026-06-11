@@ -1,0 +1,101 @@
+{% extends "templates/web.html" %} {% block title %} {{ _("Invoice
+Verification") }} {% endblock %} {% block header %}
+<link
+  rel="stylesheet"
+  href="/assets/kenya_compliance_via_slade/css/invoice_verification.css?v={{ cache_buster }}"
+/>
+{% endblock %} {% block page_content %}
+<div class="invoice-page">
+  <input type="hidden" id="invoice_id" value="{{ invoice_id or '' }}" />
+  <input
+    type="hidden"
+    id="verification_key"
+    value="{{ verification_key or '' }}"
+  />
+  <input type="hidden" id="initial_error" value="{{ error or '' }}" />
+  <input type="hidden" id="initial_redirect" value="{{ redirect_url or '' }}" />
+
+  <div id="state-loading" class="invoice-card">
+    <div class="loader"></div>
+    <h2 id="loading-title">{{ _("Verifying Invoice") }}</h2>
+    <p id="loading-text">
+      {{ _("Please wait while we verify the invoice and submission status.") }}
+    </p>
+  </div>
+
+  <div
+    id="state-success"
+    class="invoice-card success-card"
+    style="display: none"
+  >
+    <div class="status-icon success">✓</div>
+    <h1>{{ _("Verification Successful") }}</h1>
+    <p>
+      {{ _("The invoice has been verified. You will be redirected to the KRA
+      eTIMS page in 3 seconds.") }}
+    </p>
+    <p class="subtitle">
+      {{ _("If you are not redirected automatically, please click the button
+      below:") }}
+    </p>
+    <a
+      id="success-redirect-btn"
+      href="#"
+      class="primary-button"
+      style="text-decoration: none; display: inline-block; text-align: center"
+    >
+      {{ _("Open KRA eTIMS Link") }}
+    </a>
+  </div>
+
+  <div id="state-error" class="invoice-card error-card" style="display: none">
+    <div class="status-icon error">⚠</div>
+    <h1>{{ _("Verification Failed") }}</h1>
+    <p id="error-message"></p>
+  </div>
+
+  <div id="state-pending" class="invoice-card" style="display: none">
+    <div class="status-icon warning">⏳</div>
+    <h1>{{ _("Invoice Pending Submission") }}</h1>
+    <p class="subtitle">
+      {{ _("This invoice has not yet been successfully submitted to KRA eTIMS.")
+      }}
+    </p>
+
+    <div class="status-banner">
+      <div class="status-banner-title">{{ _("Submission In Progress") }}</div>
+      <div class="status-banner-text">
+        {{ _("The invoice has been generated successfully and is waiting for
+        submission processing. Please check again later.") }}
+      </div>
+    </div>
+
+    <div class="invoice-details">
+      <div class="detail-row">
+        <span>{{ _("Invoice Number") }}</span>
+        <strong id="detail-name">{{ invoice.name if invoice else '' }}</strong>
+      </div>
+      <div class="detail-row">
+        <span>{{ _("Customer") }}</span>
+        <strong id="detail-customer"
+          >{{ invoice.customer if invoice else '' }}</strong
+        >
+      </div>
+      <div class="detail-row">
+        <span>{{ _("Posting Date") }}</span>
+        <strong id="detail-date"
+          >{{ invoice.posting_date if invoice else '' }}</strong
+        >
+      </div>
+      <div class="detail-row" id="detail-amount-row" style="display: none">
+        <span>{{ _("Total Amount") }}</span>
+        <strong id="detail-amount"></strong>
+      </div>
+    </div>
+
+    <button class="primary-button" onclick="window.location.reload()">
+      {{ _("Check Again") }}
+    </button>
+  </div>
+</div>
+{% endblock %}

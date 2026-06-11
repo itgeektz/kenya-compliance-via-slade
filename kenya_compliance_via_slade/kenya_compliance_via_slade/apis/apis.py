@@ -8,6 +8,7 @@ import frappe.defaults
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder import DocType
+from frappe.utils import get_datetime
 
 from ..background_tasks.task_response_handlers import (
     operation_types_search_on_success,
@@ -21,9 +22,9 @@ from ..doctype.doctype_names_mapping import (
     USER_DOCTYPE_NAME,
 )
 from ..utils import (
+    build_bulk_invoice_payload,
     build_return_invoice_payload,
     chunked,
-    generate_custom_item_code_etims,
     get_active_settings,
     get_invoice_reference_number,
     get_link_value,
@@ -40,6 +41,7 @@ from .remote_response_status_handlers import (
     imported_item_submission_on_success,
     imported_items_search_on_success,
     initialize_device_submission_on_success,
+    invoice_bulk_submission_on_success,
     item_composition_submission_on_success,
     item_search_on_success,
     purchase_search_on_success,
@@ -54,18 +56,67 @@ from .remote_response_status_handlers import (
 endpoints_builder = EndpointsBuilder()
 
 
+# @frappe.whitelist()
+# def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None) -> str:
+#     """Bulk submit sales invoices in chunks"""
+#     filters = {"docstatus": 1, "sent_to_etims": 0}
+
+#     if docs_list:
+#         provided_names = json.loads(docs_list)
+#         valid_invoices = frappe.get_all("Sales Invoice", filters=filters, pluck="name")
+#         invoices_to_process = [n for n in provided_names if n in valid_invoices]
+#     else:
+#         invoices_to_process = frappe.get_all(
+#             "Sales Invoice", filters=filters, pluck="name"
+#         )
+
+#     if not invoices_to_process:
+#         return "No invoices to process."
+
+#     for batch in chunked(invoices_to_process, 100):
+#         frappe.enqueue(
+#             process_invoices_sequentially,
+#             invoice_list=batch,
+#             queue="long",
+#             timeout=3600,
+#             enqueue_after_commit=True,
+#             job_name=f"Bulk Submit Invoices Batch ({len(batch)})",
+#         )
+
+#     return "Processing started."
+
+
 @frappe.whitelist()
-def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None) -> str:
+def bulk_submit_sales_invoices(
+    docs_list: str = None,
+    settings_name: str = None,
+) -> str:
     """Bulk submit sales invoices in chunks"""
-    filters = {"docstatus": 1, "custom_successfully_submitted": 0}
+
+    filters = {
+        "docstatus": 1,
+        "sent_to_etims": 0,
+        "is_return": 0,
+    }
 
     if docs_list:
         provided_names = json.loads(docs_list)
-        valid_invoices = frappe.get_all("Sales Invoice", filters=filters, pluck="name")
-        invoices_to_process = [n for n in provided_names if n in valid_invoices]
+
+        valid_invoices = frappe.get_all(
+            "Sales Invoice",
+            filters=filters,
+            pluck="name",
+        )
+
+        invoices_to_process = [
+            name for name in provided_names if name in valid_invoices
+        ]
+
     else:
         invoices_to_process = frappe.get_all(
-            "Sales Invoice", filters=filters, pluck="name"
+            "Sales Invoice",
+            filters=filters,
+            pluck="name",
         )
 
     if not invoices_to_process:
@@ -73,8 +124,9 @@ def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None)
 
     for batch in chunked(invoices_to_process, 100):
         frappe.enqueue(
-            process_invoices_sequentially,
+            process_bulk_invoice_submission,
             invoice_list=batch,
+            settings_name=settings_name,
             queue="long",
             timeout=3600,
             enqueue_after_commit=True,
@@ -82,6 +134,60 @@ def bulk_submit_sales_invoices(docs_list: str = None, settings_name: str = None)
         )
 
     return "Processing started."
+
+
+def process_bulk_invoice_submission(
+    invoice_list: list[str],
+    settings_name: str,
+) -> None:
+    payload = build_bulk_invoice_payload(
+        invoice_names=invoice_list,
+        settings_name=settings_name,
+    )
+
+    frappe.enqueue(
+        process_request,
+        queue="default",
+        is_async=True,
+        request_data=payload,
+        route_key="BulkSalesInvoiceSaveReq",
+        handler_function=invoice_bulk_submission_on_success,
+        request_method="POST",
+        settings_name=settings_name,
+    )
+
+
+@frappe.whitelist(allow_guest=True)
+def bulk_invoice_callback():
+    data = frappe.request.get_json()
+
+    frappe.log_error(
+        title="Bulk Invoice Callback",
+        message=frappe.as_json(data),
+    )
+
+    frappe.enqueue(
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_ledger_scheduler",
+        queue="long",
+    )
+
+    return {
+        "status": "success",
+    }
+
+
+def handle_bulk_invoice_success(**kwargs):
+    frappe.log_error(
+        title="Bulk Invoice Success",
+        message=frappe.as_json(kwargs),
+    )
+
+
+def handle_bulk_invoice_error(**kwargs):
+    frappe.log_error(
+        title="Bulk Invoice Error",
+        message=frappe.as_json(kwargs),
+    )
 
 
 def process_invoices_sequentially(invoice_list: List[str]) -> None:
@@ -168,88 +274,6 @@ def bulk_register_items(docs_list: str, settings_name: str = None) -> None:
             )
 
 
-@frappe.whitelist()
-def update_all_items(settings_name: str = None) -> None:
-    """Update all items in chunks"""
-    settings = (
-        [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
-        if settings_name
-        else get_active_settings()
-    )
-
-    if not settings:
-        return
-
-    for setting in settings:
-        Item = DocType("Item")
-        Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
-
-        items = (
-            frappe.qb.from_(Item)
-            .inner_join(Mapping)
-            .on(
-                (Mapping.parent == Item.name)
-                & (Mapping.parenttype == "Item")
-                & (Mapping.etims_setup == setting.name)
-            )
-            .select(Item.name)
-            .where(Item.custom_sent_to_slade == 1)
-            .run(as_dict=True)
-        )
-
-        item_names = [i.name for i in items]
-
-        for batch in chunked(item_names, 100):
-            frappe.enqueue(
-                process_item_batch,
-                queue="long",
-                settings_name=setting.name,
-                items=batch,
-                job_name=f"Item Update Batch ({len(batch)})",
-            )
-
-
-@frappe.whitelist()
-def register_all_items(settings_name: str = None) -> None:
-    """Register all items in chunks"""
-    settings = (
-        [frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)]
-        if settings_name
-        else get_active_settings()
-    )
-
-    if not settings:
-        return
-
-    for setting in settings:
-        Item = DocType("Item")
-        Mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
-
-        items = (
-            frappe.qb.from_(Item)
-            .left_join(Mapping)
-            .on(
-                (Mapping.parent == Item.name)
-                & (Mapping.parenttype == "Item")
-                & (Mapping.etims_setup == setting.name)
-            )
-            .select(Item.name)
-            .where((Item.custom_sent_to_slade == 0) & (Mapping.name.isnull()))
-            .run(as_dict=True)
-        )
-
-        item_names = [i.name for i in items]
-
-        for batch in chunked(item_names, 100):
-            frappe.enqueue(
-                process_item_batch,
-                queue="long",
-                settings_name=setting.name,
-                items=batch,
-                job_name=f"Item Register Batch ({len(batch)})",
-            )
-
-
 def process_item_batch(settings_name: str, items: List[str]) -> None:
     """Process a batch of items for registration/update"""
     for item_name in items:
@@ -312,9 +336,6 @@ def perform_item_registration(item_name: str, settings_name: str) -> dict | None
             )
         )
 
-    if not item.custom_item_code_etims:
-        generate_and_set_etims_code(item)
-
     frappe.enqueue(
         process_request,
         queue="default",
@@ -324,36 +345,28 @@ def perform_item_registration(item_name: str, settings_name: str) -> dict | None
         handler_function=fetch_matching_items_on_success,
         request_method="GET",
         doctype="Item",
+        document_name=item.name,
         settings_name=settings_name,
     )
 
 
 def is_item_eligible_for_registration(item) -> bool:
     """Check if item meets basic registration criteria"""
-    return not (item.custom_prevent_etims_registration or item.disabled)
+    return not (item.etims_prevent_etims_registration or item.disabled)
 
 
 def validate_required_fields(item) -> List[str]:
     """Validate required fields for item registration"""
     required_fields = [
-        "custom_item_classification",
-        "custom_product_type",
-        "custom_item_type",
-        "custom_etims_country_of_origin",
-        "custom_packaging_unit",
-        "custom_unit_of_quantity",
-        "custom_taxation_type",
+        "etims_item_classification",
+        "etims_product_type",
+        "etims_item_type",
+        "etims_country_of_origin",
+        "etims_packaging_unit",
+        "etims_unit_of_quantity",
+        "etims_taxation_type",
     ]
     return [field for field in required_fields if not item.get(field)]
-
-
-def generate_and_set_etims_code(item) -> None:
-    """Generate and set ETIMS code for item"""
-    item.custom_item_code_etims = generate_custom_item_code_etims(item)
-    frappe.db.set_value(
-        "Item", item.name, "custom_item_code_etims", item.custom_item_code_etims
-    )
-    frappe.db.commit()
 
 
 @frappe.whitelist()
@@ -389,7 +402,7 @@ def submit_all_suppliers(settings_name: str = None) -> None:
             .on(
                 (Mapping.parent == Supplier.name)
                 & (Mapping.parenttype == "Supplier")
-                & (Mapping.etims_setup == setting.name)
+                & (Mapping.setup_docname == setting.name)
             )
             .select(Supplier.name)
             .where((Mapping.name.isnull()))
@@ -486,7 +499,7 @@ def submit_all_customers(settings_name: str = None) -> None:
             .on(
                 (Mapping.parent == Customer.name)
                 & (Mapping.parenttype == "Customer")
-                & (Mapping.etims_setup == setting.name)
+                & (Mapping.setup_docname == setting.name)
             )
             .select(Customer.name)
             .where(Mapping.name.isnull())
@@ -523,8 +536,8 @@ def send_branch_customer_details(
     data = frappe.get_doc(doctype, name)
 
     if (hasattr(data, "disabled") and data.disabled) or (
-        hasattr(data, "custom_prevent_etims_registration")
-        and data.custom_prevent_etims_registration
+        hasattr(data, "etims_prevent_etims_registration")
+        and data.etims_prevent_etims_registration
     ):
         return
 
@@ -706,7 +719,7 @@ def send_entire_stock_balance(settings_name: str) -> None:
         .on(
             (Mapping.parent == Item.name)
             & (Mapping.parenttype == "Item")
-            & (Mapping.etims_setup == settings_name)
+            & (Mapping.setup_docname == settings_name)
         )
         .select(Item.name, Item.item_code, Item.item_name)
         .where((Item.is_stock_item == 1) & (Item.custom_sent_to_slade == 1))
@@ -751,7 +764,7 @@ def submit_inventory(name: str, settings_name: str) -> None:
             "Department",
             "name",
             settings.organisation_mapping[0].department,
-            "custom_slade_id",
+            "etims_id",
         ),
         "location": get_link_value(
             "Warehouse",
@@ -832,7 +845,7 @@ def submit_item_composition(name: str) -> None:
     """Submit item composition"""
     item = frappe.get_doc("BOM", name)
     request_data = {
-        "final_product": get_link_value("Item", "name", item.item, "custom_slade_id"),
+        "final_product": get_link_value("Item", "name", item.item, "etims_id"),
         "document_name": name,
     }
     process_request(
@@ -912,14 +925,14 @@ def create_item(item: dict | frappe._dict) -> Document:
     new_item.item_code = item["item_code"]
     new_item.item_name = item["item_name"]
     new_item.item_group = "All Item Groups"
-    if "item_classification_code" in item:
-        new_item.custom_item_classification = item["item_classification_code"]
-    new_item.custom_packaging_unit = item["packaging_unit_code"]
-    new_item.custom_unit_of_quantity = (
-        item.get("quantity_unit_code", None) or item["unit_of_quantity_code"]
+    if "etims_item_classification_code" in item:
+        new_item.etims_item_classification = item["etims_item_classification_code"]
+    new_item.etims_packaging_unit = item["etims_packaging_unit_code"]
+    new_item.etims_unit_of_quantity = (
+        item.get("quantity_unit_code", None) or item["etims_unit_of_quantity_code"]
     )
-    new_item.custom_taxation_type = item["taxation_type_code"]
-    new_item.custom_etims_country_of_origin = (
+    new_item.etims_taxation_type = item["taxation_type_code"]
+    new_item.etims_country_of_origin = (
         frappe.get_doc(
             COUNTRIES_DOCTYPE_NAME,
             {"code": item_code[:2]},
@@ -928,7 +941,7 @@ def create_item(item: dict | frappe._dict) -> Document:
         if item_code
         else None
     )
-    new_item.custom_product_type = item_code[2:3] if item_code else None
+    new_item.etims_product_type = item_code[2:3] if item_code else None
 
     if item_code and int(item_code[2:3]) != 3:
         new_item.is_stock_item = 1
@@ -1029,14 +1042,12 @@ def create_purchase_invoice_from_request(request_data: str) -> Document:
             item_doc["discount_amount"] = item["discount_amount"]
         if item.get("total_amount") not in (None, ""):
             item_doc["net_amount"] = item["total_amount"]
-        if item.get("tax_amount") not in (None, ""):
-            tax_amount = float(item.get("tax_amount") or 0.0)
+        if item.get("etims_tax_amount") not in (None, ""):
+            tax_amount = float(item.get("etims_tax_amount") or 0.0)
             total_amount = float(item.get("total_amount") or 0.0) - tax_amount
             net_rate = total_amount / float(item_doc["qty"]) if item_doc["qty"] else 0.0
-            custom_tax_rate = (
-                (tax_amount / total_amount * 100.0) if total_amount else 0.0
-            )
-            item_doc["custom_tax_rate"] = custom_tax_rate
+            tax_rate = (tax_amount / total_amount * 100.0) if total_amount else 0.0
+            item_doc["etims_tax_rate"] = tax_rate
             item_doc["net_amount"] = total_amount
             item_doc["rate"] = net_rate
 
@@ -1051,7 +1062,7 @@ def create_purchase_invoice_from_request(request_data: str) -> Document:
                         "account_name",
                     ),
                     "description": "Tax for " + item["item_name"],
-                    "rate": custom_tax_rate,
+                    "rate": tax_rate,
                 },
             )
 
@@ -1261,7 +1272,7 @@ def _process_invoice_fetch_request(
                 original_invoice_id
                 if is_return
                 else frappe.db.get_value(
-                    "Sales Invoice", invoice.return_against, "custom_slade_id"
+                    "Sales Invoice", invoice.return_against, "etims_id"
                 )
             )
             request_data["invoice"] = original_invoice_slade_id
@@ -1277,6 +1288,7 @@ def _process_invoice_fetch_request(
         route_key=route_key,
         handler_function=handler_function,
         doctype=invoice_type,
+        document_name=document_name,
         settings_name=settings_name,
         company=company,
     )
@@ -1292,7 +1304,7 @@ def get_invoice_details(
 ) -> None:
     """Get invoice details"""
     invoice = frappe.get_doc(invoice_type, document_name)
-    slade_id = id or invoice.custom_slade_id
+    slade_id = id or invoice.etims_id
     if slade_id:
         request_data = {
             "document_name": document_name,
@@ -1306,6 +1318,7 @@ def get_invoice_details(
             route_key="SaleSearchReq",
             handler_function=update_invoice_info,
             doctype=invoice_type,
+            document_name=document_name,
             settings_name=settings_name,
             company=company,
         )
@@ -1421,6 +1434,45 @@ def submit_credit_note(
         handler_function=sales_information_submission_on_success,
         request_method="POST",
         doctype=doctype,
+        document_name=document_name,
         settings_name=settings_name,
         company=doc.company,
     )
+
+
+@frappe.whitelist(allow_guest=True)
+def check_invoice_submission_status(id: str, key: str) -> dict:
+    """Check invoice submission status"""
+
+    invoice = frappe.db.get_value(
+        "Sales Invoice",
+        id,
+        [
+            "name",
+            "customer",
+            "posting_date",
+            "grand_total",
+            "creation",
+            "sent_to_etims",
+            "etims_qr_code_url",
+        ],
+        as_dict=True,
+    )
+
+    if not invoice:
+        return {"error": _("Invoice not found.")}
+
+    expected_key = get_datetime(invoice.creation).strftime("%Y%m%d%H%M%S%f")
+
+    if expected_key != key:
+        return {"error": _("Invalid verification link.")}
+
+    if invoice.sent_to_etims and invoice.etims_qr_code_url:
+        return {"etims_qr_code_url": invoice.etims_qr_code_url}
+
+    return {
+        "name": invoice.name,
+        "customer": invoice.customer,
+        "posting_date": invoice.posting_date,
+        "grand_total": invoice.grand_total,
+    }

@@ -115,7 +115,8 @@ function showSettingsModalAndExecute(settings) {
         {
           label: __("Reference Number"),
           fieldname: "reference_number",
-          fieldtype: "Data",
+          fieldtype: "Link",
+          options: "Sales Invoice",
           placeholder: "Enter reference number",
         },
       ],

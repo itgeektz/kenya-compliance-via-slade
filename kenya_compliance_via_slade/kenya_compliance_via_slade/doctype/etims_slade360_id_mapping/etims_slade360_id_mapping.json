@@ -26,7 +26,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "allow_on_submit": 1,
    "default": "1",
    "fieldname": "is_active",
    "fieldtype": "Check",
@@ -49,7 +48,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-05-03 22:31:39.085960",
+ "modified": "2026-05-03 22:44:07.484561",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "eTims Slade360 ID Mapping",

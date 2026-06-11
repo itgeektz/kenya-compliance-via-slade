@@ -1,5 +1,7 @@
-from .patches.create_connection_links import update_links_for_doctypes
+from kenya_compliance_via_slade.kenya_compliance_via_slade.patches.unhide_etims_fields import (
+    cleanup_property_setters,
+)
 
 
 def after_migrate():
-    update_links_for_doctypes()
+    cleanup_property_setters()

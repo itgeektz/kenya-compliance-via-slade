@@ -11,6 +11,7 @@ from frappe.model.document import Document
 
 from ..logger import etims_logger
 from ..utils import (
+    clean_url_params,
     reset_auth_password,
     update_last_request_date,
     update_navari_settings_with_token,
@@ -19,421 +20,780 @@ from .remote_response_status_handlers import on_slade_error
 
 
 class BaseEndpointsBuilder:
-    """Abstract Endpoints Builder class"""
+    """
+    Abstract base class that implements the *observer* pattern for error
+    propagation.
+
+    Observers are notified (via :py:meth:`notify`) whenever
+    :py:attr:`error` is set and a fatal condition is detected.
+    """
 
     def __init__(self) -> None:
-        self.integration_request: str | Document | None = None
-        self.error: str | Exception | None = None
+        self._integration_request: str | Document | None = None
+        self._error: str | Exception | None = None
         self._observers: list[ErrorObserver] = []
-        self.doctype: str | Document | None = None
-        self.document_name: str | None = None
+        self._doctype: str | Document | None = None
+        self._document_name: str | None = None
 
-    def attach(self, observer: ErrorObserver) -> None:
-        """Attach an observer
+    @property
+    def integration_request(self) -> str | Document | None:
+        """Integration Request document linked to the current request."""
+        return self._integration_request
+
+    @integration_request.setter
+    def integration_request(self, value: str | Document | None) -> None:
+        self._integration_request = value
+
+    @property
+    def error(self) -> str | Exception | None:
+        """Current error captured during request processing."""
+        return self._error
+
+    @error.setter
+    def error(self, value: str | Exception | None) -> None:
+        self._error = value
+
+    @property
+    def doctype(self) -> str | Document | None:
+        """Reference doctype associated with the current request."""
+        return self._doctype
+
+    @doctype.setter
+    def doctype(self, value: str | Document | None) -> None:
+        self._doctype = value
+
+    @property
+    def document_name(self) -> str | None:
+        """Reference document name associated with the current request."""
+        return self._document_name
+
+    @document_name.setter
+    def document_name(self, value: str | None) -> None:
+        self._document_name = value
+
+    def attach(self, observer: "ErrorObserver") -> None:
+        """
+        Attach an error observer.
 
         Args:
-            observer (AbstractObserver): The observer to attach
+            observer: An :py:class:`ErrorObserver` instance that will be
+                      notified when a fatal error occurs.
         """
         self._observers.append(observer)
 
     def notify(self) -> None:
-        """Notify all attached observers."""
+        """Notify all attached observers of the current error state."""
         for observer in self._observers:
             observer.update(self)
 
 
 class ErrorObserver:
-    """Error observer class."""
+    """
+    Reacts to fatal errors surfaced by an :py:class:`BaseEndpointsBuilder`.
+
+    On notification it updates the linked ``Integration Request`` to
+    ``"Failed"``, logs the error, and raises a hard ``frappe.throw``.
+    """
 
     def update(self, notifier: BaseEndpointsBuilder) -> None:
-        """Reacts to event from notifier
+        """
+        Handle a fatal-error notification.
 
         Args:
-            notifier (AbstractEndpointsBuilder): The event notifier object
+            notifier: The builder that encountered the error.
         """
-        if notifier.error:
-            # TODO: Check why integration log is never updated
-            update_integration_request(
-                notifier.integration_request.name,
-                status="Failed",
-                output=None,
-                error=notifier.error,
-            )
-            etims_logger.exception(notifier.error, exc_info=True)
-            frappe.log_error(
-                title="Fatal Error",
-                message=notifier.error,
-                reference_doctype=notifier.doctype,
-                reference_name=notifier.document_name,
-            )
-            frappe.throw(
-                """A Fatal Error was Encountered.
-                Please check the Error Log for more details""",
-                notifier.error,
-                title="Fatal Error",
-            )
+        if not notifier.error:
+            return
+
+        _update_integration_request(
+            notifier.integration_request.name,
+            status="Failed",
+            output=None,
+            error=notifier.error,
+        )
+
+        etims_logger.exception(notifier.error, exc_info=True)
+
+        frappe.log_error(
+            title="Fatal Error",
+            message=notifier.error,
+            reference_doctype=notifier.doctype,
+            reference_name=notifier.document_name,
+        )
+
+        frappe.throw(
+            "A Fatal Error was encountered. Please check the Error Log for details.",
+            notifier.error,
+            title="Fatal Error",
+        )
 
 
 class EndpointsBuilder(BaseEndpointsBuilder):
     """
-    Base Endpoints Builder class.
-    This class harbours common functionalities when communicating with etims servers
+    Concrete HTTP client used to communicate with eTims / Slade 360 servers.
+
+    Usage pattern::
+
+        builder = EndpointsBuilder()
+        builder.headers = {...}
+        builder.url = "https://..."
+        builder.method = "POST"
+        builder.payload = {...}
+        builder.success_callback = my_handler
+        builder.settings = settings_doc
+        builder.job_queue = job_doc
+        builder.doctype = "Sales Invoice"
+        builder.document_name = "SI-001"
+        builder.page_size = 500
+        builder.page = 2
+        response = builder.make_remote_call()
+
+    The builder is typically reused (module-level singleton in ``etims_job_queue.py``)
+    with properties reset before each call.
     """
 
     def __init__(self) -> None:
         super().__init__()
+
         self._url: str | None = None
+        self._route_path: str | None = None
         self._request_description: str | None = None
-        self._payload: dict | None = None
-        self._settings: dict | None = None
-        self._headers: dict | None = None
+        self._payload: dict | list | None = None
+        self._settings: Document | dict | None = None
+        self._headers: dict[str, str] | None = None
         self._method: Literal["GET", "POST", "PATCH", "PUT"] | None = None
-        self._success_callback_handler: Callable | None = None
-        self._error_callback_handler: Callable | None = None
+        self._success_callback_handler: Callable[..., None] | None = None
+        self._error_callback_handler: Callable[..., None] | None = None
+        self._job_queue: Document | None = None
+        self._page_size: int | None = None
+        self._page: int | None = None
 
         self.attach(ErrorObserver())
 
     @property
     def method(self) -> Literal["GET", "POST", "PATCH", "PUT"] | None:
-        """The HTTP method to use for the request."""
+        """HTTP method for the next request."""
         return self._method
 
     @method.setter
-    def method(self, new_method: Literal["GET", "POST", "PATCH", "PUT"]) -> None:
-        self._method = new_method
+    def method(self, value: Literal["GET", "POST", "PATCH", "PUT"]) -> None:
+        self._method = value
 
     @property
     def url(self) -> str | None:
+        """Target URL (may include query-string for GET requests)."""
         return self._url
 
     @url.setter
-    def url(self, new_url: str) -> None:
-        self._url = new_url
+    def url(self, value: str | None) -> None:
+        self._url = value
 
     @property
     def route_path(self) -> str | None:
+        """Relative route path (used for logging and ``update_last_request_date``)."""
         return self._route_path
 
     @route_path.setter
-    def route_path(self, new_route_path: str) -> None:
-        self._route_path = new_route_path
+    def route_path(self, value: str | None) -> None:
+        self._route_path = value
 
     @property
     def request_description(self) -> str | None:
+        """Human-readable label for the request (stored on Integration Request)."""
         return self._request_description
 
     @request_description.setter
-    def request_description(self, new_request_description: str) -> None:
-        self._request_description = new_request_description
+    def request_description(self, value: str | None) -> None:
+        self._request_description = value
 
     @property
-    def payload(self) -> dict | None:
+    def payload(self) -> dict | list | None:
+        """Request body / query params dict."""
         return self._payload
 
     @payload.setter
-    def payload(self, new_payload: dict) -> None:
-        self._payload = new_payload
+    def payload(self, value: dict | list | None) -> None:
+        self._payload = value
 
     @property
-    def settings(self) -> dict | None:
+    def settings(self) -> Document | dict | None:
+        """eTims Settings document (or dict) associated with this call."""
         return self._settings
 
     @settings.setter
-    def settings(self, new_settings: dict) -> None:
-        self._settings = new_settings
+    def settings(self, value: Document | dict | None) -> None:
+        self._settings = value
 
     @property
-    def headers(self) -> dict | None:
+    def headers(self) -> dict[str, str] | None:
+        """HTTP headers including ``Authorization``."""
         return self._headers
 
     @headers.setter
-    def headers(self, new_headers: dict) -> None:
-        self._headers = new_headers
+    def headers(self, value: dict[str, str] | None) -> None:
+        self._headers = value
 
     @property
-    def success_callback(self) -> Callable | None:
+    def success_callback(self) -> Callable[..., None] | None:
+        """Callable invoked when the server returns 200/201/202."""
         return self._success_callback_handler
 
     @success_callback.setter
-    def success_callback(self, callback: Callable) -> None:
-        self._success_callback_handler = callback
+    def success_callback(self, value: Callable[..., None] | None) -> None:
+        self._success_callback_handler = value
 
     @property
-    def error_callback(self) -> Callable | None:
+    def error_callback(self) -> Callable[..., None] | None:
+        """Callable invoked on non-2xx responses."""
         return self._error_callback_handler
 
     @error_callback.setter
-    def error_callback(
-        self,
-        callback: Callable[[dict | str, str, str, str], None],
-    ) -> None:
-        self._error_callback_handler = callback
+    def error_callback(self, value: Callable[..., None] | None) -> None:
+        self._error_callback_handler = value
 
-    def refresh_token(self) -> str:
-        """Fetch a new token and update the headers."""
-        try:
-            settings = update_navari_settings_with_token(self._settings.name)
+    @property
+    def job_queue(self) -> Document | None:
+        """Queue document associated with the current request."""
+        return self._job_queue
 
-            if settings:
-                new_token = settings.access_token
-                self._headers["Authorization"] = f"Bearer {new_token}"
-                return new_token
-            else:
-                frappe.throw(
-                    "Failed to refresh token",
-                    frappe.AuthenticationError,
-                )
-        except requests.exceptions.RequestException as error:
-            frappe.throw(f"Error refreshing token: {error}", frappe.AuthenticationError)
+    @job_queue.setter
+    def job_queue(self, value: Document | None) -> None:
+        self._job_queue = value
+
+    @property
+    def page_size(self) -> int | None:
+        """Page size for paginated GET requests."""
+        return self._page_size
+
+    @page_size.setter
+    def page_size(self, value: int | None) -> None:
+        self._page_size = value
+
+    @property
+    def page(self) -> int | None:
+        """Page number for paginated GET requests."""
+        return self._page
+
+    @page.setter
+    def page(self, value: int | None) -> None:
+        self._page = value
 
     def make_remote_call(
         self,
-        doctype: Document | str | None = None,
-        document_name: str | None = None,
         retrying: bool = False,
-    ) -> str | None:
-        """Handles communication to Slade360 servers."""
-        if (
-            self._url is None
-            or self._headers is None
-            or self._method is None
-            or self._success_callback_handler is None
+    ) -> dict | str | bytes | None:
+        """
+        Issue the configured HTTP request and handle the response.
+
+        On success (200/201/202): invoke ``success_callback``, update the
+        Integration Request to ``"Completed"``, and mark the job ``"Success"``.
+
+        On error: update the Integration Request to ``"Failed"``, invoke
+        ``error_callback`` (if provided), and mark the job ``"Failed"``. If
+        the status code is 401 and this is not already a retry, refresh the
+        access token and retry once.
+
+        Args:
+            retrying: Internal flag — ``True`` on the single token-refresh
+                      retry. Prevents infinite loops.
+
+        Returns:
+            The parsed response (dict, str, or bytes) or ``None`` on error.
+        """
+        self._validate_required_fields()
+
+        if not self.settings.is_active == 1:
+            frappe.log_error(
+                title="Inactive eTims Settings",
+                message=(
+                    f"Settings '{self.settings.name}' is inactive. Remote call aborted."
+                ),
+                reference_doctype=self.doctype,
+                reference_name=self.document_name,
+            )
+            return None
+
+        if not retrying:
+            self.integration_request = self._create_integration_log(
+                self.doctype,
+                self.document_name,
+            )
+
+        try:
+            response = self._dispatch_http_request()
+
+            response_data = _parse_response(response)
+
+            update_last_request_date(
+                datetime.now(),
+                self.route_path,
+            )
+
+            if response.status_code in {200, 201, 202}:
+                self._handle_success(
+                    response_data,
+                    self.doctype,
+                    self.document_name,
+                )
+            else:
+                self._handle_error(
+                    response,
+                    response_data,
+                    self.doctype,
+                    self.document_name,
+                )
+
+                if response.status_code == 401 and not retrying:
+                    self.refresh_token()
+                    return self.make_remote_call(retrying=True)
+
+            return response_data
+
+        except Exception as exc:
+            frappe.log_error(
+                title="eTims — HTTP error",
+                message=(
+                    f"Error: {exc}\n"
+                    f"URL: {self.route_path}\n"
+                    f"Traceback:\n{frappe.get_traceback()}"
+                ),
+                reference_doctype=self.doctype,
+                reference_name=self.document_name,
+            )
+
+            if self.job_queue:
+                self.job_queue.update_status(
+                    status="Failed",
+                    error_message=str(exc),
+                    integration_request=(
+                        self.integration_request.name
+                        if self.integration_request
+                        else None
+                    ),
+                )
+
+            return None
+
+    def refresh_token(self) -> str | None:
+        """
+        Obtain a new access token and update ``Authorization`` in the headers.
+
+        Returns:
+            The new token string, or ``None`` if the refresh failed.
+
+        Raises:
+            frappe.AuthenticationError: If the refresh request fails.
+        """
+        try:
+            settings = update_navari_settings_with_token(self.settings.name)
+
+            if settings:
+                new_token = settings.access_token
+                self.headers["Authorization"] = f"Bearer {new_token}"
+                return new_token
+
+            frappe.throw(
+                "Failed to refresh token",
+                frappe.AuthenticationError,
+            )
+
+        except requests.exceptions.RequestException as exc:
+            frappe.throw(
+                f"Error refreshing token: {exc}",
+                frappe.AuthenticationError,
+            )
+
+    def _validate_required_fields(self) -> None:
+        """
+        Assert that all mandatory builder properties have been set.
+
+        Raises:
+            frappe.MandatoryError: If any required field is missing.
+        """
+        if not all(
+            [
+                self.url,
+                self.headers,
+                self.method,
+                self.success_callback,
+            ]
         ):
             frappe.throw(
-                """Please ensure all required parameters (URL, headers, method, success, and error callbacks) are set.""",
+                "Please ensure URL, headers, method, and success_callback are set.",
                 frappe.MandatoryError,
                 title="Setup Error",
                 is_minimizable=True,
             )
 
-        if not self._settings.is_active == 1:
-            frappe.log_error(
-                title="Inactive eTims Settings",
-                message=f"eTims settings {self._settings.name} is inactive. Cannot make remote call.",
-                reference_doctype=doctype,
-                reference_name=document_name,
-            )
-            return
+    def _create_integration_log(
+        self,
+        doctype: str | None,
+        document_name: str | None,
+    ) -> Document:
+        """
+        Create a Frappe ``Integration Request`` log for this call.
 
-        self.doctype, self.document_name = doctype, document_name
-        parsed_url = parse.urlparse(self._url)
-        route_path = f"/{parsed_url.path.split('/')[-1]}"
+        Falls back to a log without ``reference_docname`` if a
+        ``LinkValidationError`` is raised.
 
-        if not retrying:
-            try:
-                self.integration_request = create_request_log(
-                    data=self._payload,
-                    request_description=self._request_description,
-                    is_remote_request=True,
-                    service_name=self._request_description,
-                    request_headers=self._headers,
-                    url=self._url,
-                    reference_docname=document_name,
-                    reference_doctype=doctype,
-                )
-            except frappe.LinkValidationError:
-                # Retry without passing reference_docname if document doesn't exist
-                self.integration_request = create_request_log(
-                    data=self._payload,
-                    request_description=self._request_description,
-                    is_remote_request=True,
-                    service_name=self._request_description,
-                    request_headers=self._headers,
-                    url=self._url,
-                    reference_doctype=doctype,
-                )
+        Args:
+            doctype: Reference doctype.
+            document_name: Reference document name.
+
+        Returns:
+            The newly created ``Integration Request`` document.
+        """
+        cleaned_url = clean_url_params(self.url)
+
+        common = dict(
+            data=self.payload,
+            request_description=self.request_description,
+            is_remote_request=True,
+            service_name=self.request_description,
+            request_headers=self.headers,
+            url=cleaned_url,
+            reference_doctype=doctype,
+        )
 
         try:
-            if self._method == "POST":
-                response = requests.post(
-                    self._url, json=self._payload, headers=self._headers
-                )
-            elif self._method == "GET":
-                self._payload["page_size"] = 15000
-                response = requests.get(
-                    self._url, headers=self._headers, params=self._payload
-                )
-
-            elif self._method == "PATCH":
-                patch_id = self._payload.pop("id", None)
-                if patch_id and f"/{patch_id}/" not in self._url:
-                    self._url = f"{self._url.rstrip('/')}/{patch_id}/"
-                response = requests.patch(
-                    self._url, json=self._payload, headers=self._headers
-                )
-            elif self._method == "PUT":
-                put_id = self._payload.pop("id", None)
-                if put_id and f"/{put_id}/" not in self._url:
-                    self._url = f"{self._url.rstrip('/')}/{put_id}/"
-                response = requests.put(
-                    self._url, json=self._payload, headers=self._headers
-                )
-
-            response_data = get_response_data(response)
-            update_last_request_date(datetime.now(), self._route_path)
-
-            if response.status_code in {200, 201}:
-                frappe.db.set_value(
-                    "Integration Request",
-                    self.integration_request.name,
-                    "status",
-                    "Completed",
-                )
-
-                self._success_callback_handler(
-                    response=response_data,
-                    document_name=document_name,
-                    doctype=doctype,
-                    payload=self._payload,
-                    settings_name=self._settings.name,
-                )
-
-                current_page = response_data.get("current_page", None)
-                total_pages = response_data.get("total_pages", 0)
-
-                update_integration_request(
-                    self.integration_request.name,
-                    status="Completed",
-                    output=str(response_data),
-                    error=None,
-                    request_description=(
-                        f"Page {current_page} of {total_pages}"
-                        if int(total_pages) > 1
-                        else None
-                    ),
-                )
-            else:
-                if isinstance(response_data, str):
-                    error = response_data
-                elif isinstance(response_data, list):
-                    error = response_data[0]
-                else:
-                    error = str(response_data)
-
-                if (
-                    "could not decode json: Expecting value: line 1 column 1 (char 0)"
-                    in error
-                ):
-                    reset_auth_password(self._settings.name)
-
-                update_integration_request(
-                    self.integration_request.name,
-                    status="Failed",
-                    output=None,
-                    error=error,
-                )
-                on_slade_error(
-                    response_data,
-                    url=route_path,
-                    doctype=doctype,
-                    document_name=document_name,
-                )
-                if self._error_callback_handler:
-                    self._error_callback_handler(
-                        response=response_data,
-                        url=route_path,
-                        doctype=doctype,
-                        document_name=document_name,
-                        payload=self._payload,
-                        settings_name=self._settings.name,
-                    )
-
-                if response.status_code == 401 and not retrying:
-                    # Optionally, you can refresh token and retry here if needed
-                    self.refresh_token()
-                    self.make_remote_call(doctype, document_name, retrying=True)
-
-            return response_data
-
-        except Exception as error:
-            frappe.log_error(
-                title="eTims Error",
-                message=f"Error: {error} \nURL: {route_path} \nTraceback: {frappe.get_traceback()}",
-                reference_doctype=self.doctype,
-                reference_name=self.document_name,
+            return create_request_log(
+                **common,
+                reference_docname=document_name,
             )
-            # self.error = error
-            # self.notify()
-            return None
+
+        except frappe.LinkValidationError:
+            return create_request_log(**common)
+
+    def _dispatch_http_request(self) -> requests.Response:
+        """
+        Send the HTTP request using the configured method and return the raw
+        ``requests.Response``.
+
+        URL query parameters are normalized before dispatch to prevent
+        duplicated pagination params.
+
+        Returns:
+            requests.Response:
+                Raw HTTP response object.
+        """
+        request_url = (
+            self.job_queue.url if self.job_queue and self.job_queue.url else self.url
+        )
+
+        if self.method == "GET":
+            page_size = (
+                self.page_size
+                if self.page_size is not None
+                else (
+                    self.job_queue.page_size
+                    if self.job_queue and self.job_queue.page_size
+                    else 1000
+                )
+            )
+
+            page = (
+                self.page
+                if self.page is not None
+                else (
+                    self.job_queue.page
+                    if self.job_queue
+                    and hasattr(self.job_queue, "page")
+                    and self.job_queue.page
+                    else 1
+                )
+            )
+
+            params = {
+                **(self.payload or {}),
+                "page_size": page_size,
+                "page": page,
+            }
+
+            prepared = requests.Request(
+                method="GET",
+                url=request_url,
+                params=params,
+            ).prepare()
+
+            request_url = clean_url_params(prepared.url)
+
+            return requests.get(
+                request_url,
+                headers=self.headers,
+            )
+
+        if self.method == "POST":
+            request_url = clean_url_params(request_url)
+
+            return requests.post(
+                request_url,
+                json=self.payload,
+                headers=self.headers,
+            )
+
+        if self.method == "PATCH":
+            patch_id = (
+                self.payload.pop("id", None) if isinstance(self.payload, dict) else None
+            )
+
+            if patch_id and f"/{patch_id}/" not in request_url:
+                request_url = f"{request_url.rstrip('/')}/{patch_id}/"
+
+            request_url = clean_url_params(request_url)
+
+            return requests.patch(
+                request_url,
+                json=self.payload,
+                headers=self.headers,
+            )
+
+        if self.method == "PUT":
+            put_id = (
+                self.payload.pop("id", None) if isinstance(self.payload, dict) else None
+            )
+
+            if put_id and f"/{put_id}/" not in request_url:
+                request_url = f"{request_url.rstrip('/')}/{put_id}/"
+
+            request_url = clean_url_params(request_url)
+
+            return requests.put(
+                request_url,
+                json=self.payload,
+                headers=self.headers,
+            )
+
+        frappe.throw(f"Unsupported HTTP method: {self.method}")
+
+    def _handle_success(
+        self,
+        response_data: dict | str | bytes | None,
+        doctype: str | None,
+        document_name: str | None,
+    ) -> None:
+        """
+        Handle a 200/201 response.
+
+        * Invokes ``success_callback``.
+        * Updates the Integration Request to ``"Completed"``.
+        * Marks the job ``"Success"``.
+
+        Args:
+            response_data: Parsed response body.
+            doctype: Reference doctype.
+            document_name: Reference document name.
+        """
+        frappe.db.set_value(
+            "Integration Request",
+            self.integration_request.name,
+            "status",
+            "Completed",
+        )
+
+        self.success_callback(
+            response=response_data,
+            document_name=document_name,
+            doctype=doctype,
+            payload=self.payload,
+            settings_name=self.settings.name,
+        )
+
+        current_page = (
+            response_data.get("current_page")
+            if isinstance(response_data, dict)
+            else None
+        )
+
+        total_pages = (
+            response_data.get("total_pages", 0)
+            if isinstance(response_data, dict)
+            else 0
+        )
+
+        _update_integration_request(
+            self.integration_request.name,
+            status="Completed",
+            output=str(response_data),
+            error=None,
+            request_description=(
+                f"Page {current_page} of {total_pages}"
+                if total_pages and int(total_pages) > 1
+                else None
+            ),
+        )
+
+        if self.job_queue:
+            self.job_queue.update_status(
+                status="Success",
+                error_message=None,
+                integration_request=self.integration_request.name,
+            )
+
+    def _handle_error(
+        self,
+        response: requests.Response,
+        response_data: dict | str | bytes | None,
+        doctype: str | None,
+        document_name: str | None,
+    ) -> None:
+        """
+        Handle a non-2xx response.
+
+        * Extracts a human-readable error message.
+        * Resets auth password on JSON-decode errors.
+        * Updates the Integration Request to ``"Failed"``.
+        * Calls ``on_slade_error`` and ``error_callback``.
+        * Marks the job ``"Failed"``.
+
+        Args:
+            response: The raw ``requests.Response``.
+            response_data: Parsed response body.
+            doctype: Reference doctype.
+            document_name: Reference document name.
+        """
+        parsed_url = parse.urlparse(self.url)
+
+        route_path = f"/{parsed_url.path.split('/')[-1]}"
+
+        if isinstance(response_data, str):
+            error = response_data
+        elif isinstance(response_data, list):
+            error = response_data[0] if response_data else "Unknown error"
+        else:
+            error = str(response_data)
+
+        if "could not decode json" in error.lower():
+            reset_auth_password(self.settings.name)
+
+        _update_integration_request(
+            self.integration_request.name,
+            status="Failed",
+            output=None,
+            error=error,
+        )
+
+        on_slade_error(
+            response_data,
+            url=route_path,
+            doctype=doctype,
+            document_name=document_name,
+        )
+
+        if self.job_queue:
+            self.job_queue.update_status(
+                status="Failed",
+                error_message=error,
+                integration_request=self.integration_request.name,
+            )
+
+        if self.error_callback:
+            self.error_callback(
+                response=response_data,
+                url=route_path,
+                doctype=doctype,
+                document_name=document_name,
+                payload=self.payload,
+                settings_name=self.settings.name,
+            )
 
 
-def get_response_data(response: requests.Response) -> Optional[Union[dict, str, bytes]]:
+def _parse_response(
+    response: requests.Response,
+) -> Optional[Union[dict, str, bytes]]:
+    """
+    Extract the response body in the most appropriate Python type based on the
+    ``Content-Type`` header.
+
+    Args:
+        response: A ``requests.Response`` object.
+
+    Returns:
+        * ``dict`` for JSON responses.
+        * ``str`` for plain-text or XML responses.
+        * ``bytes`` for binary/octet-stream/PDF/ZIP responses.
+        * ``None`` if the body is empty or the content type is unrecognised.
+    """
     content_type = response.headers.get("Content-Type", "").lower()
 
     if "application/json" in content_type:
         return response.json()
-    elif "text/plain" in content_type or "text/html" in content_type:
+
+    if "text/plain" in content_type or "text/html" in content_type:
         return response.text if response.text.strip() else None
-    elif "application/xml" in content_type or "text/xml" in content_type:
+
+    if "application/xml" in content_type or "text/xml" in content_type:
         return response.text if response.text.strip() else None
-    elif (
-        "application/octet-stream" in content_type
-        or "application/pdf" in content_type
-        or "application/zip" in content_type
+
+    if any(
+        ct in content_type
+        for ct in (
+            "application/octet-stream",
+            "application/pdf",
+            "application/zip",
+        )
     ):
         return response.content
 
     return None
 
 
-def update_integration_request(
+def _update_integration_request(
     integration_request: str,
     status: Literal["Completed", "Failed"],
     output: str | None = None,
     error: str | None = None,
     request_description: str | None = None,
 ) -> None:
-    """Updates the given integration request record silently without creating a version.
+    """
+    Silently update an ``Integration Request`` document without creating a
+    version history entry.
+
+    Each field is appended to rather than overwritten so that multiple partial
+    updates accumulate a complete audit trail.
 
     Args:
-        integration_request (str): The provided integration request.
-        status (Literal["Completed", "Failed"]): The new status of the request.
-        output (str | None, optional): The response message, if any. Defaults to None.
-        error (str | None, optional): The error message, if any. Defaults to None.
-        request_description (str | None, optional): Additional description for the request.
+        integration_request: The ``name`` of the Integration Request document.
+        status: New status.
+        output: Success response text to append.
+        error: Error detail to append.
+        request_description: Additional description label to append.
     """
-    update_fields = {"status": status}
+    update_fields: dict = {"status": status}
+
+    def _append(
+        field: str,
+        new_value: str,
+        separator: str = "\n",
+    ) -> None:
+        current = frappe.db.get_value(
+            "Integration Request",
+            integration_request,
+            field,
+        )
+
+        if not current or current == "null":
+            update_fields[field] = new_value[:5000]
+
+        elif new_value not in current:
+            combined = current + separator + new_value
+            update_fields[field] = combined[:5000]
 
     if error:
-        current_error = frappe.db.get_value(
-            "Integration Request", integration_request, "error"
-        )
-        if current_error == "null" or not current_error:
-            update_fields["error"] = error[:5000] if len(error) > 5000 else error
-        elif error not in current_error:
-            new_error = current_error + "\n" + error
-            update_fields["error"] = (
-                new_error[:5000] if len(new_error) > 5000 else new_error
-            )
+        _append("error", error)
 
     if output:
-        current_output = frappe.db.get_value(
-            "Integration Request", integration_request, "output"
-        )
-        if current_output == "null" or not current_output:
-            update_fields["output"] = output[:5000] if len(output) > 5000 else output
-        elif output not in current_output:
-            new_output = current_output + "\n" + output
-            update_fields["output"] = (
-                new_output[:5000] if len(new_output) > 5000 else new_output
-            )
+        _append("output", output)
 
     if request_description:
-        current_desc = frappe.db.get_value(
-            "Integration Request", integration_request, "request_description"
+        _append(
+            "request_description",
+            request_description,
+            " - ",
         )
-        if current_desc == "null" or not current_desc:
-            update_fields["request_description"] = (
-                request_description[:5000]
-                if len(request_description) > 5000
-                else request_description
-            )
-        elif request_description not in current_desc:
-            new_desc = current_desc + " - " + request_description
-            update_fields["request_description"] = (
-                new_desc[:5000] if len(new_desc) > 5000 else new_desc
-            )
 
     frappe.db.set_value(
-        "Integration Request", integration_request, update_fields, update_modified=False
+        "Integration Request",
+        integration_request,
+        update_fields,
+        update_modified=False,
     )

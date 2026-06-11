@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 from io import BytesIO
 from typing import Any, Dict, List, Union
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
 import aiohttp
 import frappe
@@ -21,9 +21,14 @@ from frappe import _
 from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
 from frappe.query_builder import DocType
-from frappe.utils import add_to_date, now_datetime
+from frappe.utils import (
+    add_to_date,
+    get_datetime,
+    now_datetime,
+)
 
 from .doctype.doctype_names_mapping import (
+    COUNTRIES_DOCTYPE_NAME,
     ENVIRONMENT_SPECIFICATION_DOCTYPE_NAME,
     ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
     ORGANISATION_MAPPING_DOCTYPE_NAME,
@@ -422,14 +427,14 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
     currency = invoice.currency
     company_currency = frappe.get_value("Company", invoice.company, "default_currency")
     convertion_rate = 1
-    rate_field, tax_field = "net_rate", "custom_tax_amount"
+    rate_field, tax_field = "net_rate", "etims_tax_amount"
 
     if currency == "KES":
         rate_field = "net_rate"
-        tax_field = "custom_tax_amount"
+        tax_field = "etims_tax_amount"
     elif company_currency == "KES":
         rate_field = "base_net_rate"
-        tax_field = "custom_base_tax_amount"
+        tax_field = "etims_base_tax_amount"
     else:
         convertion_rate, used_rate = get_kes_conversion_rate(
             currency=currency,
@@ -438,7 +443,7 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
         )
         if used_rate != "net":
             rate_field = "base_net_rate"
-            tax_field = "custom_base_tax_amount"
+            tax_field = "etims_base_tax_amount"
 
     reference_number = get_invoice_reference_number(invoice)
     date_str = f"{invoice.posting_date} {invoice.posting_time or '00:00:00'}"
@@ -448,13 +453,13 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
         "document_name": invoice.name,
         "reference_number": reference_number,
         "sales_type": "credit",
-        "customer_pin": invoice.tax_id
-        or frappe.get_value("Customer", invoice.customer, "tax_id")
+        "customer_pin": frappe.get_value("Customer", invoice.customer, "tax_id")
         or None,
         "partner_name": frappe.get_value("Customer", invoice.customer, "customer_name")
         or None,
         "invoice_date": formatted_date,
         "itemDetails": [],
+        "invoice_details": True,
     }
 
     tax_map = calculate_tax(invoice)
@@ -484,6 +489,49 @@ def build_invoice_payload(invoice: Document, settings_name: str) -> dict:
     return payload
 
 
+def build_bulk_invoice_payload(
+    invoice_names: list[str],
+    settings_name: str,
+) -> dict:
+    invoices_payload = []
+
+    callback_url = build_callback_url(
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.bulk_invoice_callback"
+    )
+
+    for invoice_name in invoice_names:
+        invoice = frappe.get_doc("Sales Invoice", invoice_name)
+
+        invoices_payload.append(
+            build_invoice_payload(
+                invoice=invoice,
+                settings_name=settings_name,
+            )
+        )
+
+    return {
+        "invoices": invoices_payload,
+        "callback_url": callback_url,
+    }
+
+
+def build_callback_url(endpoint: str) -> str:
+    base_url = frappe.utils.get_url()
+
+    parsed_url = urlparse(base_url)
+
+    if parsed_url.hostname:
+        if not (
+            parsed_url.hostname == "localhost"
+            or parsed_url.hostname.replace(".", "").isdigit()
+        ):
+            base_url = f"{parsed_url.scheme}://{parsed_url.hostname}"
+
+    # base_url = "https://a0ce-196-96-35-223.ngrok-free.app"
+
+    return f"{base_url}/api/method/{endpoint}"
+
+
 def get_invoice_items_list(invoice: Document) -> list[dict[str, str | int | None]]:
     """Iterates over the invoice items and extracts relevant data
 
@@ -502,7 +550,7 @@ def get_invoice_items_list(invoice: Document) -> list[dict[str, str | int | None
         # actual_tax_amount = 0
         # tax_head = invoice.taxes[0].description  # Fetch tax head from taxes table
 
-        # actual_tax_amount = item_taxes[index][tax_head]["tax_amount"]
+        # actual_tax_amount = item_taxes[index][tax_head]["etims_tax_amount"]
 
         # tax_amount = round(actual_tax_amount, 2)
 
@@ -641,7 +689,7 @@ def _calculate_taxes_by_hierarchy(doc: "Document") -> dict:
         elif template_rate > 0:
             rate = template_rate
         elif not has_item_templates and doc.get("taxes") and total_net > 0:
-            total_doc_tax = sum(float(t.tax_amount or 0) for t in doc.taxes)
+            total_doc_tax = sum(float(t.etims_tax_amount or 0) for t in doc.taxes)
             item_tax = total_doc_tax * (base_net / total_net)
             rate = (item_tax / base_net) * 100 if base_net else 0.0
 
@@ -689,9 +737,9 @@ def _prepare_tax_entry(
     tax_amount = base_tax / conv_rate if is_foreign else base_tax
 
     return {
-        "custom_tax_amount": round(tax_amount, 2),
-        "custom_base_tax_amount": round(base_tax, 2),
-        "custom_tax_rate": round(rate, 2),
+        "etims_tax_amount": round(tax_amount, 2),
+        "etims_base_tax_amount": round(base_tax, 2),
+        "etims_tax_rate": round(rate, 2),
         "taxation_type_code": _determine_taxation_code(item, rate),
     }
 
@@ -727,7 +775,7 @@ def _determine_taxation_code(item: object, rate: float) -> str:
     """
     if item.item_tax_template:
         code = frappe.get_value(
-            "Item Tax Template", item.item_tax_template, "custom_etims_taxation_type"
+            "Item Tax Template", item.item_tax_template, "etims_taxation_type"
         )
         if code:
             return code
@@ -754,18 +802,18 @@ def apply_item_taxes_and_codes(doc: "Document") -> None:
         if not data:
             continue
 
-        item.custom_tax_amount = data["custom_tax_amount"]
-        item.custom_base_tax_amount = data["custom_base_tax_amount"]
-        item.custom_tax_rate = data["custom_tax_rate"]
-        item.taxation_type_code = data["taxation_type_code"]
+        item.etims_tax_amount = data["etims_tax_amount"]
+        item.etims_base_tax_amount = data["etims_base_tax_amount"]
+        item.etims_tax_rate = data["etims_tax_rate"]
+        item.etims_taxation_type_code = data["taxation_type_code"]
 
         frappe.db.set_value(
             "Sales Invoice Item",
             item.name,
             {
-                "custom_tax_amount": data["custom_tax_amount"],
-                "custom_base_tax_amount": data["custom_base_tax_amount"],
-                "custom_tax_rate": data["custom_tax_rate"],
+                "etims_tax_amount": data["etims_tax_amount"],
+                "etims_base_tax_amount": data["etims_base_tax_amount"],
+                "etims_tax_rate": data["etims_tax_rate"],
                 "taxation_type_code": data["taxation_type_code"],
             },
             update_modified=False,
@@ -774,6 +822,36 @@ def apply_item_taxes_and_codes(doc: "Document") -> None:
 
 def after_save_(doc: "Document", method: str | None = None) -> None:
     apply_item_taxes_and_codes(doc)
+
+    if doc.doctype == "Sales Invoice":
+        response = analyze_etims_eligibility(doc.name)
+
+        if response.get("eligible"):
+            url = build_verification_url(doc)
+
+            if not doc.get("etims_verification_url"):
+                frappe.db.set_value(
+                    doc.doctype,
+                    doc.name,
+                    "etims_verification_url",
+                    url,
+                    update_modified=False,
+                )
+
+            if (
+                hasattr(doc, "enable_background_invoice_submission")
+                and doc.enable_background_invoice_submission
+                and url
+                and not doc.etims_qr_image
+            ):
+                image_url = generate_and_attach_qr_code(url, doc.name, doc.doctype)
+                frappe.db.set_value(
+                    doc.doctype,
+                    doc.name,
+                    "etims_qr_image",
+                    image_url,
+                    update_modified=False,
+                )
 
 
 def get_invoice_number(invoice_name: str) -> int:
@@ -809,10 +887,10 @@ def get_taxation_types(doc: dict) -> dict:
     for item in doc.items:
         # Fetch the taxation type using item_code
         taxation_type = frappe.db.get_value(
-            "Item", item.item_code, "custom_taxation_type"
+            "Item", item.item_code, "etims_taxation_type"
         )
         taxable_amount = item.net_amount
-        tax_amount = item.custom_tax_amount
+        tax_amount = item.etims_tax_amount
 
         # Fetch the tax rate for the current taxation type from the specified doctype
         tax_rate = frappe.db.get_value(
@@ -821,12 +899,12 @@ def get_taxation_types(doc: dict) -> dict:
         # If the taxation type already exists in the dictionary, update the totals
         if taxation_type in taxation_totals:
             taxation_totals[taxation_type]["taxable_amount"] += taxable_amount
-            taxation_totals[taxation_type]["tax_amount"] += tax_amount
+            taxation_totals[taxation_type]["etims_tax_amount"] += tax_amount
 
         else:
             taxation_totals[taxation_type] = {
-                "tax_rate": tax_rate,
-                "tax_amount": tax_amount,
+                "etims_tax_rate": tax_rate,
+                "etims_tax_amount": tax_amount,
                 "taxable_amount": taxable_amount,
             }
 
@@ -950,12 +1028,21 @@ def update_navari_settings_with_token(docname: str, skip_checks: bool = False) -
         if not token_details:
             return None
 
-        settings_doc.access_token = token_details["access_token"]
-        settings_doc.refresh_token = token_details["refresh_token"]
-        settings_doc.token_expiry = datetime.now() + timedelta(
-            seconds=token_details["expires_in"]
+        frappe.db.set_value(
+            SETTINGS_DOCTYPE_NAME,
+            docname,
+            {
+                "access_token": token_details["access_token"],
+                "refresh_token": token_details["refresh_token"],
+                "token_expiry": datetime.now()
+                + timedelta(seconds=token_details["expires_in"]),
+            },
+            update_modified=False,
         )
-        settings_doc.save(ignore_permissions=True)
+
+        frappe.db.commit()
+
+        settings_doc.reload()
 
         # user_details_fetch(docname)
 
@@ -1088,7 +1175,7 @@ def get_company_from_setup_mapping(cluster_id: str, setup_name: str) -> str:
     mappings = frappe.get_all(
         "eTims Company Setup Mapping",
         filters={
-            "etims_setup": setup_name,
+            "setup_docname": setup_name,
             "cluster": cluster_id,
             "parenttype": "Company",
             "is_active": 1,
@@ -1134,9 +1221,9 @@ def update_company_slade_ids(
 
         company_doc = frappe.get_doc("Company", company)
 
-        mappings = company_doc.get("etims_setup_mapping") or []
+        mappings = company_doc.get("etims_id_mapping") or []
         existing_mapping = (
-            next((m for m in mappings if m.etims_setup == setting_name), None)
+            next((m for m in mappings if m.setup_docname == setting_name), None)
             if mappings
             else None
         )
@@ -1153,8 +1240,8 @@ def update_company_slade_ids(
                     "doctype": "eTims Company Setup Mapping",
                     "parent": company_doc.name,
                     "parenttype": SETTINGS_DOCTYPE_NAME,
-                    "parentfield": "etims_setup_mapping",
-                    "etims_setup": setting_name,
+                    "parentfield": "etims_id_mapping",
+                    "setup_docname": setting_name,
                     "organisation": organisation_id,
                     "is_active": 1,
                 }
@@ -1175,7 +1262,7 @@ def get_department(id: str, company: str) -> str:
             "Department",
             existing_department,
             {
-                "custom_slade_id": id,
+                "etims_id": id,
                 "custom_is_etims_department": 1,
                 "company": company,
             },
@@ -1186,7 +1273,7 @@ def get_department(id: str, company: str) -> str:
             {
                 "doctype": "Department",
                 "department_name": department_name,
-                "custom_slade_id": id,
+                "etims_id": id,
                 "custom_is_etims_department": 1,
                 "company": company,
             }
@@ -1261,7 +1348,7 @@ def process_dynamic_url(route_path: str, request_data: dict | str) -> str:
 
 def generate_custom_item_code_etims(doc: Document) -> str:
     """Generate custom item code ETIMS based on the document fields"""
-    new_prefix = f"{doc.custom_etims_country_of_origin_code}{doc.custom_product_type}{doc.custom_packaging_unit_code}{doc.custom_unit_of_quantity_code}"
+    new_prefix = f"{doc.etims_country_of_origin}{doc.etims_product_type}{doc.etims_packaging_unit_code}{doc.etims_unit_of_quantity_code}"
 
     if doc.custom_item_code_etims:
         existing_suffix = doc.custom_item_code_etims[-7:]
@@ -1270,11 +1357,11 @@ def generate_custom_item_code_etims(doc: Document) -> str:
             """
             SELECT custom_item_code_etims
             FROM `tabItem`
-            WHERE custom_item_classification = %s
+            WHERE item_classification = %s
             ORDER BY CAST(SUBSTRING(custom_item_code_etims, -7) AS UNSIGNED) DESC
             LIMIT 1
             """,
-            (doc.custom_item_classification,),
+            (doc.etims_item_classification,),
         )
         last_code = last_code[0][0] if last_code else None
         if last_code:
@@ -1501,7 +1588,7 @@ def get_active_settings(
 #         frappe.throw(_("An error occurred while fetching settings"))
 
 
-def get_slade360_id(doctype: str, name: str, setting: str) -> str:
+def get_etims_id(doctype: str, name: str, setting: str) -> str:
     if not frappe.db.exists(doctype, name):
         frappe.throw(
             _("Document {0} with name {1} does not exist.").format(doctype, name)
@@ -1511,7 +1598,7 @@ def get_slade360_id(doctype: str, name: str, setting: str) -> str:
         frappe.throw(_("eTims Setup {0} is not active.").format(setting))
 
     base_filters = {
-        "etims_setup": setting,
+        "setup_docname": setting,
         "parenttype": doctype,
         "parent": name,
     }
@@ -1525,7 +1612,7 @@ def get_slade360_id(doctype: str, name: str, setting: str) -> str:
     slade_id = frappe.db.get_value(
         SLADE_ID_MAPPING_DOCTYPE_NAME,
         filters=filters,
-        fieldname="slade360_id",
+        fieldname="etims_id",
     )
 
     if (
@@ -1554,12 +1641,12 @@ def get_slade360_id(doctype: str, name: str, setting: str) -> str:
     return slade_id
 
 
-def get_parent_by_slade360_id(doctype: str, slade360_id: str, setting: str) -> str:
+def get_parent_by_etims_id(doctype: str, etims_id: str, setting: str) -> str:
     """Returns the parent document name for a given Slade360 ID.
 
     Args:
         doctype (str): The parent doctype
-        slade360_id (str): The Slade360 ID to search for
+        etims_id (str): The Slade360 ID to search for
         setting (str): The eTims setting name
 
     Returns:
@@ -1568,9 +1655,9 @@ def get_parent_by_slade360_id(doctype: str, slade360_id: str, setting: str) -> s
     parent_name = frappe.db.get_value(
         SLADE_ID_MAPPING_DOCTYPE_NAME,
         filters={
-            "etims_setup": setting,
+            "setup_docname": setting,
             "parenttype": doctype,
-            "slade360_id": slade360_id,
+            "etims_id": etims_id,
         },
         fieldname="parent",
     )
@@ -1612,16 +1699,16 @@ def get_etims_action_data(doctype: str, docname: str = None) -> dict[str, Any]:
     registered_mappings = []
     registered_setup_names = set()
 
-    for row in getattr(doc, "etims_setup_mapping", []):
-        if row.etims_setup in active_setting_names:
+    for row in getattr(doc, "etims_id_mapping", []):
+        if row.setup_docname in active_setting_names:
             registered_mappings.append(
                 {
-                    "etims_setup": row.etims_setup,
-                    "slade360_id": row.slade360_id,
+                    "setup_docname": row.setup_docname,
+                    "etims_id": row.etims_id,
                     "name": row.name,
                 }
             )
-            registered_setup_names.add(row.etims_setup)
+            registered_setup_names.add(row.setup_docname)
 
     unregistered_settings = [
         s for s in active_settings if s["name"] not in registered_setup_names
@@ -1681,16 +1768,20 @@ def build_item_payload(item, settings_name: str, slade_id: str = None) -> dict:
     """Construct the payload for item registration"""
     selling_price = round(item.get("valuation_rate", 1), 2) or 1
     purchasing_price = round(item.get("last_purchase_rate", 1), 2)
-    tax = get_slade360_id(
-        TAXATION_TYPE_DOCTYPE_NAME, item.get("custom_taxation_type"), settings_name
+    tax = get_etims_id(
+        TAXATION_TYPE_DOCTYPE_NAME, item.get("etims_taxation_type"), settings_name
     )
     id = slade_id or next(
         (
-            row.slade360_id
-            for row in item.etims_setup_mapping
-            if row.etims_setup == settings_name
+            row.etims_id
+            for row in item.etims_id_mapping
+            if row.setup_docname == settings_name
         ),
         None,
+    )
+
+    country_of_origin = frappe.db.get_value(
+        COUNTRIES_DOCTYPE_NAME, item.etims_country_of_origin, "alpha_3_code"
     )
 
     payload = {
@@ -1701,25 +1792,24 @@ def build_item_payload(item, settings_name: str, slade_id: str = None) -> dict:
         "can_be_purchased": bool(item.is_purchase_item),
         "company_name": frappe.defaults.get_user_default("Company"),
         "code": item.item_code,
-        # "scu_item_code": item.custom_item_code_etims,
-        "scu_item_classification": frappe.db.get_value(
+        "scu_item_classification": get_etims_id(
             ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
-            item.custom_item_classification,
-            "slade_id",
-        ),
-        "product_type": item.custom_product_type,
-        "item_type": item.custom_item_type,
-        "preferred_name": item.item_name,
-        "country_of_origin": item.custom_etims_country_of_origin_code,
-        "selling_price": selling_price,
-        "packaging_unit": get_slade360_id(
-            PACKAGING_UNIT_DOCTYPE_NAME,
-            item.custom_packaging_unit,
+            item.etims_item_classification,
             settings_name,
         ),
-        "quantity_unit": get_slade360_id(
+        "product_type": item.etims_product_type,
+        "item_type": item.etims_item_type,
+        "preferred_name": item.item_name,
+        "country_of_origin": country_of_origin,
+        "selling_price": selling_price,
+        "packaging_unit": get_etims_id(
+            PACKAGING_UNIT_DOCTYPE_NAME,
+            item.etims_packaging_unit,
+            settings_name,
+        ),
+        "quantity_unit": get_etims_id(
             UNIT_OF_QUANTITY_DOCTYPE_NAME,
-            item.custom_unit_of_quantity,
+            item.etims_unit_of_quantity,
             settings_name,
         ),
         "purchasing_price": purchasing_price,
@@ -1791,9 +1881,10 @@ def build_partner_payload(
         "+254" + phone_number[-9:] if len(phone_number) >= 9 else None
     )
 
-    currency_name = get_slade360_id(
+    currency_name = get_etims_id(
         "Currency",
-        payload.get("currency"),
+        # payload.get("currency"),
+        "KES",
         settings_name,
     )
 
@@ -1806,9 +1897,9 @@ def build_partner_payload(
 
     id = existing_id or next(
         (
-            row.slade360_id
-            for row in data.etims_setup_mapping
-            if row.etims_setup == settings_name
+            row.etims_id
+            for row in data.etims_id_mapping
+            if row.setup_docname == settings_name
         ),
         None,
     )
@@ -1861,14 +1952,14 @@ def build_return_invoice_payload(
     currency = invoice.currency
     company_currency = frappe.get_value("Company", invoice.company, "default_currency")
     convertion_rate = 1
-    rate_field, tax_field = "net_rate", "custom_tax_amount"
+    rate_field, tax_field = "net_rate", "etims_tax_amount"
 
     if currency == "KES":
         rate_field = "net_rate"
-        tax_field = "custom_tax_amount"
+        tax_field = "etims_tax_amount"
     elif company_currency == "KES":
         rate_field = "base_net_rate"
-        tax_field = "custom_base_tax_amount"
+        tax_field = "etims_base_tax_amount"
     else:
         convertion_rate, used_rate = get_kes_conversion_rate(
             currency=currency,
@@ -1877,7 +1968,7 @@ def build_return_invoice_payload(
         )
         if used_rate != "net":
             rate_field = "base_net_rate"
-            tax_field = "custom_base_tax_amount"
+            tax_field = "etims_base_tax_amount"
 
     original_invoice = frappe.get_doc("Sales Invoice", invoice.return_against)
     original_invoice_total = abs(
@@ -2020,7 +2111,7 @@ def prepare_credit_note_items_payload(
     for item in items:
         credit_note_items.append(
             {
-                "product": get_slade360_id(
+                "product": get_etims_id(
                     "Item",
                     item.get("product_name"),
                     settings_name,
@@ -2079,3 +2170,279 @@ def get_next_run(frequency, cron=None):
             return None
 
     return None
+
+
+def clean_url_params(url: str) -> str:
+    """
+    Removes duplicated query parameters from a URL.
+
+    Keeps only the first occurrence of each parameter
+    while preserving the original URL structure.
+
+    Example:
+        Input:
+            http://example.com?page=5&page_size=100&page_size=100
+
+        Output:
+            http://example.com?page=5&page_size=100
+
+    Args:
+        url (str):
+            URL to normalize.
+
+    Returns:
+        str:
+            URL with cleaned query parameters.
+    """
+
+    if not url:
+        return url
+
+    parsed = urlparse(url)
+
+    query_dict = parse_qs(
+        parsed.query,
+        keep_blank_values=True,
+    )
+
+    cleaned_query = {key: values[0] for key, values in query_dict.items() if values}
+
+    normalized_query = urlencode(cleaned_query)
+
+    return urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            normalized_query,
+            parsed.fragment,
+        )
+    )
+
+
+def update_sales_invoice_etims_details(name: str) -> None:
+    sales_invoice = frappe.get_doc("Sales Invoice", name)
+
+    etims_ledger = frappe.db.get_value(
+        "eTIMS Sales Ledger Entry",
+        {"sales_invoice": sales_invoice.name},
+        [
+            "name",
+            "etims_id",
+            "etims_qr_code_url",
+        ],
+        as_dict=True,
+        order_by="creation desc",
+    )
+
+    updates = {
+        "etims_qr_code_url": None,
+        "etims_id": None,
+        "sent_to_etims": 0,
+        "etims_verification_url": sales_invoice.get("etims_verification_url"),
+        "etims_qr_image": sales_invoice.get("etims_qr_image"),
+    }
+
+    if etims_ledger and etims_ledger.etims_qr_code_url:
+        updates.update(
+            {
+                "etims_qr_code_url": etims_ledger.etims_qr_code_url,
+                "etims_id": etims_ledger.etims_id,
+                "sent_to_etims": 1,
+            }
+        )
+
+    if not updates["etims_verification_url"]:
+        updates["etims_verification_url"] = build_verification_url(sales_invoice)
+
+    if not updates["etims_qr_image"] and updates["etims_verification_url"]:
+        updates["etims_qr_image"] = generate_and_attach_qr_code(
+            updates["etims_verification_url"], sales_invoice.name, sales_invoice.doctype
+        )
+
+    sales_invoice.db_set(updates, update_modified=False)
+
+
+def generate_and_attach_qr_code(url: str, docname: str, doctype: str) -> str:
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    file_doc = frappe.get_doc(
+        {
+            "doctype": "File",
+            "file_name": f"QR-{docname}.png",
+            "is_private": 0,
+            "content": buffer.read(),
+            "attached_to_doctype": doctype,
+            "attached_to_name": docname,
+        }
+    )
+    file_doc.save(ignore_permissions=True)
+
+    return file_doc.file_url
+
+
+@frappe.whitelist()
+def analyze_etims_eligibility(invoice_name):
+    doc = frappe.get_doc("Sales Invoice", invoice_name)
+
+    errors = []
+    warnings = []
+
+    try:
+        if doc.tax_id:
+            validate_kra_pin(doc.tax_id)
+    except Exception as e:
+        errors.append(str(e))
+
+    settings_doc = get_settings(company_name=doc.company)
+
+    if doc.prevent_etims_submission:
+        errors.append("eTIMS submission is disabled for this invoice.")
+
+    if getattr(doc, "etr_invoice_number", None):
+        warnings.append(
+            f"Invoice already has ETR Invoice Number {doc.etr_invoice_number}."
+        )
+
+    if doc.status == "Credit Note Issued":
+        warnings.append("Credit Note has already been issued.")
+
+    if not settings_doc:
+        errors.append(f"No active eTIMS settings found for company {doc.company}.")
+
+    if (
+        settings_doc
+        and not settings_doc.sales_auto_submission_enabled
+        and not doc.etims_verification_url
+    ):
+        errors.append(
+            "Sales auto submission to eTIMS is disabled and invoice has not been submitted yet."
+        )
+
+    if settings_doc:
+        customer_slade_id = get_etims_id(
+            "Customer",
+            doc.customer,
+            settings_doc.name,
+        )
+
+        if not customer_slade_id:
+            errors.append(f"Customer {doc.customer} is not registered in eTIMS.")
+
+        for item in doc.items:
+            slade_id = get_etims_id(
+                "Item",
+                item.item_code,
+                settings_doc.name,
+            )
+
+            if not slade_id:
+                errors.append(f"Item {item.item_code} is not registered in eTIMS.")
+
+        if doc.is_return and doc.return_against:
+            return_invoice = frappe.get_doc(
+                "Sales Invoice",
+                doc.return_against,
+            )
+
+            if not return_invoice.sent_to_etims:
+                errors.append(
+                    f"Return Against Invoice {doc.return_against} was not Sent to eTims to eTIMS."
+                )
+
+    last_error = None
+
+    if hasattr(doc, "custom_etims_error_message"):
+        last_error = doc.custom_etims_error_message
+
+    return {
+        "eligible": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "last_error": last_error,
+    }
+
+
+def build_verification_url(doc) -> str:
+    creation = get_datetime(doc.creation) if doc.creation else None
+
+    key = creation.strftime("%Y%m%d%H%M%S%f") if creation else ""
+
+    return f"/invoice-verification?id={quote(str(doc.name))}&key={quote(key)}"
+
+
+@frappe.whitelist()
+def check_hanging_custom_fields():
+    doctypes = [
+        "Item",
+        "Item Group",
+        "Customer",
+        "Sales Invoice",
+        "Sales Invoice Item",
+        "Item Tax Template",
+        "Supplier",
+        "Stock Ledger Entry",
+        "Sales Taxes and Charges Template",
+    ]
+
+    hanging_fields = frappe.get_all(
+        "Custom Field",
+        filters={
+            "dt": ["in", doctypes],
+            "module": "Kenya Compliance Via Slade",
+        },
+        fields=["name", "dt", "fieldname", "label"],
+    )
+
+    return hanging_fields
+
+
+@frappe.whitelist()
+def delete_hanging_custom_fields():
+    doctypes = [
+        "Item",
+        "Item Group",
+        "Customer",
+        "Sales Invoice",
+        "Sales Invoice Item",
+        "Item Tax Template",
+        "Supplier",
+        "Stock Ledger Entry",
+        "Sales Taxes and Charges Template",
+    ]
+
+    hanging_fields = frappe.get_all(
+        "Custom Field",
+        filters={
+            "dt": ["in", doctypes],
+            "module": "Kenya Compliance Via Slade",
+        },
+        fields=["name", "dt"],
+    )
+
+    if not hanging_fields:
+        return {"success": True, "message": "No hanging custom fields found."}
+
+    for field in hanging_fields:
+        frappe.delete_doc("Custom Field", field.name, force=True)
+
+    for dt in doctypes:
+        frappe.clear_cache(doctype=dt)
+
+    return {
+        "success": True,
+        "message": f"Successfully deleted {len(hanging_fields)} hanging custom fields.",
+    }

@@ -1,7 +1,7 @@
-const doctype = "Branch";
+const doctypeName = "Branch";
 const settingsDoctypeName = "Navari KRA eTims Settings";
 
-frappe.ui.form.on(doctype, {
+frappe.ui.form.on(doctypeName, {
   refresh: async function (frm) {
     const companyName = frappe.boot.sysdefaults.company;
     if (frm.is_new()) return;
@@ -32,7 +32,7 @@ frappe.ui.form.on(doctype, {
             },
           });
         },
-        __("eTims Actions")
+        __("eTims Actions"),
       );
     }
   },
