@@ -1,7 +1,7 @@
-const doctype = "Supplier";
+const supplierDoctype = "Supplier";
 const settingsDoctypeName = "Navari KRA eTims Settings";
 
-frappe.ui.form.on(doctype, {
+frappe.ui.form.on(supplierDoctype, {
   refresh: async function (frm) {
     if (frm.is_new()) return;
     const { message: data } = await frappe.call({
@@ -19,7 +19,6 @@ frappe.ui.form.on(doctype, {
 
     if (!allSettings.length) return;
 
-    // Add action buttons based on registration status
     addSupplierActionButtons(frm, {
       allSettings,
       registeredMappings,
@@ -39,11 +38,11 @@ function addSupplierActionButtons(frm, data) {
           frm,
           "search_supplier",
           registeredMappings.map((r) => ({
-            name: r.etims_setup,
-            company: getCompanyName(allSettings, r.etims_setup),
-          }))
+            name: r.setup_docname,
+            company: getCompanyName(allSettings, r.setup_docname),
+          })),
         ),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -52,7 +51,7 @@ function addSupplierActionButtons(frm, data) {
       __("Send Supplier Details"),
       () =>
         showCompanySelectionModal(frm, "send_supplier", unregisteredSettings),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
 
@@ -64,29 +63,13 @@ function addSupplierActionButtons(frm, data) {
           frm,
           "update_supplier",
           registeredMappings.map((r) => ({
-            name: r.etims_setup,
-            company: getCompanyName(allSettings, r.etims_setup),
-          }))
+            name: r.setup_docname,
+            company: getCompanyName(allSettings, r.setup_docname),
+          })),
         ),
-      __("eTims Actions")
+      __("eTims Actions"),
     );
   }
-
-  // if (registeredMappings.length > 0) {
-  //   frm.add_custom_button(
-  //     __("Get Supplier Details"),
-  //     () =>
-  //       showCompanySelectionModal(
-  //         frm,
-  //         "get_supplier_details",
-  //         registeredMappings.map((r) => ({
-  //           name: r.etims_setup,
-  //           company: getCompanyName(allSettings, r.etims_setup),
-  //         }))
-  //       ),
-  //     __("eTims Actions")
-  //   );
-  // }
 }
 
 function getCompanyName(allSettings, settingName) {
@@ -101,7 +84,7 @@ function showCompanySelectionModal(frm, actionType, availableSettings) {
   }
 
   if (availableSettings.length === 1) {
-    executeCustomerAction(frm, actionType, availableSettings[0].name);
+    executeSupplierAction(frm, actionType, availableSettings[0].name);
     return;
   }
 
@@ -136,11 +119,11 @@ function executeSupplierAction(frm, actionType, settingsName) {
   let method, args, successMessage;
 
   let sladeId = "";
-  if (frm.doc.etims_setup_mapping) {
-    const mappingRow = frm.doc.etims_setup_mapping.find(
-      (row) => row.etims_setup === settingsName
+  if (frm.doc.etims_id_mapping) {
+    const mappingRow = frm.doc.etims_id_mapping.find(
+      (row) => row.setup_docname === settingsName,
     );
-    sladeId = mappingRow ? mappingRow.slade360_id : "";
+    sladeId = mappingRow ? mappingRow.etims_id : "";
   }
 
   switch (actionType) {
