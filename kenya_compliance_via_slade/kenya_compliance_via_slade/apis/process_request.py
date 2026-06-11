@@ -31,7 +31,7 @@ def process_request(
     settings_name: str = None,
     company: str = None,
     queue: bool = True,
-    page_size: int = 100,
+    page_size: int = 1000,
     page: int = 1,
 ) -> str | None:
     """Create eTims Job Queue entry only. No execution is performed."""
@@ -179,7 +179,7 @@ def execute_remote_request(
     document_name: str,
     settings: dict,
     job_queue: Document | None,
-    page_size: int = 100,
+    page_size: int = 1000,
     page: int = 1,
 ) -> None:
     """
