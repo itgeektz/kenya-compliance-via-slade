@@ -469,9 +469,9 @@ def update_branches(response: dict, settings_name: str, **kwargs) -> None:
         company = get_company_from_setup_mapping(cluster_id, settings_name)
 
         if not company:
-            frappe.log_error(
-                f"No company found for cluster {cluster_id}", "Branch Update Skipped"
-            )
+            # frappe.log_error(
+            #     f"No company found for cluster {cluster_id}", "Branch Update Skipped"
+            # )
             continue
 
         original_branch_name = branch_data.get("name", "").strip()
