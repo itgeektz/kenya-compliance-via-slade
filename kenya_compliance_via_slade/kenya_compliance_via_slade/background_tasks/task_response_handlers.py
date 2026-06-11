@@ -12,18 +12,23 @@ from ..doctype.doctype_names_mapping import (
     PACKAGING_UNIT_DOCTYPE_NAME,
     PAYMENT_TYPE_DOCTYPE_NAME,
     SETTINGS_DOCTYPE_NAME,
+    SLADE_ID_MAPPING_DOCTYPE_NAME,
     TAXATION_TYPE_DOCTYPE_NAME,
     UNIT_OF_QUANTITY_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_company_from_setup_mapping, get_link_value
+from ..utils import (
+    get_company_from_setup_mapping,
+    get_link_value,
+    update_sales_invoice_etims_details,
+)
 
 
 def send_pos_invoices_information() -> None:
     from ..overrides.server.sales_invoice import on_submit
 
     all_pending_pos_invoices: list[Document] = frappe.get_all(
-        "POS Invoice", {"docstatus": 1, "custom_successfully_submitted": 0}, ["name"]
+        "POS Invoice", {"docstatus": 1, "sent_to_etims": 0}, ["name"]
     )
 
     if all_pending_pos_invoices:
@@ -60,6 +65,11 @@ def update_documents(
 
     doc_list = data if isinstance(data, list) else data.get("results", [data])
 
+    def safe_setattr(doc, field, value):
+        if isinstance(value, str):
+            value = value.replace("\\'", "'")
+        setattr(doc, field, value)
+
     for record in doc_list:
         if isinstance(record, str):
             continue
@@ -72,13 +82,13 @@ def update_documents(
 
         for field, value in field_mapping.items():
             if isinstance(value, str):
-                setattr(temp_doc, field, record.get(value, ""))
+                safe_setattr(temp_doc, field, record.get(value, ""))
 
         for field, value in field_mapping.items():
             if isinstance(value, dict) and "doctype" in value:
                 linked_doctype = value.get("doctype")
                 link_field = value.get("link_field")
-                link_filter_field = value.get("filter_field", "custom_slade_id")
+                link_filter_field = value.get("filter_field", "etims_id")
                 link_extract_field = value.get("extract_field", "name")
                 link_filter_value = record.get(link_field)
                 if linked_doctype and link_filter_value:
@@ -132,16 +142,16 @@ def update_documents(
         if is_table and table_name and hasattr(doc, table_name):
             found = False
             for child_row in getattr(doc, table_name):
-                if child_row.etims_setup == settings_name:
-                    child_row.slade360_id = record.get("id")
+                if child_row.setup_docname == settings_name:
+                    child_row.etims_id = record.get("id")
                     child_row.is_active = 1
                     found = True
                     break
 
             if not found and settings_name:
                 new_row = doc.append(table_name)
-                new_row.etims_setup = settings_name
-                new_row.slade360_id = record.get("id")
+                new_row.setup_docname = settings_name
+                new_row.etims_id = record.get("id")
                 new_row.is_active = 1
 
         if settings_name and not is_table:
@@ -159,39 +169,149 @@ def update_documents(
     frappe.db.commit()
 
 
-def update_unit_of_quantity(response: dict, settings_name: str, **kwargs) -> None:
-    field_mapping = {
-        "slade_id": "id",
-        "code": "code",
-        "sort_order": "sort_order",
-        "code_name": "name",
-        "code_description": "description",
-    }
-    update_documents(
-        response,
-        UNIT_OF_QUANTITY_DOCTYPE_NAME,
-        field_mapping,
+def sync_etims_mappings(
+    response: list | dict,
+    doctype: str,
+    settings_name: str,
+    match_field: str,
+    response_field: str,
+    update_fields: dict | None = None,
+    create_missing: bool = False,
+) -> None:
+    if isinstance(response, str):
+        response = json.loads(response)
+
+    records = response if isinstance(response, list) else response.get("results", [])
+
+    if not records:
+        return
+
+    match_values = [
+        row.get(response_field) for row in records if row.get(response_field)
+    ]
+
+    existing_docs = frappe.get_all(
+        doctype,
+        filters={match_field: ["in", match_values]},
+        fields=["name", match_field],
+    )
+
+    doc_map = {d[match_field]: d["name"] for d in existing_docs}
+
+    modified = False
+
+    for row in records:
+        match_value = row.get(response_field)
+        etims_id = row.get("id")
+
+        if not match_value:
+            continue
+
+        docname = doc_map.get(match_value)
+
+        if not docname and create_missing:
+            doc = frappe.new_doc(doctype)
+            doc.set(match_field, match_value)
+
+            if update_fields:
+                for target_field, source_field in update_fields.items():
+                    value = row.get(source_field)
+
+                    if value is not None:
+                        doc.set(target_field, value)
+
+            doc.insert(ignore_permissions=True)
+
+            docname = doc.name
+            doc_map[match_value] = docname
+            modified = True
+
+        if not docname:
+            continue
+
+        if etims_id:
+            exists = frappe.db.exists(
+                SLADE_ID_MAPPING_DOCTYPE_NAME,
+                {
+                    "parent": docname,
+                    "parenttype": doctype,
+                    "parentfield": "etims_id_mapping",
+                    "setup_docname": settings_name,
+                },
+            )
+
+            if not exists:
+                frappe.get_doc(
+                    {
+                        "doctype": SLADE_ID_MAPPING_DOCTYPE_NAME,
+                        "parent": docname,
+                        "parenttype": doctype,
+                        "parentfield": "etims_id_mapping",
+                        "setup_doctype": SETTINGS_DOCTYPE_NAME,
+                        "setup_docname": settings_name,
+                        "etims_id": etims_id,
+                    }
+                ).insert(ignore_permissions=True)
+
+                modified = True
+
+        if update_fields:
+            values = {}
+
+            for target_field, source_field in update_fields.items():
+                value = row.get(source_field)
+
+                if value is not None:
+                    values[target_field] = value
+
+            if values:
+                frappe.db.set_value(
+                    doctype,
+                    docname,
+                    values,
+                    update_modified=False,
+                )
+                modified = True
+
+    if modified:
+        frappe.db.commit()
+
+
+def update_unit_of_quantity(
+    response: dict,
+    settings_name: str,
+    **kwargs,
+) -> None:
+    sync_etims_mappings(
+        response=response,
+        doctype=UNIT_OF_QUANTITY_DOCTYPE_NAME,
         settings_name=settings_name,
-        is_table=True,
-        table_name="etims_setup_mapping",
+        match_field="code",
+        response_field="code",
+        update_fields={
+            "code_name": "name",
+            "code_description": "description",
+            "sort_order": "sort_order",
+        },
     )
 
 
-def update_packaging_units(response: dict, settings_name: str, **kwargs) -> None:
-    field_mapping = {
-        "slade_id": "id",
-        "code": "code",
-        "code_name": "name",
-        "sort_order": "sort_order",
-        "code_description": "description",
-    }
-    update_documents(
-        response,
-        PACKAGING_UNIT_DOCTYPE_NAME,
-        field_mapping,
+def update_packaging_units(
+    response: dict,
+    settings_name: str,
+    **kwargs,
+) -> None:
+    sync_etims_mappings(
+        response=response,
+        doctype=PACKAGING_UNIT_DOCTYPE_NAME,
         settings_name=settings_name,
-        is_table=True,
-        table_name="etims_setup_mapping",
+        match_field="code",
+        response_field="code",
+        update_fields={
+            "code_name": "name",
+            "code_description": "description",
+            "sort_order": "sort_order",
+        },
     )
 
 
@@ -214,58 +334,56 @@ def update_payment_methods(response: dict, **kwargs) -> None:
     )
 
 
-def update_currencies(response: dict, settings_name: str, **kwargs) -> None:
-    field_mapping = {
-        "custom_slade_id": "id",
-        "currency_name": "iso_code",
-        "enabled": lambda x: 1 if x.get("active") else 0,
-        "custom_conversion_rate": "conversion_rate",
-    }
-    update_documents(
-        response,
-        "Currency",
-        field_mapping,
-        filter_field="currency_name",
+def update_currencies(
+    response: dict,
+    settings_name: str,
+    **kwargs,
+) -> None:
+    sync_etims_mappings(
+        response=response,
+        doctype="Currency",
         settings_name=settings_name,
-        is_table=True,
-        table_name="etims_setup_mapping",
+        match_field="name",
+        response_field="iso_code",
     )
 
 
-def update_item_classification_codes(response: dict | list, **kwargs) -> None:
-    field_mapping = {
-        "slade_id": "id",
-        "itemclscd": "classification_code",
-        "itemclslvl": "classification_level",
-        "itemclsnm": "classification_name",
-        "taxtycd": "tax_type_code",
-        "useyn": lambda x: 1 if x.get("is_used") else 0,
-        "mjrtgyn": lambda x: 1 if x.get("is_frequently_used") else 0,
-    }
-    update_documents(
-        response,
-        ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
-        field_mapping,
-        filter_field="itemclscd",
+def update_item_classification_codes(
+    response: dict | list,
+    settings_name: str,
+    **kwargs,
+) -> None:
+    sync_etims_mappings(
+        response=response,
+        doctype=ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
+        settings_name=settings_name,
+        match_field="itemclscd",
+        response_field="classification_code",
+        update_fields={
+            "itemclsnm": "classification_name",
+            "itemclslvl": "classification_level",
+        },
+        create_missing=True,
     )
 
 
-def update_taxation_type(response: dict, settings_name: str, **kwargs) -> None:
-    field_mapping = {
-        "slade_id": "id",
-        "cd": "tax_code",
-        "srtord": "sort_order",
-        "cdnm": "name",
-        "cddesc": "description",
-    }
-    update_documents(
-        response,
-        TAXATION_TYPE_DOCTYPE_NAME,
-        field_mapping,
-        filter_field="cd",
+def update_taxation_type(
+    response: list,
+    settings_name: str,
+    **kwargs,
+) -> None:
+    sync_etims_mappings(
+        response=response,
+        doctype=TAXATION_TYPE_DOCTYPE_NAME,
         settings_name=settings_name,
-        is_table=True,
-        table_name="etims_setup_mapping",
+        match_field="cd",
+        response_field="tax_code",
+        update_fields={
+            "cdnm": "name",
+            "cddesc": "description",
+            "percentage": "percentage",
+            "amount_type": "amount_type",
+        },
     )
 
 
@@ -312,9 +430,7 @@ def update_organisations(response: dict, **kwargs) -> None:
 
     if record.get("default_currency"):
         doc.default_currency = (
-            get_link_value(
-                "Currency", "custom_slade_id", record.get("default_currency")
-            )
+            get_link_value("Currency", "etims_id", record.get("default_currency"))
             or "KES"
         )
     if record.get("web_address"):
@@ -324,7 +440,7 @@ def update_organisations(response: dict, **kwargs) -> None:
     if record.get("description"):
         doc.company_description = record.get("description", "")
     if record.get("id"):
-        doc.custom_slade_id = record.get("id", "")
+        doc.etims_id = record.get("id", "")
     if record.get("email_address"):
         doc.email = record.get("email_address", "")
     if record.get("tax_payer_pin"):
@@ -353,9 +469,9 @@ def update_branches(response: dict, settings_name: str, **kwargs) -> None:
         company = get_company_from_setup_mapping(cluster_id, settings_name)
 
         if not company:
-            frappe.log_error(
-                f"No company found for cluster {cluster_id}", "Branch Update Skipped"
-            )
+            # frappe.log_error(
+            #     f"No company found for cluster {cluster_id}", "Branch Update Skipped"
+            # )
             continue
 
         original_branch_name = branch_data.get("name", "").strip()
@@ -425,14 +541,14 @@ def update_departments(response: dict, **kwargs) -> None:
 
     if record.get("organisation"):
         doc.company = (
-            get_link_value("Company", "custom_slade_id", record.get("organisation"))
+            get_link_value("Company", "etims_id", record.get("organisation"))
             or frappe.defaults.get_user_default("Company")
             or frappe.get_value("Company", {}, "name")
         )
     if record.get("parent"):
         doc.custom_branch = get_link_value("Branch", "slade_id", record.get("parent"))
     if record.get("id"):
-        doc.custom_slade_id = record.get("id")
+        doc.etims_id = record.get("id")
     doc.is_etims_verified = 1 if record.get("is_etims_verified") else 0
     doc.custom_is_etims_department = 1
 
@@ -626,10 +742,6 @@ def fetch_etims_sales_invoices_on_success(response: dict, **kwargs) -> None:
     data = response.get("results")
 
     if not data or not isinstance(data, list):
-        frappe.log_error(
-            title="eTIMS Fetch Error",
-            message=f"No valid data received from eTims or data is not a list {data}",
-        )
         return
 
     settings_name = kwargs.get("settings_name")
@@ -646,7 +758,7 @@ def fetch_etims_sales_invoices_on_success(response: dict, **kwargs) -> None:
                 continue
 
             existing_name = frappe.db.get_value(
-                "eTIMS Sales Ledger Entry", {"slade360_id": slade_id}
+                "eTIMS Sales Ledger Entry", {"etims_id": slade_id}
             )
 
             invoice_date = invoice_data.get("invoice_date")
@@ -657,70 +769,94 @@ def fetch_etims_sales_invoices_on_success(response: dict, **kwargs) -> None:
                 except Exception:
                     invoice_date = None
 
-            if existing_name:
-                sales_ledger = frappe.get_doc("eTIMS Sales Ledger Entry", existing_name)
-            else:
-                sales_ledger = frappe.new_doc("eTIMS Sales Ledger Entry")
-                sales_ledger.slade360_id = slade_id
-
-            sales_ledger.update(
-                {
-                    "etims_settings": settings_name,
-                    "type": "Sales Invoice",
-                    "invoice_date": invoice_date,
-                    "reference_number": invoice_data.get("reference_number"),
-                    "document_number": invoice_data.get("document_number"),
-                    "sales_type": invoice_data.get("sales_type"),
-                    "workflow_state": invoice_data.get("workflow_state"),
-                    "customer_name": invoice_data.get("customer_name"),
-                    "total_vat": invoice_data.get("total_vat", 0),
-                    "total_amount": invoice_data.get("total_amount", 0),
-                    "total_gross_amount": invoice_data.get("total_gross_amount", 0),
-                    "tax_exclusive_amount": invoice_data.get("tax_exclusive_amount", 0),
-                    "tax_inclusive_amount": invoice_data.get("tax_inclusive_amount", 0),
-                    "is_signed": 1 if invoice_data.get("is_signed") else 0,
-                }
-            )
+            update_values = {
+                "etims_settings": settings_name,
+                "type": "Sales Invoice",
+                "invoice_date": invoice_date,
+                "reference_number": invoice_data.get("reference_number"),
+                "document_number": invoice_data.get("document_number"),
+                "sales_type": invoice_data.get("sales_type"),
+                "workflow_state": invoice_data.get("workflow_state"),
+                "customer_name": invoice_data.get("customer_name"),
+                "total_vat": invoice_data.get("total_vat", 0),
+                "total_amount": invoice_data.get("total_amount", 0),
+                "total_gross_amount": invoice_data.get("total_gross_amount", 0),
+                "tax_exclusive_amount": invoice_data.get("tax_exclusive_amount", 0),
+                "tax_inclusive_amount": invoice_data.get("tax_inclusive_amount", 0),
+                "is_signed": 1 if invoice_data.get("is_signed") else 0,
+            }
 
             scu_data = invoice_data.get("scu_data") or {}
-            sales_ledger.update(
-                {
-                    "scu_invoice_number": scu_data.get("scu_invoice_number"),
-                    "scu_receipt_number": scu_data.get("scu_receipt_number"),
-                    "scu_id": scu_data.get("scu_id"),
-                    "scu_receipt_signature": scu_data.get("scu_receipt_signature"),
-                    "scu_receipt_date": scu_data.get("scu_receipt_date"),
-                    "scu_receipt_time": scu_data.get("scu_receipt_time"),
-                    "qr_code_url": scu_data.get("qr_code_url"),
-                    "scu_internal_data": scu_data.get("scu_internal_data"),
-                    "scu_mrc_number": scu_data.get("scu_mrc_number"),
-                }
-            )
 
-            sales_ledger.set("sales_invoice_lines", [])
+            scu_fields = {
+                "scu_invoice_number": scu_data.get("scu_invoice_number"),
+                "scu_receipt_number": scu_data.get("scu_receipt_number"),
+                "scu_id": scu_data.get("scu_id"),
+                "scu_receipt_signature": scu_data.get("scu_receipt_signature"),
+                "scu_receipt_date": scu_data.get("scu_receipt_date"),
+                "scu_receipt_time": scu_data.get("scu_receipt_time"),
+                "etims_qr_code_url": scu_data.get("qr_code_url"),
+                "scu_internal_data": scu_data.get("scu_internal_data"),
+                "scu_mrc_number": scu_data.get("scu_mrc_number"),
+            }
+
+            for field, value in scu_fields.items():
+                if value is not None:
+                    update_values[field] = value
+
+            if existing_name:
+                for field, value in update_values.items():
+                    if value is not None:
+                        frappe.db.set_value(
+                            "eTIMS Sales Ledger Entry", existing_name, field, value
+                        )
+                sales_ledger_name = existing_name
+
+                existing_child_records = frappe.get_all(
+                    "eTIMS Sales Ledger Item",
+                    filters={"parent": sales_ledger_name},
+                    pluck="name",
+                )
+                for child in existing_child_records:
+                    frappe.delete_doc("eTIMS Sales Ledger Item", child, force=True)
+            else:
+                sales_ledger = frappe.new_doc("eTIMS Sales Ledger Entry")
+                sales_ledger.etims_id = slade_id
+                for field, value in update_values.items():
+                    if value is not None:
+                        setattr(sales_ledger, field, value)
+                sales_ledger.insert(ignore_permissions=True)
+                sales_ledger_name = sales_ledger.name
+
             lines = invoice_data.get("sales_invoice_lines") or []
 
-            for line in lines:
-                sales_ledger.append(
-                    "sales_invoice_lines",
-                    {
-                        "product_name": line.get("product_name"),
-                        "quantity": line.get("quantity", 1),
-                        "price_inclusive_tax": line.get("price_inclusive_tax", 0),
-                        "price_exclusive_tax": line.get("price_exclusive_tax", 0),
-                        "tax_code": line.get("tax_code"),
-                        "tax_code_description": line.get("tax_code_description"),
-                        "tax_amount": line.get("tax_amount", 0),
-                        "gross_line_amount": line.get("gross_line_amount", 0),
-                        "tax_exclusive_amount": line.get("tax_exclusive_amount", 0),
-                        "tax_inclusive_amount": line.get("tax_inclusive_amount", 0),
-                        "total_net_amount": line.get("total_net_amount", 0),
-                        "pricelist_name": line.get("pricelist_name"),
-                    },
-                )
+            for idx, line in enumerate(lines):
+                child_doc = frappe.new_doc("eTIMS Sales Ledger Item")
+                child_doc.parent = sales_ledger_name
+                child_doc.parenttype = "eTIMS Sales Ledger Entry"
+                child_doc.parentfield = "sales_invoice_lines"
+                child_doc.idx = idx + 1
+                child_doc.product_name = line.get("product_name")
+                child_doc.quantity = line.get("quantity", 1)
+                child_doc.price_inclusive_tax = line.get("price_inclusive_tax", 0)
+                child_doc.price_exclusive_tax = line.get("price_exclusive_tax", 0)
+                child_doc.tax_code = line.get("tax_code")
+                child_doc.tax_code_description = line.get("tax_code_description")
+                child_doc.etims_tax_amount = line.get("tax_amount", 0)
+                child_doc.gross_line_amount = line.get("gross_line_amount", 0)
+                child_doc.tax_exclusive_amount = line.get("tax_exclusive_amount", 0)
+                child_doc.tax_inclusive_amount = line.get("tax_inclusive_amount", 0)
+                child_doc.total_net_amount = line.get("total_net_amount", 0)
+                child_doc.pricelist_name = line.get("pricelist_name")
+                child_doc.insert(ignore_permissions=True)
 
-            sales_ledger.save(ignore_permissions=True)
             frappe.db.commit()
+
+            sales_invoice = frappe.db.get_value(
+                "eTIMS Sales Ledger Entry", sales_ledger_name, "sales_invoice"
+            )
+            if sales_invoice:
+                update_sales_invoice_etims_details(sales_invoice)
 
         except Exception as e:
             doc_ref = invoice_data.get("document_number", "Unknown Document")
@@ -734,10 +870,6 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
     data = response.get("results")
 
     if not data or not isinstance(data, list):
-        frappe.log_error(
-            title="eTIMS Fetch Error",
-            message=f"No valid data received from eTims or data is not a list {data}",
-        )
         return
 
     settings_name = kwargs.get("settings_name")
@@ -755,14 +887,10 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
 
             sales_credit_note_lines = invoice_data.get("sales_credit_note_lines") or []
             if not sales_credit_note_lines:
-                frappe.log_error(
-                    title="eTIMS Skip Empty Credit Note",
-                    message=f"Skipping credit note {invoice_data.get('document_number')} - No sales credit note lines found",
-                )
                 continue
 
             existing_name = frappe.db.get_value(
-                "eTIMS Sales Ledger Entry", {"slade360_id": slade_id}
+                "eTIMS Sales Ledger Entry", {"etims_id": slade_id}
             )
 
             created_at = invoice_data.get("created")
@@ -774,72 +902,99 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
                 except Exception:
                     invoice_date = None
 
+            update_values = {
+                "etims_settings": settings_name,
+                "type": "Credit Note",
+                "invoice_date": invoice_date,
+                "reference_number": invoice_data.get("reference_number"),
+                "document_number": invoice_data.get("document_number"),
+                "workflow_state": invoice_data.get("workflow_state"),
+                "total_vat": -abs(invoice_data.get("total_vat") or 0),
+                "total_amount": -abs(invoice_data.get("crn_total_amount") or 0),
+                "total_gross_amount": -abs(invoice_data.get("total_gross_amount") or 0),
+                "is_signed": 1 if invoice_data.get("is_signed") else 0,
+                "original_etims_invoice_counter": invoice_data.get(
+                    "original_etims_invoice_counter"
+                ),
+            }
+
+            customer_details = invoice_data.get("customer_details") or {}
+            if customer_details.get("partner_name"):
+                update_values["customer_name"] = customer_details.get("partner_name")
+            if customer_details.get("customer_tax_pin"):
+                update_values["customer_tax_id"] = customer_details.get(
+                    "customer_tax_pin"
+                )
+
+            scu_data = invoice_data.get("scu_data") or {}
+
+            scu_fields = {
+                "scu_invoice_number": scu_data.get("scu_invoice_number"),
+                "scu_receipt_number": scu_data.get("scu_receipt_number"),
+                "scu_id": scu_data.get("scu_id"),
+                "scu_receipt_signature": scu_data.get("scu_receipt_signature"),
+                "scu_receipt_date": scu_data.get("scu_receipt_date"),
+                "scu_receipt_time": scu_data.get("scu_receipt_time"),
+                "etims_qr_code_url": scu_data.get("qr_code_url"),
+                "scu_internal_data": scu_data.get("scu_internal_data"),
+                "scu_mrc_number": scu_data.get("scu_mrc_number"),
+            }
+
+            for field, value in scu_fields.items():
+                if value is not None:
+                    update_values[field] = value
+
             if existing_name:
-                sales_ledger = frappe.get_doc("eTIMS Sales Ledger Entry", existing_name)
+                for field, value in update_values.items():
+                    if value is not None:
+                        frappe.db.set_value(
+                            "eTIMS Sales Ledger Entry", existing_name, field, value
+                        )
+                sales_ledger_name = existing_name
+
+                existing_child_records = frappe.get_all(
+                    "eTIMS Sales Ledger Item",
+                    filters={"parent": sales_ledger_name},
+                    pluck="name",
+                )
+                for child in existing_child_records:
+                    frappe.delete_doc("eTIMS Sales Ledger Item", child, force=True)
             else:
                 sales_ledger = frappe.new_doc("eTIMS Sales Ledger Entry")
-                sales_ledger.slade360_id = slade_id
+                sales_ledger.etims_id = slade_id
+                for field, value in update_values.items():
+                    if value is not None:
+                        setattr(sales_ledger, field, value)
+                sales_ledger.insert(ignore_permissions=True)
+                sales_ledger_name = sales_ledger.name
 
             etims_invoice = frappe.db.get_value(
                 "eTIMS Sales Ledger Entry",
-                {"slade360_id": invoice_data.get("invoice")},
+                {"etims_id": invoice_data.get("invoice")},
                 "name",
             )
 
             if etims_invoice:
+                frappe.db.set_value(
+                    "eTIMS Sales Ledger Entry",
+                    sales_ledger_name,
+                    "etims_invoice",
+                    etims_invoice,
+                )
                 sales_invoice = frappe.db.get_value(
                     "eTIMS Sales Ledger Entry",
-                    {"slade360_id": invoice_data.get("invoice")},
+                    {"etims_id": invoice_data.get("invoice")},
                     "sales_invoice",
                 )
-                sales_ledger.etims_invoice = etims_invoice
-                sales_ledger.sales_invoice = sales_invoice
+                if sales_invoice:
+                    frappe.db.set_value(
+                        "eTIMS Sales Ledger Entry",
+                        sales_ledger_name,
+                        "sales_invoice",
+                        sales_invoice,
+                    )
 
-            sales_ledger.update(
-                {
-                    "etims_settings": settings_name,
-                    "type": "Credit Note",
-                    "invoice_date": invoice_date,
-                    "reference_number": invoice_data.get("reference_number"),
-                    "document_number": invoice_data.get("document_number"),
-                    "workflow_state": invoice_data.get("workflow_state"),
-                    "total_vat": -abs(invoice_data.get("total_vat") or 0),
-                    "total_amount": -abs(invoice_data.get("crn_total_amount") or 0),
-                    "total_gross_amount": -abs(
-                        invoice_data.get("total_gross_amount") or 0
-                    ),
-                    "is_signed": 1 if invoice_data.get("is_signed") else 0,
-                    "original_etims_invoice_counter": invoice_data.get(
-                        "original_etims_invoice_counter"
-                    ),
-                }
-            )
-
-            customer_details = invoice_data.get("customer_details") or {}
-            sales_ledger.update(
-                {
-                    "customer_name": customer_details.get("partner_name"),
-                    "customer_tax_id": customer_details.get("customer_tax_pin"),
-                }
-            )
-            scu_data = invoice_data.get("scu_data") or {}
-            sales_ledger.update(
-                {
-                    "scu_invoice_number": scu_data.get("scu_invoice_number"),
-                    "scu_receipt_number": scu_data.get("scu_receipt_number"),
-                    "scu_id": scu_data.get("scu_id"),
-                    "scu_receipt_signature": scu_data.get("scu_receipt_signature"),
-                    "scu_receipt_date": scu_data.get("scu_receipt_date"),
-                    "scu_receipt_time": scu_data.get("scu_receipt_time"),
-                    "qr_code_url": scu_data.get("qr_code_url"),
-                    "scu_internal_data": scu_data.get("scu_internal_data"),
-                    "scu_mrc_number": scu_data.get("scu_mrc_number"),
-                }
-            )
-
-            sales_ledger.set("sales_invoice_lines", [])
-
-            for line in sales_credit_note_lines:
+            for idx, line in enumerate(sales_credit_note_lines):
                 quantity = line.get("quantity", 1)
                 price_exclusive_tax = line.get("price_exclusive_tax", 0)
                 price_inclusive_tax = line.get("price_inclusive_tax", 0)
@@ -849,25 +1004,25 @@ def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
                 tax_inclusive_amount = line.get("total_amount_line", 0)
                 total_net_amount = line.get("total_tax_exclusive_amount", 0)
 
-                sales_ledger.append(
-                    "sales_invoice_lines",
-                    {
-                        "product_name": line.get("product_name"),
-                        "quantity": quantity,
-                        "price_inclusive_tax": -abs(price_inclusive_tax),
-                        "price_exclusive_tax": -abs(price_exclusive_tax),
-                        "tax_code": line.get("tax_code"),
-                        "tax_code_description": line.get("tax_code_description"),
-                        "tax_amount": -abs(tax_amount),
-                        "gross_line_amount": -abs(gross_line_amount),
-                        "tax_exclusive_amount": -abs(tax_exclusive_amount),
-                        "tax_inclusive_amount": -abs(tax_inclusive_amount),
-                        "total_net_amount": -abs(total_net_amount),
-                        "pricelist_name": line.get("pricelist_name"),
-                    },
-                )
+                child_doc = frappe.new_doc("eTIMS Sales Ledger Item")
+                child_doc.parent = sales_ledger_name
+                child_doc.parenttype = "eTIMS Sales Ledger Entry"
+                child_doc.parentfield = "sales_invoice_lines"
+                child_doc.idx = idx + 1
+                child_doc.product_name = line.get("product_name")
+                child_doc.quantity = quantity
+                child_doc.price_inclusive_tax = -abs(price_inclusive_tax)
+                child_doc.price_exclusive_tax = -abs(price_exclusive_tax)
+                child_doc.tax_code = line.get("tax_code")
+                child_doc.tax_code_description = line.get("tax_code_description")
+                child_doc.etims_tax_amount = -abs(tax_amount)
+                child_doc.gross_line_amount = -abs(gross_line_amount)
+                child_doc.tax_exclusive_amount = -abs(tax_exclusive_amount)
+                child_doc.tax_inclusive_amount = -abs(tax_inclusive_amount)
+                child_doc.total_net_amount = -abs(total_net_amount)
+                child_doc.pricelist_name = line.get("pricelist_name")
+                child_doc.insert(ignore_permissions=True)
 
-            sales_ledger.save(ignore_permissions=True)
             frappe.db.commit()
 
         except Exception as e:

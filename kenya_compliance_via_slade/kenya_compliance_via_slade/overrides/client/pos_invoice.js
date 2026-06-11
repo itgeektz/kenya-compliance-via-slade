@@ -37,18 +37,18 @@ frappe.ui.form.on(doctypeName, {
           if (!frm.doc.custom_transaction_progres) {
             frm.set_value(
               "custom_transaction_progres",
-              response.sales_transaction_progress
+              response.sales_transaction_progress,
             );
           }
-        }
+        },
       );
     }
   },
 });
 
 frappe.ui.form.on(childDoctypeName, {
-  custom_packaging_unit: async function (frm, cdt, cdn) {
-    const packagingUnit = locals[cdt][cdn].custom_packaging_unit;
+  packaging_unit: async function (frm, cdt, cdn) {
+    const packagingUnit = locals[cdt][cdn].etims_packaging_unit;
 
     if (packagingUnit) {
       const response = await frappe.db.get_value(
@@ -56,16 +56,16 @@ frappe.ui.form.on(childDoctypeName, {
         {
           name: packagingUnit,
         },
-        ["code"]
+        ["code"],
       );
 
       const code = response.message?.code;
-      locals[cdt][cdn].custom_packaging_unit_code = code;
-      frm.refresh_field("custom_packaging_unit_code");
+      locals[cdt][cdn].etims_packaging_unit_code = code;
+      frm.refresh_field("etims_packaging_unit_code");
     }
   },
-  custom_unit_of_quantity: async function (frm, cdt, cdn) {
-    const unitOfQuantity = locals[cdt][cdn].custom_unit_of_quantity;
+  unit_of_quantity: async function (frm, cdt, cdn) {
+    const unitOfQuantity = locals[cdt][cdn].etims_unit_of_quantity;
 
     if (unitOfQuantity) {
       const response = await frappe.db.get_value(
@@ -73,16 +73,16 @@ frappe.ui.form.on(childDoctypeName, {
         {
           name: unitOfQuantity,
         },
-        ["code"]
+        ["code"],
       );
 
       const code = response.message?.code;
-      locals[cdt][cdn].custom_unit_of_quantity_code = code;
-      frm.refresh_field("custom_unit_of_quantity_code");
+      locals[cdt][cdn].etims_unit_of_quantity_code = code;
+      frm.refresh_field("etims_unit_of_quantity_code");
     }
   },
-  custom_taxation_type: async function (frm, cdt, cdn) {
-    const taxationType = locals[cdt][cdn].custom_taxation_type;
+  taxation_type: async function (frm, cdt, cdn) {
+    const taxationType = locals[cdt][cdn].etims_taxation_type;
 
     if (taxationType) {
       const response = await frappe.db.get_value(
@@ -90,12 +90,12 @@ frappe.ui.form.on(childDoctypeName, {
         {
           name: taxationType,
         },
-        ["cd"]
+        ["cd"],
       );
 
       const code = response.message?.cd;
-      locals[cdt][cdn].custom_taxation_type_code = code;
-      frm.refresh_field("custom_taxation_type_code");
+      locals[cdt][cdn].etims_taxation_type_code = code;
+      frm.refresh_field("taxation_type_code");
     }
   },
 });

@@ -1,16 +1,15 @@
-from typing import Optional
 import json
+
 import frappe
 from frappe.model.document import Document
 
+from ...doctype.doctype_names_mapping import (
+    ORGANISATION_MAPPING_DOCTYPE_NAME,
+    SETTINGS_DOCTYPE_NAME,
+)
 from ...utils import (
     reset_auth_password,
     update_navari_settings_with_token,
-    get_next_run,
-)
-from ...doctype.doctype_names_mapping import (
-    SETTINGS_DOCTYPE_NAME,
-    ORGANISATION_MAPPING_DOCTYPE_NAME,
 )
 
 
@@ -67,35 +66,36 @@ class NavariKRAeTimsSettings(Document):
         update_navari_settings_with_token(self.name, True)
 
     def initialize_next_runs(self):
-        if self.sales_auto_submission_enabled and not self.sales_next_run:
-            self.sales_next_run = get_next_run(
-                self.sales_information_submission,
-                self.sales_info_cron_format,
-            )
+        pass
+        # if self.sales_auto_submission_enabled and not self.sales_next_run:
+        #     self.sales_next_run = get_next_run(
+        #         self.sales_information_submission,
+        #         self.sales_info_cron_format,
+        #     )
 
-        if self.purchase_auto_submission_enabled and not self.purchases_next_run:
-            self.purchases_next_run = get_next_run(
-                self.purchase_information_submission,
-                self.purchase_info_cron_format,
-            )
+        # if self.purchase_auto_submission_enabled and not self.purchases_next_run:
+        #     self.purchases_next_run = get_next_run(
+        #         self.purchase_information_submission,
+        #         self.purchase_info_cron_format,
+        #     )
 
-        if self.stock_auto_submission_enabled and not self.stock_next_run:
-            self.stock_next_run = get_next_run(
-                self.stock_information_submission,
-                self.stock_info_cron_format,
-            )
+        # if self.stock_auto_submission_enabled and not self.stock_next_run:
+        #     self.stock_next_run = get_next_run(
+        #         self.stock_information_submission,
+        #         self.stock_info_cron_format,
+        #     )
 
-        if self.notices_refresh_frequency and not self.notices_next_run:
-            self.notices_next_run = get_next_run(
-                self.notices_refresh_frequency,
-                self.notices_refresh_freq_cron_format,
-            )
+        # if self.notices_refresh_frequency and not self.notices_next_run:
+        #     self.notices_next_run = get_next_run(
+        #         self.notices_refresh_frequency,
+        #         self.notices_refresh_freq_cron_format,
+        #     )
 
-        if self.codes_refresh_frequency and not self.codes_next_run:
-            self.codes_next_run = get_next_run(
-                self.codes_refresh_frequency,
-                self.codes_refresh_freq_cron_format,
-            )
+        # if self.codes_refresh_frequency and not self.codes_next_run:
+        #     self.codes_next_run = get_next_run(
+        #         self.codes_refresh_frequency,
+        #         self.codes_refresh_freq_cron_format,
+        #     )
 
     def cleanup_legacy_scheduled_jobs(self):
         """Remove old Scheduled Job Types created by this settings doc"""
@@ -125,48 +125,44 @@ class NavariKRAeTimsSettings(Document):
 
 @frappe.whitelist()
 def update_companies_with_cluster_info(matched_data, settings_name):
-    """Update company documents with cluster information using setup_mapping table"""
     try:
         if isinstance(matched_data, str):
             matched_data = json.loads(matched_data)
 
         for match in matched_data:
-            if (
-                not isinstance(match, dict)
-                or not match.get("company")
-                or not match.get("cluster_id")
-            ):
+            company_name = match.get("company")
+            cluster_id = match.get("cluster_id")
+
+            if not company_name or not cluster_id:
                 continue
 
-            company_name = match["company"]
             if not frappe.db.exists("Company", company_name):
                 continue
 
             company = frappe.get_doc("Company", company_name)
 
-            existing_mapping = None
-            duplicate_mappings = []
+            company.setup_mapping = [
+                row for row in (company.setup_mapping or []) if row.setup_docname
+            ]
 
-            for mapping in company.setup_mapping:
-                if mapping.etims_setup == settings_name:
-                    if existing_mapping:
-                        duplicate_mappings.append(mapping)
-                    else:
-                        existing_mapping = mapping
-            for duplicate in duplicate_mappings:
-                company.setup_mapping.remove(duplicate)
+            existing = None
 
-            if existing_mapping:
-                existing_mapping.organisation = match.get("organisation", "")
-                existing_mapping.cluster = match["cluster_id"]
-                existing_mapping.is_active = 1
+            for row in company.setup_mapping:
+                if row.setup_docname == settings_name:
+                    existing = row
+                    break
+
+            if existing:
+                existing.organisation = match.get("organisation") or ""
+                existing.cluster = cluster_id
+                existing.is_active = 1
             else:
                 company.append(
                     "setup_mapping",
                     {
-                        "etims_setup": settings_name,
-                        "organisation": match.get("organisation", ""),
-                        "cluster": match["cluster_id"],
+                        "setup_docname": settings_name,
+                        "organisation": match.get("organisation") or "",
+                        "cluster": cluster_id,
                         "is_active": 1,
                     },
                 )
@@ -174,9 +170,12 @@ def update_companies_with_cluster_info(matched_data, settings_name):
             company.save(ignore_permissions=True)
 
         frappe.db.commit()
-        return {"success": True, "message": "Companies updated successfully"}
-    except Exception as e:
+
+        return {"success": True}
+
+    except Exception:
         frappe.log_error(
-            message=f"Company update failed: {str(e)}", title="Company Update Error"
+            message=frappe.get_traceback(),
+            title="Company Update Error",
         )
-        return {"success": False, "message": str(e)}
+        return {"success": False}

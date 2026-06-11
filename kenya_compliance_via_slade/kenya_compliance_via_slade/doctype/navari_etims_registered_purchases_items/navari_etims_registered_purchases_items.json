@@ -1,187 +1,187 @@
 {
- "actions": [],
- "autoname": "field:slade_id",
- "creation": "2024-04-29 15:54:18.363289",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "field_order": [
-  "item_name",
-  "product_name",
-  "item_code",
-  "slade_id",
-  "item_sequence",
-  "item_classification_code",
-  "barcode",
-  "package",
-  "packaging_unit_code",
-  "quantity",
-  "purchase_invoice",
-  "column_break_ccgg",
-  "unit_price",
-  "product_code",
-  "supply_amount",
-  "discount_rate",
-  "discount_amount",
-  "item_classification_code_data",
-  "taxation_type_code",
-  "taxable_amount",
-  "tax_amount",
-  "total_amount",
-  "quantity_unit_code",
-  "is_mapped"
- ],
- "fields": [
-  {
-   "fieldname": "item_sequence",
-   "fieldtype": "Int",
-   "label": "Item Sequence"
-  },
-  {
-   "fieldname": "item_classification_code",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Item Classification Code",
-   "options": "Navari KRA eTims Item Classification"
-  },
-  {
-   "fieldname": "item_code",
-   "fieldtype": "Data",
-   "label": "Item Code"
-  },
-  {
-   "fieldname": "item_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Item Name"
-  },
-  {
-   "fieldname": "barcode",
-   "fieldtype": "Data",
-   "label": "BarCode"
-  },
-  {
-   "fieldname": "packaging_unit_code",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Packaging Unit Code",
-   "options": "Navari eTims Packaging Unit"
-  },
-  {
-   "fieldname": "package",
-   "fieldtype": "Data",
-   "label": "Package"
-  },
-  {
-   "fieldname": "quantity_unit_code",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Quantity Unit Code",
-   "options": "Navari eTims Unit of Quantity"
-  },
-  {
-   "fieldname": "quantity",
-   "fieldtype": "Int",
-   "in_list_view": 1,
-   "label": "Quantity"
-  },
-  {
-   "fieldname": "column_break_ccgg",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "unit_price",
-   "fieldtype": "Float",
-   "label": "Unit Price",
-   "precision": "2"
-  },
-  {
-   "fieldname": "supply_amount",
-   "fieldtype": "Float",
-   "label": "Supply Amount"
-  },
-  {
-   "fieldname": "discount_rate",
-   "fieldtype": "Float",
-   "label": "Discount Rate"
-  },
-  {
-   "fieldname": "discount_amount",
-   "fieldtype": "Float",
-   "label": "Discount Amount"
-  },
-  {
-   "fieldname": "taxation_type_code",
-   "fieldtype": "Link",
-   "label": "Taxation Type Code",
-   "options": "Navari KRA eTims Taxation Type"
-  },
-  {
-   "fieldname": "taxable_amount",
-   "fieldtype": "Float",
-   "label": "Taxable Amount",
-   "precision": "2"
-  },
-  {
-   "fieldname": "tax_amount",
-   "fieldtype": "Float",
-   "label": "Tax Amount"
-  },
-  {
-   "fieldname": "total_amount",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Total Amount",
-   "precision": "2"
-  },
-  {
-   "fieldname": "slade_id",
-   "fieldtype": "Data",
-   "label": "Slade ID",
-   "unique": 1
-  },
-  {
-   "fieldname": "item_classification_code_data",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Item Classification Code Data",
-   "options": "Navari KRA eTims Item Classification"
-  },
-  {
-   "fieldname": "product_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Product Name"
-  },
-  {
-   "fieldname": "purchase_invoice",
-   "fieldtype": "Data",
-   "label": "Purchase Invoice"
-  },
-  {
-   "fieldname": "product_code",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Product Code"
-  },
-  {
-   "default": "0",
-   "fieldname": "is_mapped",
-   "fieldtype": "Check",
-   "label": "Is Mapped"
-  }
- ],
- "index_web_pages_for_search": 1,
- "istable": 1,
- "links": [],
- "modified": "2024-12-18 18:31:17.087616",
- "modified_by": "Administrator",
- "module": "Kenya Compliance Via Slade",
- "name": "Navari eTims Registered Purchases Items",
- "naming_rule": "By fieldname",
- "owner": "Administrator",
- "permissions": [],
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": []
+  "actions": [],
+  "autoname": "field:slade_id",
+  "creation": "2024-04-29 15:54:18.363289",
+  "doctype": "DocType",
+  "editable_grid": 1,
+  "engine": "InnoDB",
+  "field_order": [
+    "item_name",
+    "product_name",
+    "item_code",
+    "slade_id",
+    "item_sequence",
+    "etims_item_classification_code",
+    "barcode",
+    "package",
+    "etims_packaging_unit_code",
+    "quantity",
+    "purchase_invoice",
+    "column_break_ccgg",
+    "unit_price",
+    "product_code",
+    "supply_amount",
+    "discount_rate",
+    "discount_amount",
+    "item_classification_code_data",
+    "taxation_type_code",
+    "taxable_amount",
+    "etims_tax_amount",
+    "total_amount",
+    "quantity_unit_code",
+    "is_mapped"
+  ],
+  "fields": [
+    {
+      "fieldname": "item_sequence",
+      "fieldtype": "Int",
+      "label": "Item Sequence"
+    },
+    {
+      "fieldname": "etims_item_classification_code",
+      "fieldtype": "Link",
+      "in_list_view": 1,
+      "label": "Item Classification Code",
+      "options": "Navari KRA eTims Item Classification"
+    },
+    {
+      "fieldname": "item_code",
+      "fieldtype": "Data",
+      "label": "Item Code"
+    },
+    {
+      "fieldname": "item_name",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Item Name"
+    },
+    {
+      "fieldname": "barcode",
+      "fieldtype": "Data",
+      "label": "BarCode"
+    },
+    {
+      "fieldname": "etims_packaging_unit_code",
+      "fieldtype": "Link",
+      "in_list_view": 1,
+      "label": "Packaging Unit Code",
+      "options": "Navari eTims Packaging Unit"
+    },
+    {
+      "fieldname": "package",
+      "fieldtype": "Data",
+      "label": "Package"
+    },
+    {
+      "fieldname": "quantity_unit_code",
+      "fieldtype": "Link",
+      "in_list_view": 1,
+      "label": "Quantity Unit Code",
+      "options": "Navari eTims Unit of Quantity"
+    },
+    {
+      "fieldname": "quantity",
+      "fieldtype": "Int",
+      "in_list_view": 1,
+      "label": "Quantity"
+    },
+    {
+      "fieldname": "column_break_ccgg",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "unit_price",
+      "fieldtype": "Float",
+      "label": "Unit Price",
+      "precision": "2"
+    },
+    {
+      "fieldname": "supply_amount",
+      "fieldtype": "Float",
+      "label": "Supply Amount"
+    },
+    {
+      "fieldname": "discount_rate",
+      "fieldtype": "Float",
+      "label": "Discount Rate"
+    },
+    {
+      "fieldname": "discount_amount",
+      "fieldtype": "Float",
+      "label": "Discount Amount"
+    },
+    {
+      "fieldname": "taxation_type_code",
+      "fieldtype": "Link",
+      "label": "Taxation Type Code",
+      "options": "Navari KRA eTims Taxation Type"
+    },
+    {
+      "fieldname": "taxable_amount",
+      "fieldtype": "Float",
+      "label": "Taxable Amount",
+      "precision": "2"
+    },
+    {
+      "fieldname": "etims_tax_amount",
+      "fieldtype": "Float",
+      "label": "Tax Amount"
+    },
+    {
+      "fieldname": "total_amount",
+      "fieldtype": "Float",
+      "in_list_view": 1,
+      "label": "Total Amount",
+      "precision": "2"
+    },
+    {
+      "fieldname": "slade_id",
+      "fieldtype": "Data",
+      "label": "Slade ID",
+      "unique": 1
+    },
+    {
+      "fieldname": "item_classification_code_data",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Item Classification Code Data",
+      "options": "Navari KRA eTims Item Classification"
+    },
+    {
+      "fieldname": "product_name",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Product Name"
+    },
+    {
+      "fieldname": "purchase_invoice",
+      "fieldtype": "Data",
+      "label": "Purchase Invoice"
+    },
+    {
+      "fieldname": "product_code",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Product Code"
+    },
+    {
+      "default": "0",
+      "fieldname": "is_mapped",
+      "fieldtype": "Check",
+      "label": "Is Mapped"
+    }
+  ],
+  "index_web_pages_for_search": 1,
+  "istable": 1,
+  "links": [],
+  "modified": "2024-12-18 18:31:17.087616",
+  "modified_by": "Administrator",
+  "module": "Kenya Compliance Via Slade",
+  "name": "Navari eTims Registered Purchases Items",
+  "naming_rule": "By fieldname",
+  "owner": "Administrator",
+  "permissions": [],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": []
 }
