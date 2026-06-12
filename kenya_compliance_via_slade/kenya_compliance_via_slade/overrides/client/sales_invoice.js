@@ -15,9 +15,11 @@ frappe.realtime.on("refresh_form", function (name) {
 frappe.ui.form.on(parentDoctype, {
   refresh: async function (frm) {
     await updateTaxAmountLabel(frm);
-    if (frm.is_new()) return;
 
-    await renderEtimsEligibilityBanner(frm);
+    if (frm.is_new()) {
+      clearEtimsHtmlAndWarnings(frm);
+      return;
+    }
 
     const { message: activeSetting } = await frappe.call({
       method:
@@ -25,518 +27,750 @@ frappe.ui.form.on(parentDoctype, {
       args: { doctype: settingsDoctypeName, company: frm.doc.company },
     });
 
+    if (!activeSetting?.length || frm.doc.prevent_etims_submission) {
+      return;
+    }
+
+    clearEtimsHtmlAndWarnings(frm);
+
+    const eligibilityData = await fetchEligibilityData(frm);
+    const summaryData = await fetchAndRenderSummary(
+      frm,
+      activeSetting,
+      eligibilityData,
+    );
+
+    if (frm.doc.docstatus !== 0) {
+      addCustomButtons(frm, activeSetting, summaryData);
+    }
+
     if (
-      activeSetting?.length > 0 &&
-      frm.doc.docstatus !== 0 &&
-      !frm.doc.prevent_etims_submission
+      eligibilityData?.errors?.length ||
+      eligibilityData?.warnings?.length ||
+      eligibilityData?.last_error
     ) {
-      const summaryData = await renderEtimsSummary(frm, activeSetting);
-      if (!frm.doc.sent_to_etims) {
-        frm.add_custom_button(
-          __("Send Invoice"),
-          function () {
-            showSettingsModalAndExecute(
-              "Send Invoice",
-              activeSetting,
-              (settings_name) => ({
-                method:
-                  "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.send_invoice_details",
-                args: {
-                  name: frm.doc.name,
-                  settings_name: settings_name,
-                },
-                success_msg: "Invoice submission queued",
-              }),
-            );
-          },
-          __("eTims Actions"),
-        );
-      } else {
-        frm.add_custom_button(
-          __("eTIMS Sales Ledger"),
-          function () {
-            frappe.route_options = {
-              company: frm.doc.company,
-              sales_invoice: frm.doc.name,
-              show_details: 1,
-              from_date: frm.doc.posting_date,
-              to_date: moment(frm.doc.modified).format("YYYY-MM-DD"),
-            };
-            frappe.set_route("query-report", "eTIMS Sales Ledger");
-          },
-          __("View"),
-        );
-      }
-
-      frm.add_custom_button(
-        __("Sync or Check Status"),
-        function () {
-          showSettingsModalAndExecute(
-            "Sync Invoice",
-            activeSetting,
-            (settings_name) => ({
-              method:
-                "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
-              args: {
-                document_name: frm.doc.name,
-                invoice_type: "Sales Invoice",
-                settings_name: settings_name,
-                company: frm.doc.company,
-              },
-            }),
-          );
-
-          showSettingsModalAndExecute(
-            "Check eTIMS Status",
-            activeSetting,
-            (settings_name) => ({
-              method:
-                "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_data",
-              args: {
-                settings_name: settings_name,
-                invoice_type: "Both",
-                document_name: frm.doc.name,
-                request_data: { reference_number: frm.doc.name },
-              },
-              success_msg: "Invoice status fetch queued",
-            }),
-          );
-        },
-        __("eTims Actions"),
+      showEtimsAlert(
+        frm,
+        "warning",
+        "eTIMS Validation Issues Detected",
+        "This invoice may not be eligible for eTIMS submission. Click to review the eTIMS Details section.",
+        () => frm.scroll_to_field("etims_summary"),
       );
+    }
 
-      frm.add_custom_button(
-        __("View Invoice Status"),
-        () => {
-          const key = frm.doc.creation.replace(/[-:\s]/g, "").replace(".", "");
-
-          window.open(
-            `/invoice-verification?id=${encodeURIComponent(frm.doc.name)}&key=${encodeURIComponent(key)}`,
-            "_blank",
-          );
-        },
-        __("eTims Actions"),
+    if (summaryData?.hasSignificantMismatch && frm.doc.sent_to_etims) {
+      showEtimsAlert(
+        frm,
+        "danger",
+        "eTIMS Reconciliation Mismatch Detected",
+        `Invoices: ${summaryData.invoiceDiffPercent?.toFixed(1)}% | Credits: ${summaryData.creditDiffPercent?.toFixed(1)}% | Net: ${summaryData.netDiffPercent?.toFixed(1)}%`,
+        () => frm.scroll_to_field("etims_summary"),
       );
-
-      if (frm.doc.sent_to_etims && summaryData?.hasSignificantMismatch) {
-        frm.add_custom_button(
-          __("Correction Credit Note on eTIMS"),
-          function () {
-            const erpInvoiceAmount = flt(
-              summaryData?.totalRow?.erp_invoice_period_amount || 0,
-            );
-
-            const erpCreditAmount = flt(
-              summaryData?.totalRow?.erp_credit_period_amount || 0,
-            );
-
-            const etimsInvoiceAmount = flt(
-              summaryData?.totalRow?.etims_invoice_amount || 0,
-            );
-
-            const etimsCreditAmount = flt(
-              summaryData?.totalRow?.etims_credit_amount || 0,
-            );
-
-            const erpVat = flt(summaryData?.totalRow?.erp_tax_amount || 0);
-
-            const etimsVat = flt(summaryData?.totalRow?.etims_total_tax || 0);
-
-            const difference = flt(summaryData?.totalRow?.difference || 0);
-
-            const vatDifference = flt(
-              summaryData?.totalRow?.tax_difference || 0,
-            );
-
-            const erpNet = erpInvoiceAmount - erpCreditAmount;
-
-            const etimsNet = etimsInvoiceAmount - etimsCreditAmount;
-
-            const differencePercent = flt(summaryData?.differencePercent || 0);
-
-            const currency = "KES";
-
-            const formatValue = (value) =>
-              format_currency(value || 0, currency);
-
-            const issueNotes = [];
-
-            if (Math.abs(difference) > 1) {
-              issueNotes.push(`
-        <li style="margin-bottom:10px;">
-          ERPNext invoice totals do not match eTIMS invoice totals.
-        </li>
-      `);
-            }
-
-            if (Math.abs(vatDifference) > 1) {
-              issueNotes.push(`
-        <li style="margin-bottom:10px;">
-          ERPNext VAT totals do not match eTIMS VAT totals.
-        </li>
-      `);
-            }
-
-            if (Math.abs(erpNet) > 1 && Math.abs(etimsNet) > 1) {
-              issueNotes.push(`
-        <li style="margin-bottom:10px;">
-          Net invoice balance is not fully offset by credit notes. Some invoices may be missing corresponding correction credit notes on eTIMS.
-        </li>
-      `);
-            }
-
-            if (
-              Math.abs(erpInvoiceAmount) > 1 &&
-              Math.abs(etimsInvoiceAmount) < 1
-            ) {
-              issueNotes.push(`
-        <li style="margin-bottom:10px;">
-          ERPNext invoices exist but no matching eTIMS invoice totals were found.
-        </li>
-      `);
-            }
-
-            if (
-              Math.abs(erpCreditAmount) > 1 &&
-              Math.abs(etimsCreditAmount) < 1
-            ) {
-              issueNotes.push(`
-        <li style="margin-bottom:10px;">
-          ERPNext credit notes exist but no matching eTIMS credit notes were found.
-        </li>
-      `);
-            }
-
-            if (!issueNotes.length) {
-              issueNotes.push(`
-        <li style="margin-bottom:10px;">
-          Significant reconciliation mismatch detected requiring verification.
-        </li>
-      `);
-            }
-
-            const dialog = new frappe.ui.Dialog({
-              title: __("Correction Credit Note on eTIMS"),
-              size: "large",
-              fields: [
-                {
-                  fieldtype: "HTML",
-                  fieldname: "warning_html",
-                  options: `
-            <div style="
-              display:flex;
-              flex-direction:column;
-              gap:14px;
-            ">
-
-              <div style="
-                padding:22px;
-                border-radius:14px;
-                background:#fef2f2;
-                border:1px solid #fecaca;
-              ">
-                <div style="
-                  font-size:16px;
-                  font-weight:700;
-                  color:#991b1b;
-                  margin-bottom:14px;
-                ">
-                  Warning
-                </div>
-
-                <div style="
-                  font-size:14px;
-                  color:#7f1d1d;
-                  line-height:1.8;
-                ">
-                  This process verifies ERPNext invoice values against eTIMS records and may automatically generate correction credit notes on eTIMS to align submitted tax data with ERPNext records.
-
-                  <br><br>
-
-                  This affects official tax submissions to KRA and should only be executed after reviewing the reconciliation summary below.
-                </div>
-              </div>
-
-              <div style="
-                border:1px solid #e5e7eb;
-                border-radius:14px;
-                overflow:hidden;
-                background:#ffffff;
-              ">
-                <div style="
-                  padding:16px 16px;
-                  background:#f8fafc;
-                  border-bottom:1px solid #e5e7eb;
-                  font-size:17px;
-                  font-weight:700;
-                  color:#0f172a;
-                ">
-                  Advanced Reconciliation Summary
-                </div>
-
-                <div style="
-                  display:grid;
-                  grid-template-columns:repeat(auto-fit,minmax(216px,1fr));
-                  gap:14px;
-                  padding:14px;
-                ">
-
-                  <div style="
-                    padding:16px;
-                    border-radius:10px;
-                    border:1px solid #e2e8f0;
-                    background:#ffffff;
-                  ">
-                    <div style="font-size:12px;color:#64748b;">
-                      ERPNext Invoice Amount
-                    </div>
-
-                    <div style="
-                      margin-top:8px;
-                      font-size:24px;
-                      font-weight:700;
-                      color:#0f172a;
-                    ">
-                      ${formatValue(erpInvoiceAmount)}
-                    </div>
-                  </div>
-
-                  <div style="
-                    padding:16px;
-                    border-radius:10px;
-                    border:1px solid #e2e8f0;
-                    background:#ffffff;
-                  ">
-                    <div style="font-size:12px;color:#64748b;">
-                      ERPNext Credit Notes
-                    </div>
-
-                    <div style="
-                      margin-top:8px;
-                      font-size:24px;
-                      font-weight:700;
-                      color:#0f172a;
-                    ">
-                      ${formatValue(erpCreditAmount)}
-                    </div>
-                  </div>
-
-                  <div style="
-                    padding:16px;
-                    border-radius:10px;
-                    border:1px solid #bfdbfe;
-                    background:#eff6ff;
-                  ">
-                    <div style="font-size:12px;color:#1d4ed8;">
-                      eTIMS Invoice Amount
-                    </div>
-
-                    <div style="
-                      margin-top:8px;
-                      font-size:24px;
-                      font-weight:700;
-                      color:#1e3a8a;
-                    ">
-                      ${formatValue(etimsInvoiceAmount)}
-                    </div>
-                  </div>
-
-                  <div style="
-                    padding:16px;
-                    border-radius:10px;
-                    border:1px solid #bfdbfe;
-                    background:#eff6ff;
-                  ">
-                    <div style="font-size:12px;color:#1d4ed8;">
-                      eTIMS Credit Notes
-                    </div>
-
-                    <div style="
-                      margin-top:8px;
-                      font-size:24px;
-                      font-weight:700;
-                      color:#1e3a8a;
-                    ">
-                      ${formatValue(etimsCreditAmount)}
-                    </div>
-                  </div>
-
-                  <div style="
-                    padding:16px;
-                    border-radius:10px;
-                    border:1px solid #fecaca;
-                    background:#fef2f2;
-                  ">
-                    <div style="font-size:12px;color:#991b1b;">
-                      Difference
-                    </div>
-
-                    <div style="
-                      margin-top:8px;
-                      font-size:24px;
-                      font-weight:700;
-                      color:#991b1b;
-                    ">
-                      ${formatValue(difference)}
-                    </div>
-                  </div>
-
-                  <div style="
-                    padding:16px;
-                    border-radius:10px;
-                    border:1px solid #fecaca;
-                    background:#fef2f2;
-                  ">
-                    <div style="font-size:12px;color:#991b1b;">
-                      VAT Difference
-                    </div>
-
-                    <div style="
-                      margin-top:8px;
-                      font-size:24px;
-                      font-weight:700;
-                      color:#991b1b;
-                    ">
-                      ${formatValue(vatDifference)}
-                    </div>
-                  </div>
-
-                  <div style="
-                    padding:16px;
-                    border-radius:10px;
-                    border:1px solid #e5e7eb;
-                    background:#ffffff;
-                  ">
-                    <div style="font-size:12px;color:#64748b;">
-                      ERPNext Net Value
-                    </div>
-
-                    <div style="
-                      margin-top:8px;
-                      font-size:24px;
-                      font-weight:700;
-                      color:#0f172a;
-                    ">
-                      ${formatValue(erpNet)}
-                    </div>
-                  </div>
-
-                  <div style="
-                    padding:16px;
-                    border-radius:10px;
-                    border:1px solid #e5e7eb;
-                    background:#ffffff;
-                  ">
-                    <div style="font-size:12px;color:#64748b;">
-                      eTIMS Net Value
-                    </div>
-
-                    <div style="
-                      margin-top:8px;
-                      font-size:24px;
-                      font-weight:700;
-                      color:#0f172a;
-                    ">
-                      ${formatValue(etimsNet)}
-                    </div>
-                  </div>
-
-                  <div style="
-                    padding:16px;
-                    border-radius:10px;
-                    border:1px solid #fcd34d;
-                    background:#fffbeb;
-                  ">
-                    <div style="font-size:12px;color:#92400e;">
-                      Difference Percentage
-                    </div>
-
-                    <div style="
-                      margin-top:8px;
-                      font-size:24px;
-                      font-weight:700;
-                      color:#92400e;
-                    ">
-                      ${differencePercent.toFixed(2)}%
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div style="
-                border:1px solid #fde68a;
-                background:#fffbeb;
-                border-radius:14px;
-                padding:16px;
-              ">
-                <div style="
-                  font-size:17px;
-                  font-weight:700;
-                  color:#92400e;
-                  margin-bottom:14px;
-                ">
-                  Potential Causes Detected
-                </div>
-
-                <ul style="
-                  margin:0;
-                  padding-left:16px;
-                  color:#78350f;
-                  font-size:14px;
-                  line-height:1.8;
-                ">
-                  ${issueNotes.join("")}
-                </ul>
-              </div>
-
-              </div>
-            </div>
-          `,
-                },
-              ],
-              primary_action_label: __("Queue Correction"),
-              secondary_action_label: __("Cancel"),
-              secondary_action: () => {
-                dialog.hide();
-              },
-              primary_action: () => {
-                dialog.hide();
-
-                showSettingsModalAndExecute(
-                  "Correction Credit Note on eTIMS",
-                  activeSetting,
-                  (settings_name) => ({
-                    method:
-                      "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.verify_invoice_details",
-                    args: {
-                      document_name: frm.doc.name,
-                      invoice_type: "Sales Invoice",
-                      settings_name: settings_name,
-                      company: frm.doc.company,
-                    },
-                    success_msg: "Verification and correction queued",
-                  }),
-                );
-              },
-            });
-
-            dialog.set_secondary_action(() => {
-              dialog.hide();
-            });
-
-            dialog.show();
-          },
-          __("eTims Actions"),
-        );
-      }
     }
   },
 });
 
+async function fetchEligibilityData(frm) {
+  try {
+    const { message } = await frappe.call({
+      method:
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.analyze_etims_eligibility",
+      args: { invoice_name: frm.doc.name },
+    });
+    return message || {};
+  } catch (error) {
+    console.error("Failed to fetch eligibility data:", error);
+    return {};
+  }
+}
+
+async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
+  const htmlField = frm.fields_dict.etims_summary;
+  if (!htmlField) return null;
+
+  const fmt = (v) => format_currency(v || 0, "KES");
+  const flt2 = (v) => parseFloat(v || 0);
+
+  htmlField.$wrapper.html(`
+    ${SHARED_ETIMS_STYLES}
+    <div class="etims-root">
+      <div class="etims-empty">
+        <div class="etims-spinner"></div>
+        <div style="font-size:14px;color:var(--text-muted);font-weight:500;">Fetching compliance data...</div>
+      </div>
+    </div>
+  `);
+
+  try {
+    const errors = eligibilityData?.errors || [];
+
+    if (errors.length > 0) {
+      renderErrorsBlock(htmlField, errors);
+      return null;
+    }
+
+    if (frm.doc.docstatus === 0) {
+      htmlField.$wrapper.html(`
+        ${SHARED_ETIMS_STYLES}
+        <div class="etims-root">
+          <div class="etims-empty">
+            <div class="etims-empty-icon" style="color:#94a3b8;">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 8v4l3 3M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/></svg>
+            </div>
+            <div class="etims-empty-title">Draft Invoice</div>
+            <div class="etims-empty-sub">Submit this invoice to view eTIMS reconciliation details.</div>
+          </div>
+        </div>
+      `);
+      return null;
+    }
+
+    const postingDate = frappe.datetime.str_to_obj(frm.doc.posting_date);
+    const creationDate = frappe.datetime.str_to_obj(
+      (frm.doc.creation || "").split(" ")[0],
+    );
+    const startDate =
+      creationDate && creationDate < postingDate
+        ? frappe.datetime.obj_to_str(creationDate)
+        : frappe.datetime.add_months(frm.doc.posting_date, -3);
+    const endDate = frappe.datetime.get_today();
+
+    const referenceNumber =
+      frm.doc.is_return && frm.doc.return_against
+        ? frm.doc.return_against
+        : frm.doc.name;
+
+    const response = await frappe.call({
+      method: "frappe.desk.query_report.run",
+      args: {
+        report_name: "eTIMS Sales Ledger",
+        filters: {
+          company: frm.doc.company,
+          from_date: startDate,
+          to_date: endDate,
+          sales_invoice: referenceNumber,
+          show_details: 1,
+        },
+      },
+      freeze: false,
+    });
+
+    const rows = response.message.result || [];
+    const totalRow = rows.find((d) => d.sales_invoice === "TOTAL") || {};
+    let detailRows = rows.filter(
+      (d) =>
+        d.indent === 1 &&
+        (flt2(d.etims_invoice_amount) ||
+          flt2(d.etims_credit_amount) ||
+          flt2(d.etims_total_tax)),
+    );
+
+    if (frm.doc.is_return && frm.doc.return_against) {
+      const matchedCreditNote = detailRows.find(
+        (row) =>
+          row.type === "Credit Note" && row.reference_number === frm.doc.name,
+      );
+
+      if (matchedCreditNote) {
+        detailRows = [matchedCreditNote];
+      } else {
+        const unmatchedCreditNote = {
+          invoice_date: frm.doc.posting_date,
+          customer: frm.doc.customer_name,
+          type: "Credit Note (Unmatched)",
+          etims_invoice_amount: 0,
+          etims_credit_amount: Math.abs(flt2(frm.doc.grand_total)),
+          etims_total_tax: Math.abs(flt2(frm.doc.total_taxes_and_charges)),
+          reference_number: "Not Found on eTIMS",
+          is_signed: 0,
+        };
+        detailRows = [unmatchedCreditNote];
+      }
+    }
+
+    const badge = (ok) =>
+      ok
+        ? `<span class="etims-pill etims-pill-success">${ETIMS_ICONS.check} Signed</span>`
+        : `<span class="etims-pill etims-pill-danger">${ETIMS_ICONS.x} Unsigned</span>`;
+
+    const tableHtml = `
+      <div class="etims-card">
+        <div class="etims-card-header">
+          <span class="etims-card-header-title">Transaction Records</span>
+          <span class="etims-pill etims-pill-neutral">${detailRows.length} entr${detailRows.length !== 1 ? "ies" : "y"}</span>
+        </div>
+        <div class="etims-table-wrap">
+          <table class="etims-table">
+            <thead>
+              <tr><th>Date</th><th>Customer</th><th>Type</th><th class="r">Invoice Amt</th><th class="r">Credit Amt</th><th class="r">VAT</th><th>Reference</th><th class="c">Status</th></tr>
+            </thead>
+            <tbody>
+              ${
+                detailRows.length
+                  ? detailRows
+                      .map(
+                        (row, i) => `
+                <tr class="${i % 2 === 0 ? "row-even" : "row-odd"}">
+                  <td class="muted">${frappe.datetime.str_to_user(row.invoice_date)}</td>
+                  <td class="bold">${frappe.utils.escape_html(row.customer || "—")}</td>
+                  <td><span class="etims-type-chip">${row.type || "—"}</span></td>
+                  <td class="r mono">${fmt(row.etims_invoice_amount)}</td>
+                  <td class="r mono" style="color:var(--text-muted);">${fmt(row.etims_credit_amount)}</td>
+                  <td class="r mono" style="color:var(--text-muted);">${fmt(row.etims_total_tax)}</td>
+                  <td class="muted" style="font-family:monospace;font-size:11px;">${frappe.utils.escape_html(row.reference_number || "—")}</td>
+                  <td class="c">${badge(row.is_signed)}</td>
+                </tr>
+              `,
+                      )
+                      .join("")
+                  : `<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-muted);">No eTIMS records found for this invoice.</td></tr>`
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    if (!frm.doc.sent_to_etims && detailRows.length === 0) {
+      renderNotSubmittedBlock(htmlField, activeSetting, frm);
+      return null;
+    }
+
+    if (!frm.doc.sent_to_etims && detailRows.length > 0) {
+      renderInconsistentBlock(htmlField, tableHtml);
+      return null;
+    }
+
+    if (frm.doc.is_return) {
+      htmlField.$wrapper.html(`
+        ${SHARED_ETIMS_STYLES}
+        <div class="etims-root">
+          <div class="etims-empty">
+            <div class="etims-empty-icon" style="color:#d97706;background:#fffbeb;">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 14L4 9l5-5M4 9h11a6 6 0 010 12h-2"/></svg>
+            </div>
+            <div class="etims-empty-title">Return Invoice</div>
+            <div class="etims-empty-sub">
+              This is a credit note / return transaction. Please refer to the original invoice 
+              for the complete eTIMS reconciliation ledger and dashboard metrics.
+            </div>
+          </div>
+        </div>
+      `);
+      return {
+        hasSignificantMismatch: false,
+        invoiceDiffPercent: 0,
+        creditDiffPercent: 0,
+        netDiffPercent: 0,
+      };
+    }
+
+    let erpInvoiceAmount = flt2(totalRow.erp_invoice_period_amount || 0);
+    let etimsInvoiceAmount = flt2(totalRow.etims_invoice_amount || 0);
+    let erpCreditAmount = flt2(totalRow.erp_credit_period_amount || 0);
+    let etimsCreditAmount = flt2(totalRow.etims_credit_amount || 0);
+
+    if (frm.doc.is_return) {
+      const returnGrandTotal = Math.abs(flt2(frm.doc.grand_total));
+      const returnTaxTotal = Math.abs(flt2(frm.doc.total_taxes_and_charges));
+
+      erpInvoiceAmount = 0;
+      erpCreditAmount = returnGrandTotal;
+      etimsInvoiceAmount = 0;
+      etimsCreditAmount =
+        detailRows.length > 0 &&
+        detailRows[0].type !== "Credit Note (Unmatched)"
+          ? Math.abs(flt2(detailRows[0].etims_credit_amount))
+          : 0;
+
+      if (
+        detailRows.length > 0 &&
+        detailRows[0].type === "Credit Note (Unmatched)"
+      ) {
+        etimsCreditAmount = 0;
+      }
+    }
+
+    const invoiceDifference = erpInvoiceAmount - etimsInvoiceAmount;
+    const invoiceDiffPercent =
+      erpInvoiceAmount > 0
+        ? (Math.abs(invoiceDifference) / erpInvoiceAmount) * 100
+        : 0;
+
+    const creditDifference = erpCreditAmount - etimsCreditAmount;
+    const creditDiffPercent =
+      erpCreditAmount > 0
+        ? (Math.abs(creditDifference) / erpCreditAmount) * 100
+        : 0;
+
+    const erpNetAmount = erpInvoiceAmount + erpCreditAmount;
+    const etimsNetAmount = etimsInvoiceAmount + etimsCreditAmount;
+    const netDifference = erpNetAmount - etimsNetAmount;
+    const netDiffPercent =
+      Math.abs(erpNetAmount) > 0
+        ? (Math.abs(netDifference) / Math.abs(erpNetAmount)) * 100
+        : 0;
+
+    const hasSignificantMismatch =
+      invoiceDiffPercent > 0.5 ||
+      creditDiffPercent > 0.5 ||
+      netDiffPercent > 0.5;
+
+    renderSummaryDashboard(htmlField, {
+      startDate,
+      endDate,
+      hasSignificantMismatch,
+      erpInvoiceAmount,
+      etimsInvoiceAmount,
+      invoiceDifference,
+      invoiceDiffPercent,
+      erpCreditAmount,
+      etimsCreditAmount,
+      creditDifference,
+      creditDiffPercent,
+      erpNetAmount,
+      etimsNetAmount,
+      netDifference,
+      netDiffPercent,
+      tableHtml,
+      fmt,
+    });
+
+    return {
+      hasSignificantMismatch,
+      invoiceDiffPercent,
+      creditDiffPercent,
+      netDiffPercent,
+      totalRow,
+      erp_invoice_period_amount: erpInvoiceAmount,
+      erp_credit_period_amount: erpCreditAmount,
+      etims_invoice_amount: etimsInvoiceAmount,
+      etims_credit_amount: etimsCreditAmount,
+      difference: netDifference,
+      tax_difference: flt2(totalRow.tax_difference || 0),
+      erp_tax_amount: flt2(totalRow.erp_tax_amount || 0),
+      etims_total_tax: flt2(totalRow.etims_total_tax || 0),
+    };
+  } catch (error) {
+    console.error("eTIMS summary error:", error);
+    renderErrorBlock(htmlField);
+    return null;
+  }
+}
+
+function renderErrorsBlock(htmlField, errors) {
+  htmlField.$wrapper.html(`
+    ${SHARED_ETIMS_STYLES}
+    <div class="etims-root">
+      <div class="etims-card">
+        <div class="etims-card-header">
+          <div style="display:flex;align-items:center;gap:10px;color:#dc2626;">
+            ${ETIMS_ICONS.warn}
+            <span class="etims-card-header-title" style="color:#dc2626;">Submission Blocked</span>
+          </div>
+          <span class="etims-pill etims-pill-danger">${errors.length} issue${errors.length > 1 ? "s" : ""}</span>
+        </div>
+        <div class="etims-card-body">
+          ${errors
+            .map(
+              (e, i) => `
+            <div class="etims-error-item etims-error-item-danger">
+              <span class="etims-error-num etims-error-num-danger">${String(i + 1).padStart(2, "0")}</span>
+              <span class="etims-error-msg">${frappe.utils.escape_html(e)}</span>
+            </div>
+          `,
+            )
+            .join("")}
+          <div class="etims-note">
+            ${ETIMS_ICONS.info}
+            Resolve all issues listed above before submitting to eTIMS.
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function renderNotSubmittedBlock(htmlField, activeSetting, frm) {
+  htmlField.$wrapper.html(`
+    ${SHARED_ETIMS_STYLES}
+    <div class="etims-root">
+      <div class="etims-empty">
+        <div class="etims-empty-icon" style="color:#3b82f6;">${ETIMS_ICONS.up}</div>
+        <div class="etims-empty-title">Not submitted to eTIMS</div>
+        <div class="etims-empty-sub">This invoice hasn't been sent to KRA's eTIMS system yet.</div>
+        <button class="btn-etims" id="etims-submit-btn">Submit to eTIMS</button>
+      </div>
+    </div>
+  `);
+  htmlField.$wrapper.find("#etims-submit-btn").on("click", function () {
+    showSettingsModalAndExecute(
+      "Send Invoice",
+      activeSetting,
+      (settings_name) => ({
+        method:
+          "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.send_invoice_details",
+        args: { name: frm.doc.name, settings_name: settings_name },
+        success_msg: "Invoice submission queued",
+      }),
+    );
+  });
+}
+
+function renderInconsistentBlock(htmlField, tableHtml) {
+  htmlField.$wrapper.html(`
+    ${SHARED_ETIMS_STYLES}
+    <div class="etims-root">
+      <div class="etims-card">
+        <div class="etims-card-header">
+          <div style="display:flex;align-items:center;gap:10px;color:#d97706;">
+            ${ETIMS_ICONS.warn}
+            <span class="etims-card-header-title" style="color:#d97706;">Data Inconsistency</span>
+          </div>
+          <span class="etims-pill etims-pill-warn">Not Marked Sent</span>
+        </div>
+        <div class="etims-card-body">
+          <p style="margin:0 0 16px;font-size:13px;color:var(--text-muted);">
+            eTIMS entries exist for this invoice but it is not marked as sent. Review the records below.
+          </p>
+        </div>
+      </div>
+      ${tableHtml}
+    </div>
+  `);
+}
+
+function renderSummaryDashboard(htmlField, data) {
+  htmlField.$wrapper.html(`
+    ${SHARED_ETIMS_STYLES}
+    <div class="etims-root">
+      <div class="etims-hero">
+        <div>
+          <div class="etims-hero-title">eTIMS Reconciliation Dashboard</div>
+          <div class="etims-hero-sub">${data.startDate} — ${data.endDate}</div>
+        </div>
+        <span class="etims-pill ${data.hasSignificantMismatch ? "etims-pill-danger" : "etims-pill-success"}">
+          ${data.hasSignificantMismatch ? `${ETIMS_ICONS.warn} Mismatch Detected` : `${ETIMS_ICONS.check} All Balanced`}
+        </span>
+      </div>
+
+      <div class="etims-stats-grid">
+        <div class="etims-stat-card">
+          <div class="etims-stat-header">Invoices</div>
+          <div class="etims-stat-body">
+            <div class="etims-compare-row"><span class="etims-compare-label">ERP</span><span class="etims-compare-value erp">${data.fmt(data.erpInvoiceAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${data.fmt(data.etimsInvoiceAmount)}</span></div>
+            <div class="etims-diff-section">
+              <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.invoiceDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.invoiceDifference)}</span></div>
+              <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.invoiceDiffPercent.toFixed(2)}%</span></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="etims-stat-card">
+          <div class="etims-stat-header">Credit Notes</div>
+          <div class="etims-stat-body">
+            <div class="etims-compare-row"><span class="etims-compare-label">ERP</span><span class="etims-compare-value erp">${data.fmt(data.erpCreditAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${data.fmt(data.etimsCreditAmount)}</span></div>
+            <div class="etims-diff-section">
+              <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.creditDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.creditDifference)}</span></div>
+              <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.creditDiffPercent.toFixed(2)}%</span></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="etims-stat-card">
+          <div class="etims-stat-header">Net Values</div>
+          <div class="etims-stat-body">
+            <div class="etims-compare-row"><span class="etims-compare-label">ERP Net</span><span class="etims-compare-value erp">${data.fmt(data.erpNetAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Net</span><span class="etims-compare-value etims">${data.fmt(data.etimsNetAmount)}</span></div>
+            <div class="etims-diff-section">
+              <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.netDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.netDifference)}</span></div>
+              <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.netDiffPercent.toFixed(2)}%</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      ${data.tableHtml}
+    </div>
+  `);
+}
+
+function renderErrorBlock(htmlField) {
+  htmlField.$wrapper.html(`
+    ${SHARED_ETIMS_STYLES}
+    <div class="etims-root">
+      <div class="etims-empty">
+        <div class="etims-empty-icon" style="background:#fee2e2;color:#dc2626;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 3L21.5 19.5H2.5L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v5.5M12 17v.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <div class="etims-empty-title">Failed to load eTIMS data</div>
+        <div class="etims-empty-sub">Please refresh the page or contact support if the issue persists.</div>
+      </div>
+    </div>
+  `);
+}
+
+function addCustomButtons(frm, activeSetting, summaryData) {
+  if (frm.doc.docstatus == 0 || frm.doc.prevent_etims_submission) return;
+
+  if (!frm.doc.sent_to_etims) {
+    frm.add_custom_button(
+      __("Send Invoice"),
+      function () {
+        showSettingsModalAndExecute(
+          "Send Invoice",
+          activeSetting,
+          (settings_name) => ({
+            method:
+              "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.send_invoice_details",
+            args: { name: frm.doc.name, settings_name: settings_name },
+            success_msg: "Invoice submission queued",
+          }),
+        );
+      },
+      __("eTims Actions"),
+    );
+  } else {
+    frm.add_custom_button(
+      __("eTIMS Sales Ledger"),
+      function () {
+        frappe.route_options = {
+          company: frm.doc.company,
+          sales_invoice: frm.doc.is_return
+            ? frm.doc.return_against
+            : frm.doc.name,
+          show_details: 1,
+          from_date: frm.doc.posting_date,
+          to_date: moment(frm.doc.modified).format("YYYY-MM-DD"),
+        };
+        frappe.set_route("query-report", "eTIMS Sales Ledger");
+      },
+      __("View"),
+    );
+  }
+
+  frm.add_custom_button(
+    __("Sync or Check Status"),
+    function () {
+      showSettingsModalAndExecute(
+        "Check eTIMS Status",
+        activeSetting,
+        (settings_name) => ({
+          method:
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_invoices",
+          args: {
+            settings_name: settings_name,
+            document_name: frm.doc.name,
+            request_data: {
+              reference_number: frm.doc.is_return
+                ? frm.doc.return_against
+                : frm.doc.name,
+            },
+          },
+          success_msg: "Invoice status fetch queued",
+        }),
+      );
+    },
+    __("eTims Actions"),
+  );
+
+  frm.add_custom_button(
+    __("View Invoice Status"),
+    () => {
+      const key = frm.doc.creation.replace(/[-:\s]/g, "").replace(".", "");
+      window.open(
+        `/invoice-verification?id=${encodeURIComponent(frm.doc.name)}&key=${encodeURIComponent(key)}`,
+        "_blank",
+      );
+    },
+    __("eTims Actions"),
+  );
+
+  if (frm.doc.sent_to_etims && summaryData?.hasSignificantMismatch) {
+    frm.add_custom_button(
+      __("Correction Credit Note on eTIMS"),
+      function () {
+        showCorrectionDialog(frm, activeSetting, summaryData);
+      },
+      __("eTims Actions"),
+    );
+  }
+}
+
+function showCorrectionDialog(frm, activeSetting, summaryData) {
+  let erpInvoiceAmount = flt(summaryData?.erp_invoice_period_amount || 0);
+  let erpCreditAmount = flt(summaryData?.erp_credit_period_amount || 0);
+  let etimsInvoiceAmount = flt(summaryData?.etims_invoice_amount || 0);
+  let etimsCreditAmount = flt(summaryData?.etims_credit_amount || 0);
+
+  if (frm.doc.is_return) {
+    erpInvoiceAmount = 0;
+    erpCreditAmount = Math.abs(flt(frm.doc.grand_total));
+    etimsInvoiceAmount = 0;
+    etimsCreditAmount = Math.abs(etimsCreditAmount);
+  }
+
+  const erpVat = flt(summaryData?.erp_tax_amount || 0);
+  const etimsVat = flt(summaryData?.etims_total_tax || 0);
+  const difference =
+    erpInvoiceAmount -
+    erpCreditAmount -
+    (etimsInvoiceAmount - etimsCreditAmount);
+  const vatDifference = flt(summaryData?.tax_difference || 0);
+  const erpNet = erpInvoiceAmount - erpCreditAmount;
+  const etimsNet = etimsInvoiceAmount - etimsCreditAmount;
+  const differencePercent =
+    Math.abs(erpNet) > 0 ? (Math.abs(difference) / Math.abs(erpNet)) * 100 : 0;
+  const currency = "KES";
+
+  const formatValue = (value) => format_currency(value || 0, currency);
+
+  const issueNotes = [];
+
+  if (Math.abs(difference) > 1) {
+    issueNotes.push(
+      `<li style="margin-bottom:10px;">ERPNext invoice totals do not match eTIMS invoice totals.</li>`,
+    );
+  }
+
+  if (Math.abs(vatDifference) > 1) {
+    issueNotes.push(
+      `<li style="margin-bottom:10px;">ERPNext VAT totals do not match eTIMS VAT totals.</li>`,
+    );
+  }
+
+  if (Math.abs(erpNet) > 1 && Math.abs(etimsNet) > 1) {
+    issueNotes.push(
+      `<li style="margin-bottom:10px;">Net invoice balance is not fully offset by credit notes. Some invoices may be missing corresponding correction credit notes on eTIMS.</li>`,
+    );
+  }
+
+  if (Math.abs(erpInvoiceAmount) > 1 && Math.abs(etimsInvoiceAmount) < 1) {
+    issueNotes.push(
+      `<li style="margin-bottom:10px;">ERPNext invoices exist but no matching eTIMS invoice totals were found.</li>`,
+    );
+  }
+
+  if (Math.abs(erpCreditAmount) > 1 && Math.abs(etimsCreditAmount) < 1) {
+    issueNotes.push(
+      `<li style="margin-bottom:10px;">ERPNext credit notes exist but no matching eTIMS credit notes were found.</li>`,
+    );
+  }
+
+  if (!issueNotes.length) {
+    issueNotes.push(
+      `<li style="margin-bottom:10px;">Significant reconciliation mismatch detected requiring verification.</li>`,
+    );
+  }
+
+  const dialog = new frappe.ui.Dialog({
+    title: __("Correction Credit Note on eTIMS"),
+    size: "large",
+    fields: [
+      {
+        fieldtype: "HTML",
+        fieldname: "warning_html",
+        options: `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div style="padding:22px;border-radius:14px;background:#fef2f2;border:1px solid #fecaca;">
+            <div style="font-size:16px;font-weight:700;color:#991b1b;margin-bottom:14px;">Warning</div>
+            <div style="font-size:14px;color:#7f1d1d;line-height:1.8;">
+              This process verifies ERPNext invoice values against eTIMS records and may automatically generate correction credit notes on eTIMS to align submitted tax data with ERPNext records.
+              <br><br>
+              This affects official tax submissions to KRA and should only be executed after reviewing the reconciliation summary below.
+            </div>
+          </div>
+
+          <div style="border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;background:#ffffff;">
+            <div style="padding:16px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:17px;font-weight:700;color:#0f172a;">Advanced Reconciliation Summary</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(216px,1fr));gap:14px;padding:14px;">
+              <div style="padding:16px;border-radius:10px;border:1px solid #e2e8f0;background:#ffffff;">
+                <div style="font-size:12px;color:#64748b;">ERPNext Invoice Amount</div>
+                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#0f172a;">${formatValue(erpInvoiceAmount)}</div>
+              </div>
+              <div style="padding:16px;border-radius:10px;border:1px solid #e2e8f0;background:#ffffff;">
+                <div style="font-size:12px;color:#64748b;">ERPNext Credit Notes</div>
+                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#0f172a;">${formatValue(erpCreditAmount)}</div>
+              </div>
+              <div style="padding:16px;border-radius:10px;border:1px solid #bfdbfe;background:#eff6ff;">
+                <div style="font-size:12px;color:#1d4ed8;">eTIMS Invoice Amount</div>
+                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#1e3a8a;">${formatValue(etimsInvoiceAmount)}</div>
+              </div>
+              <div style="padding:16px;border-radius:10px;border:1px solid #bfdbfe;background:#eff6ff;">
+                <div style="font-size:12px;color:#1d4ed8;">eTIMS Credit Notes</div>
+                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#1e3a8a;">${formatValue(etimsCreditAmount)}</div>
+              </div>
+              <div style="padding:16px;border-radius:10px;border:1px solid #fecaca;background:#fef2f2;">
+                <div style="font-size:12px;color:#991b1b;">Difference</div>
+                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#991b1b;">${formatValue(difference)}</div>
+              </div>
+              <div style="padding:16px;border-radius:10px;border:1px solid #fecaca;background:#fef2f2;">
+                <div style="font-size:12px;color:#991b1b;">VAT Difference</div>
+                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#991b1b;">${formatValue(vatDifference)}</div>
+              </div>
+              <div style="padding:16px;border-radius:10px;border:1px solid #e5e7eb;background:#ffffff;">
+                <div style="font-size:12px;color:#64748b;">ERPNext Net Value</div>
+                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#0f172a;">${formatValue(erpNet)}</div>
+              </div>
+              <div style="padding:16px;border-radius:10px;border:1px solid #e5e7eb;background:#ffffff;">
+                <div style="font-size:12px;color:#64748b;">eTIMS Net Value</div>
+                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#0f172a;">${formatValue(etimsNet)}</div>
+              </div>
+              <div style="padding:16px;border-radius:10px;border:1px solid #fcd34d;background:#fffbeb;">
+                <div style="font-size:12px;color:#92400e;">Difference Percentage</div>
+                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#92400e;">${differencePercent.toFixed(2)}%</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="border:1px solid #fde68a;background:#fffbeb;border-radius:14px;padding:16px;">
+            <div style="font-size:17px;font-weight:700;color:#92400e;margin-bottom:14px;">Potential Causes Detected</div>
+            <ul style="margin:0;padding-left:16px;color:#78350f;font-size:14px;line-height:1.8;">${issueNotes.join("")}</ul>
+          </div>
+        </div>
+      `,
+      },
+    ],
+    primary_action_label: __("Queue Correction"),
+    secondary_action_label: __("Cancel"),
+    secondary_action: () => dialog.hide(),
+    primary_action: () => {
+      dialog.hide();
+      showSettingsModalAndExecute(
+        "Correction Credit Note on eTIMS",
+        activeSetting,
+        (settings_name) => ({
+          method:
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.verify_invoice_details",
+          args: {
+            document_name: frm.doc.name,
+            invoice_type: "Sales Invoice",
+            settings_name: settings_name,
+            company: frm.doc.company,
+          },
+          success_msg: "Verification and correction queued",
+        }),
+      );
+    },
+  });
+
+  dialog.show();
+}
+
+function clearEtimsHtmlAndWarnings(frm) {
+  frm.$wrapper.find(".etims-top-alert").remove();
+  const htmlField = frm.fields_dict.etims_summary;
+  if (htmlField) {
+    htmlField.$wrapper.find(".etims-validation-banner").remove();
+    htmlField.$wrapper.empty();
+  }
+}
+
 function showSettingsModalAndExecute(title, settings, getCallArgs) {
   if (settings.length === 1) {
     const { method, args, success_msg } = getCallArgs(settings[0].name);
-
     frappe.call({
       method: method,
       args: args,
@@ -548,7 +782,6 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
         frappe.msgprint(__("An error occurred during the request."));
       },
     });
-
     return;
   }
 
@@ -570,9 +803,7 @@ function showSettingsModalAndExecute(title, settings, getCallArgs) {
     primary_action_label: __("Proceed"),
     primary_action: ({ settings_name }) => {
       dialog.hide();
-
       const { method, args, success_msg } = getCallArgs(settings_name);
-
       frappe.call({
         method: method,
         args: args,
@@ -615,9 +846,7 @@ frappe.ui.form.on(childDoctype, {
     if (packagingUnit) {
       frappe.db.get_value(
         packagingUnitDoctypeName,
-        {
-          name: packagingUnit,
-        },
+        { name: packagingUnit },
         ["code"],
         (response) => {
           const code = response.code;
@@ -634,9 +863,7 @@ frappe.ui.form.on(childDoctype, {
     if (unitOfQuantity) {
       frappe.db.get_value(
         unitOfQuantityDoctypeName,
-        {
-          name: unitOfQuantity,
-        },
+        { name: unitOfQuantity },
         ["code"],
         (response) => {
           const code = response.code;
@@ -651,7 +878,6 @@ frappe.ui.form.on(childDoctype, {
 async function updateTaxAmountLabel(frm) {
   try {
     const defaultCompany = frappe.defaults.get_user_default("Company");
-
     if (!defaultCompany) return;
 
     const { message: companyDoc } = await frappe.db.get_value(
@@ -659,10 +885,8 @@ async function updateTaxAmountLabel(frm) {
       defaultCompany,
       "default_currency",
     );
-
     if (companyDoc?.default_currency) {
       const currency = companyDoc.default_currency;
-
       frm.fields_dict.items.grid.update_docfield_property(
         "etims_tax_amount",
         "label",
@@ -672,6 +896,39 @@ async function updateTaxAmountLabel(frm) {
   } catch (error) {
     console.error("Error updating Tax Amount label:", error);
   }
+}
+
+function showEtimsAlert(frm, type, title, message, onClose) {
+  frm.$wrapper.find(".etims-top-alert").remove();
+
+  const alertDiv = $(`
+    <div class="etims-top-alert etims-top-alert-${type}" style="margin:12px 15px;">
+      <div style="display:flex;align-items:flex-start;gap:12px;flex:1;">
+        ${type === "danger" ? ETIMS_ICONS.warn : type === "warning" ? ETIMS_ICONS.warn : ETIMS_ICONS.info}
+        <div>
+          <div class="etims-alert-title etims-alert-title-${type}">${title}</div>
+          <div class="etims-alert-message">${message}</div>
+        </div>
+      </div>
+      <button class="etims-alert-close">×</button>
+    </div>
+  `);
+
+  frm.$wrapper.find(".layout-main-section").first().prepend(alertDiv);
+
+  alertDiv.on("click", function (e) {
+    if ($(e.target).closest(".etims-alert-close").length) return;
+    if (onClose) onClose();
+  });
+
+  alertDiv.find(".etims-alert-close").on("click", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    alertDiv.remove();
+    if (onClose && typeof onClose === "function") onClose();
+  });
+
+  return alertDiv;
 }
 
 const SHARED_ETIMS_STYLES = `
@@ -1133,531 +1390,3 @@ const ETIMS_ICONS = {
   info: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 7v3.5M8 5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
   up: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 4v13M12 4l-4.5 4.5M12 4l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
 };
-
-function showEtimsAlert(frm, type, title, message, onClose) {
-  const alertDiv = $(`
-    <div class="etims-top-alert etims-top-alert-${type}" style="margin:12px 15px;">
-      <div style="display:flex;align-items:flex-start;gap:12px;flex:1;">
-        ${type === "danger" ? ETIMS_ICONS.warn : type === "warning" ? ETIMS_ICONS.warn : ETIMS_ICONS.info}
-        <div>
-          <div class="etims-alert-title etims-alert-title-${type}">${title}</div>
-          <div class="etims-alert-message">${message}</div>
-        </div>
-      </div>
-      <button class="etims-alert-close">×</button>
-    </div>
-  `);
-
-  frm.$wrapper.find(".layout-main-section").first().prepend(alertDiv);
-
-  alertDiv.on("click", function (e) {
-    if ($(e.target).closest(".etims-alert-close").length) return;
-    if (onClose) onClose();
-  });
-
-  alertDiv.find(".etims-alert-close").on("click", function (e) {
-    e.preventDefault();
-    e.stopPropagation();
-    alertDiv.remove();
-    if (onClose && typeof onClose === "function") onClose();
-  });
-
-  return alertDiv;
-}
-
-async function renderEtimsSummary(frm, activeSetting) {
-  if (!frm.doc.name || frm.is_new()) return null;
-
-  const htmlField = frm.fields_dict.etims_summary;
-  if (!htmlField) return null;
-
-  const fmt = (v) => format_currency(v || 0, "KES");
-  const flt2 = (v) => parseFloat(v || 0);
-
-  const badge = (ok) =>
-    ok
-      ? `<span class="etims-pill etims-pill-success">${ETIMS_ICONS.check} Signed</span>`
-      : `<span class="etims-pill etims-pill-danger">${ETIMS_ICONS.x} Unsigned</span>`;
-
-  htmlField.$wrapper.html(`
-    ${SHARED_ETIMS_STYLES}
-    <div class="etims-root">
-      <div class="etims-empty">
-        <div class="etims-spinner"></div>
-        <div style="font-size:14px;color:var(--text-muted);font-weight:500;">Fetching compliance data...</div>
-      </div>
-    </div>
-  `);
-
-  try {
-    const { message: eligibility } = await frappe.call({
-      method:
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.analyze_etims_eligibility",
-      args: { invoice_name: frm.doc.name },
-    });
-
-    const errors = eligibility?.errors || [];
-
-    if (errors.length > 0) {
-      htmlField.$wrapper.html(`
-        ${SHARED_ETIMS_STYLES}
-        <div class="etims-root">
-          <div class="etims-card">
-            <div class="etims-card-header">
-              <div style="display:flex;align-items:center;gap:10px;color:#dc2626;">
-                ${ETIMS_ICONS.warn}
-                <span class="etims-card-header-title" style="color:#dc2626;">Submission Blocked</span>
-              </div>
-              <span class="etims-pill etims-pill-danger">${errors.length} issue${errors.length > 1 ? "s" : ""}</span>
-            </div>
-            <div class="etims-card-body">
-              ${errors
-                .map(
-                  (e, i) => `
-                <div class="etims-error-item etims-error-item-danger">
-                  <span class="etims-error-num etims-error-num-danger">${String(i + 1).padStart(2, "0")}</span>
-                  <span class="etims-error-msg">${frappe.utils.escape_html(e)}</span>
-                </div>
-              `,
-                )
-                .join("")}
-              <div class="etims-note">
-                ${ETIMS_ICONS.info}
-                Resolve all issues listed above before submitting to eTIMS.
-              </div>
-            </div>
-          </div>
-        </div>
-      `);
-      return null;
-    }
-
-    const postingDate = frappe.datetime.str_to_obj(frm.doc.posting_date);
-    const creationDate = frappe.datetime.str_to_obj(
-      (frm.doc.creation || "").split(" ")[0],
-    );
-    const startDate =
-      creationDate && creationDate < postingDate
-        ? frappe.datetime.obj_to_str(creationDate)
-        : frappe.datetime.add_months(frm.doc.posting_date, -3);
-    const endDate = frappe.datetime.get_today();
-
-    const response = await frappe.call({
-      method: "frappe.desk.query_report.run",
-      args: {
-        report_name: "eTIMS Sales Ledger",
-        filters: {
-          company: frm.doc.company,
-          from_date: startDate,
-          to_date: endDate,
-          sales_invoice: frm.doc.name,
-          show_details: 1,
-        },
-      },
-      freeze: false,
-    });
-
-    const rows = response.message.result || [];
-    const totalRow = rows.find((d) => d.sales_invoice === "TOTAL") || {};
-    const detailRows = rows.filter(
-      (d) =>
-        d.indent === 1 &&
-        (flt2(d.etims_invoice_amount) ||
-          flt2(d.etims_credit_amount) ||
-          flt2(d.etims_total_tax)),
-    );
-
-    const tableHtml = `
-      <div class="etims-card">
-        <div class="etims-card-header">
-          <span class="etims-card-header-title">Transaction Records</span>
-          <span class="etims-pill etims-pill-neutral">${detailRows.length} entr${detailRows.length !== 1 ? "ies" : "y"}</span>
-        </div>
-        <div class="etims-table-wrap">
-          <table class="etims-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Customer</th>
-                <th>Type</th>
-                <th class="r">Invoice Amt</th>
-                <th class="r">Credit Amt</th>
-                <th class="r">VAT</th>
-                <th>Reference</th>
-                <th class="c">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${
-                detailRows.length
-                  ? detailRows
-                      .map(
-                        (row, i) => `
-                <tr class="${i % 2 === 0 ? "row-even" : "row-odd"}">
-                  <td class="muted">${frappe.datetime.str_to_user(row.invoice_date)}</td>
-                  <td class="bold">${frappe.utils.escape_html(row.customer || "—")}</td>
-                  <td><span class="etims-type-chip">${row.type || "—"}</span></td>
-                  <td class="r mono">${fmt(row.etims_invoice_amount)}</td>
-                  <td class="r mono" style="color:var(--text-muted);">${fmt(row.etims_credit_amount)}</td>
-                  <td class="r mono" style="color:var(--text-muted);">${fmt(row.etims_total_tax)}</td>
-                  <td class="muted" style="font-family:monospace;font-size:11px;">${frappe.utils.escape_html(row.reference_number || "—")}</td>
-                  <td class="c">${badge(row.is_signed)}</td>
-                </tr>
-              `,
-                      )
-                      .join("")
-                  : `
-                <tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-muted);">No eTIMS records found for this invoice.</td></tr>
-              `
-              }
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-
-    if (!frm.doc.sent_to_etims && detailRows.length === 0) {
-      htmlField.$wrapper.html(`
-        ${SHARED_ETIMS_STYLES}
-        <div class="etims-root">
-          <div class="etims-empty">
-            <div class="etims-empty-icon" style="color:#3b82f6;">${ETIMS_ICONS.up}</div>
-            <div class="etims-empty-title">Not submitted to eTIMS</div>
-            <div class="etims-empty-sub">This invoice hasn't been sent to KRA's eTIMS system yet.</div>
-            <button class="btn-etims" id="etims-submit-btn">Submit to eTIMS</button>
-          </div>
-        </div>
-      `);
-
-      htmlField.$wrapper.find("#etims-submit-btn").on("click", function () {
-        showSettingsModalAndExecute(
-          "Send Invoice",
-          activeSetting,
-          (settings_name) => ({
-            method:
-              "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.send_invoice_details",
-            args: {
-              name: frm.doc.name,
-              settings_name: settings_name,
-            },
-            success_msg: "Invoice submission queued",
-          }),
-        );
-      });
-
-      return null;
-    }
-
-    if (!frm.doc.sent_to_etims && detailRows.length > 0) {
-      htmlField.$wrapper.html(`
-        ${SHARED_ETIMS_STYLES}
-        <div class="etims-root">
-          <div class="etims-card">
-            <div class="etims-card-header">
-              <div style="display:flex;align-items:center;gap:10px;color:#d97706;">
-                ${ETIMS_ICONS.warn}
-                <span class="etims-card-header-title" style="color:#d97706;">Data Inconsistency</span>
-              </div>
-              <span class="etims-pill etims-pill-warn">Not Marked Sent</span>
-            </div>
-            <div class="etims-card-body">
-              <p style="margin:0 0 16px;font-size:13px;color:var(--text-muted);">
-                eTIMS entries exist for this invoice but it is not marked as sent. Review the records below.
-              </p>
-            </div>
-          </div>
-          ${tableHtml}
-        </div>
-      `);
-      return null;
-    }
-
-    const erpInvoiceAmount = flt2(totalRow.erp_invoice_period_amount || 0);
-    const etimsInvoiceAmount = flt2(totalRow.etims_invoice_amount || 0);
-    const invoiceDifference = erpInvoiceAmount - etimsInvoiceAmount;
-    const invoiceDiffPercent =
-      erpInvoiceAmount > 0
-        ? (Math.abs(invoiceDifference) / erpInvoiceAmount) * 100
-        : 0;
-
-    const erpCreditAmount = flt2(totalRow.erp_credit_period_amount || 0);
-    const etimsCreditAmount = flt2(totalRow.etims_credit_amount || 0);
-    const creditDifference = erpCreditAmount - etimsCreditAmount;
-    const creditDiffPercent =
-      erpCreditAmount > 0
-        ? (Math.abs(creditDifference) / erpCreditAmount) * 100
-        : 0;
-
-    const erpNetAmount = erpInvoiceAmount - erpCreditAmount;
-    const etimsNetAmount = etimsInvoiceAmount - etimsCreditAmount;
-    const netDifference = erpNetAmount - etimsNetAmount;
-    const netDiffPercent =
-      Math.abs(erpNetAmount) > 0
-        ? (Math.abs(netDifference) / Math.abs(erpNetAmount)) * 100
-        : 0;
-
-    const hasSignificantMismatch =
-      invoiceDiffPercent > 0.5 ||
-      creditDiffPercent > 0.5 ||
-      netDiffPercent > 0.5;
-
-    htmlField.$wrapper.html(`
-      ${SHARED_ETIMS_STYLES}
-      <div class="etims-root">
-        <div class="etims-hero">
-          <div>
-            <div class="etims-hero-title">eTIMS Reconciliation Dashboard</div>
-            <div class="etims-hero-sub">${startDate} — ${endDate}</div>
-          </div>
-          <span class="etims-pill ${hasSignificantMismatch ? "etims-pill-danger" : "etims-pill-success"}">
-            ${hasSignificantMismatch ? `${ETIMS_ICONS.warn} Mismatch Detected` : `${ETIMS_ICONS.check} All Balanced`}
-          </span>
-        </div>
-
-        <div class="etims-stats-grid">
-          <div class="etims-stat-card">
-            <div class="etims-stat-header">Invoices</div>
-            <div class="etims-stat-body">
-              <div class="etims-compare-row">
-                <span class="etims-compare-label">ERP</span>
-                <span class="etims-compare-value erp">${fmt(erpInvoiceAmount)}</span>
-              </div>
-              <div class="etims-compare-row">
-                <span class="etims-compare-label">eTIMS</span>
-                <span class="etims-compare-value etims">${fmt(etimsInvoiceAmount)}</span>
-              </div>
-              <div class="etims-diff-section">
-                <div class="etims-diff-row">
-                  <span class="etims-diff-label">Difference</span>
-                  <span class="etims-diff-amount ${invoiceDifference >= 0 ? "positive" : "negative"}">${fmt(invoiceDifference)}</span>
-                </div>
-                <div class="etims-diff-row">
-                  <span class="etims-diff-label">Difference %</span>
-                  <div>
-                    <span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${invoiceDiffPercent.toFixed(2)}%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="etims-stat-card">
-            <div class="etims-stat-header">Credit Notes</div>
-            <div class="etims-stat-body">
-              <div class="etims-compare-row">
-                <span class="etims-compare-label">ERP</span>
-                <span class="etims-compare-value erp">${fmt(erpCreditAmount)}</span>
-              </div>
-              <div class="etims-compare-row">
-                <span class="etims-compare-label">eTIMS</span>
-                <span class="etims-compare-value etims">${fmt(etimsCreditAmount)}</span>
-              </div>
-              <div class="etims-diff-section">
-                <div class="etims-diff-row">
-                  <span class="etims-diff-label">Difference</span>
-                  <span class="etims-diff-amount ${creditDifference >= 0 ? "positive" : "negative"}">${fmt(creditDifference)}</span>
-                </div>
-                <div class="etims-diff-row">
-                  <span class="etims-diff-label">Difference %</span>
-                  <div>
-                    <span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${creditDiffPercent.toFixed(2)}%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="etims-stat-card">
-            <div class="etims-stat-header">Net Values</div>
-            <div class="etims-stat-body">
-              <div class="etims-compare-row">
-                <span class="etims-compare-label">ERP Net</span>
-                <span class="etims-compare-value erp">${fmt(erpNetAmount)}</span>
-              </div>
-              <div class="etims-compare-row">
-                <span class="etims-compare-label">eTIMS Net</span>
-                <span class="etims-compare-value etims">${fmt(etimsNetAmount)}</span>
-              </div>
-              <div class="etims-diff-section">
-                <div class="etims-diff-row">
-                  <span class="etims-diff-label">Difference</span>
-                  <span class="etims-diff-amount ${netDifference >= 0 ? "positive" : "negative"}">${fmt(netDifference)}</span>
-                </div>
-                <div class="etims-diff-row">
-                  <span class="etims-diff-label">Difference %</span>
-                  <div>
-                    <span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${netDiffPercent.toFixed(2)}%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        ${tableHtml}
-      </div>
-    `);
-
-    frm.$wrapper.find(".etims-top-alert").remove();
-
-    if (hasSignificantMismatch) {
-      showEtimsAlert(
-        frm,
-        "danger",
-        "eTIMS Reconciliation Mismatch Detected",
-        `Invoices: ${invoiceDiffPercent.toFixed(1)}% | Credits: ${creditDiffPercent.toFixed(1)}% | Net: ${netDiffPercent.toFixed(1)}%`,
-        () => frm.scroll_to_field("etims_summary"),
-      );
-    }
-
-    return {
-      erpTotal: erpInvoiceAmount + erpCreditAmount,
-      differencePercent:
-        ((Math.abs(invoiceDifference) + Math.abs(creditDifference)) /
-          (Math.abs(erpInvoiceAmount) + Math.abs(erpCreditAmount))) *
-        100,
-      hasSignificantMismatch,
-      totalRow,
-      erp_invoice_period_amount: erpInvoiceAmount,
-      erp_credit_period_amount: erpCreditAmount,
-      etims_invoice_amount: etimsInvoiceAmount,
-      etims_credit_amount: etimsCreditAmount,
-      difference: netDifference,
-      tax_difference: flt2(totalRow.tax_difference || 0),
-      erp_tax_amount: flt2(totalRow.erp_tax_amount || 0),
-      etims_total_tax: flt2(totalRow.etims_total_tax || 0),
-    };
-  } catch (error) {
-    console.error("eTIMS summary error:", error);
-    htmlField.$wrapper.html(`
-      ${SHARED_ETIMS_STYLES}
-      <div class="etims-root">
-        <div class="etims-empty">
-          <div class="etims-empty-icon" style="background:#fee2e2;color:#dc2626;">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 3L21.5 19.5H2.5L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v5.5M12 17v.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          </div>
-          <div class="etims-empty-title">Failed to load eTIMS data</div>
-          <div class="etims-empty-sub">Please refresh the page or contact support if the issue persists.</div>
-        </div>
-      </div>
-    `);
-    return null;
-  }
-}
-
-async function renderEtimsEligibilityBanner(frm) {
-  if (frm.is_new()) return;
-
-  const htmlField = frm.fields_dict.etims_summary;
-  if (!htmlField) return;
-
-  frm.$wrapper.find(".etims-top-alert").remove();
-  htmlField.$wrapper.find(".etims-validation-banner").remove();
-
-  try {
-    const { message } = await frappe.call({
-      method:
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.analyze_etims_eligibility",
-      args: {
-        invoice_name: frm.doc.name,
-      },
-    });
-
-    const errors = message?.errors || [];
-    const warnings = message?.warnings || [];
-    const lastError = message?.last_error;
-
-    if (!errors.length && !warnings.length && !lastError) {
-      return;
-    }
-
-    if (errors.length || warnings.length) {
-      showEtimsAlert(
-        frm,
-        "warning",
-        "eTIMS Validation Issues Detected",
-        "This invoice may not be eligible for eTIMS submission. Click to review the eTIMS Details section.",
-        () => frm.scroll_to_field("etims_summary"),
-      );
-    }
-
-    let validationHtml = '<div class="etims-validation-banner">';
-
-    if (lastError) {
-      validationHtml += `
-        <div class="etims-card" style="margin-bottom:16px;">
-          <div class="etims-card-header">
-            <div style="display:flex;align-items:center;gap:10px;color:#dc2626;">
-              ${ETIMS_ICONS.warn}
-              <span class="etims-card-header-title" style="color:#dc2626;">Last eTIMS Submission Failed</span>
-            </div>
-            <span class="etims-pill etims-pill-danger">Error</span>
-          </div>
-          <div class="etims-card-body">
-            <div class="etims-error-item etims-error-item-danger" style="margin-bottom:0;">
-              <span class="etims-error-num etims-error-num-danger">!</span>
-              <span class="etims-error-msg">${frappe.utils.escape_html(lastError)}</span>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    if (errors.length) {
-      validationHtml += `
-        <div class="etims-card" style="margin-bottom:16px;">
-          <div class="etims-card-header">
-            <div style="display:flex;align-items:center;gap:10px;color:#dc2626;">
-              ${ETIMS_ICONS.warn}
-              <span class="etims-card-header-title" style="color:#dc2626;">eTIMS Submission Blockers</span>
-            </div>
-            <span class="etims-pill etims-pill-danger">${errors.length} issue${errors.length > 1 ? "s" : ""}</span>
-          </div>
-          <div class="etims-card-body">
-            ${errors
-              .map(
-                (e, i) => `
-              <div class="etims-error-item etims-error-item-danger">
-                <span class="etims-error-num etims-error-num-danger">${String(i + 1).padStart(2, "0")}</span>
-                <span class="etims-error-msg">${frappe.utils.escape_html(e)}</span>
-              </div>
-            `,
-              )
-              .join("")}
-          </div>
-        </div>
-      `;
-    }
-
-    if (warnings.length) {
-      validationHtml += `
-        <div class="etims-card">
-          <div class="etims-card-header">
-            <div style="display:flex;align-items:center;gap:10px;color:#d97706;">
-              ${ETIMS_ICONS.warn}
-              <span class="etims-card-header-title" style="color:#d97706;">eTIMS Warnings</span>
-            </div>
-            <span class="etims-pill etims-pill-warn">${warnings.length} warning${warnings.length > 1 ? "s" : ""}</span>
-          </div>
-          <div class="etims-card-body">
-            ${warnings
-              .map(
-                (w, i) => `
-              <div class="etims-error-item etims-error-item-warning">
-                <span class="etims-error-num etims-error-num-warning">${String(i + 1).padStart(2, "0")}</span>
-                <span class="etims-error-msg">${frappe.utils.escape_html(w)}</span>
-              </div>
-            `,
-              )
-              .join("")}
-          </div>
-        </div>
-      `;
-    }
-
-    validationHtml += "</div>";
-    htmlField.$wrapper.prepend(validationHtml);
-  } catch (error) {
-    console.error("Failed to render eTIMS eligibility banner:", error);
-  }
-}
