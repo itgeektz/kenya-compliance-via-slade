@@ -129,81 +129,43 @@ def migrate_doctype_fields(doctype, field_map, error_title):
     if not valid_field_map:
         return
 
-    total_records = frappe.db.count(doctype)
-    if total_records == 0:
-        return
-
-    batch_size = 500
-    processed = 0
-
-    frappe.publish_realtime(
-        "progress",
-        {"title": f"Migrating {doctype} fields", "percent": 0},
-        user=frappe.session.user,
+    records = frappe.get_all(
+        doctype,
+        fields=["name"] + list(valid_field_map.keys()),
+        limit_page_length=0,
     )
 
-    while processed < total_records:
+    for idx, record in enumerate(records, start=1):
         try:
-            records = frappe.get_all(
-                doctype,
-                fields=["name"] + list(valid_field_map.keys()),
-                limit=batch_size,
-                offset=processed,
-                order_by="creation",
-            )
+            update_values = {}
 
-            if not records:
-                break
+            for src, target in valid_field_map.items():
+                value = getattr(record, src, None)
+                if value is not None:
+                    update_values[target] = value
 
-            for record in records:
-                try:
-                    update_values = {}
-
-                    for src, target in valid_field_map.items():
-                        value = getattr(record, src, None)
-                        if value is not None:
-                            update_values[target] = value
-
-                    if update_values:
-                        frappe.db.set_value(
-                            doctype,
-                            record.name,
-                            update_values,
-                            update_modified=False,
-                        )
-
-                except Exception:
-                    frappe.log_error(
-                        title=f"{error_title} - Record {record.name}",
-                        message=frappe.get_traceback(),
-                    )
-
-            frappe.db.commit()
-            processed += len(records)
-
-            percent = int((processed / total_records) * 100)
-            frappe.publish_realtime(
-                "progress",
-                {"title": f"Migrating {doctype} fields", "percent": percent},
-                user=frappe.session.user,
-            )
+            if not update_values:
+                continue
 
             frappe.db.set_value(
-                "Patch Log",
-                "kenya_compliance_via_slade.kenya_compliance_via_slade.patches.migrate_csf_ke_data",
-                "progress",
-                f"{processed}/{total_records}",
+                doctype,
+                record.name,
+                update_values,
                 update_modified=False,
             )
+
+            if idx % 1000 == 0:
+                frappe.db.commit()
 
         except Exception:
             frappe.db.rollback()
             frappe.log_error(
-                title=f"{error_title} - Batch Error at offset {processed}",
+                title=error_title,
                 message=frappe.get_traceback(),
             )
-            processed += batch_size
-            continue
+            frappe.db.commit()
+
+    frappe.db.commit()
 
 
 def migrate_etims_id_mapping():
@@ -225,7 +187,7 @@ def migrate_etims_id_mapping():
         limit_page_length=0,
     )
 
-    for row in old_rows:
+    for idx, row in enumerate(old_rows, start=1):
         try:
             exists = frappe.db.exists(
                 "eTims ID Mapping",
@@ -253,66 +215,54 @@ def migrate_etims_id_mapping():
             )
 
             doc.insert(ignore_permissions=True)
-            frappe.db.commit()
+
+            if idx % 1000 == 0:
+                frappe.db.commit()
 
         except Exception:
+            frappe.db.rollback()
             frappe.log_error(
                 title="eTims ID Mapping Migration Failed",
                 message=frappe.get_traceback(),
             )
-            frappe.db.rollback()
+            frappe.db.commit()
+
+    frappe.db.commit()
 
 
 def generate_invoice_verification_urls():
-    batch_size = 500
-    processed = 0
-
-    total_invoices = frappe.db.count(
-        "Sales Invoice", {"docstatus": 1, "etims_verification_url": ("is", None)}
+    invoices = frappe.get_all(
+        "Sales Invoice",
+        filters={"docstatus": 1, "etims_verification_url": ("is", None)},
+        fields=["name"],
+        limit_page_length=0,
     )
 
-    if total_invoices == 0:
-        return
-
-    while processed < total_invoices:
+    for idx, invoice in enumerate(invoices, start=1):
         try:
-            invoices = frappe.get_all(
-                "Sales Invoice",
-                filters={"docstatus": 1, "etims_verification_url": ("is", None)},
-                fields=["name"],
-                limit=batch_size,
-                offset=processed,
-                order_by="creation",
-            )
+            doc = frappe.get_doc("Sales Invoice", invoice.name)
+            url = build_verification_url(doc)
+            if url:
+                frappe.db.set_value(
+                    "Sales Invoice",
+                    invoice.name,
+                    "etims_verification_url",
+                    url,
+                    update_modified=False,
+                )
 
-            for invoice in invoices:
-                try:
-                    doc = frappe.get_doc("Sales Invoice", invoice.name)
-                    url = build_verification_url(doc)
-                    if url:
-                        frappe.db.set_value(
-                            "Sales Invoice",
-                            invoice.name,
-                            "etims_verification_url",
-                            url,
-                            update_modified=False,
-                        )
-                except Exception:
-                    frappe.log_error(
-                        title="Invoice Verification URL Generation Failed",
-                        message=frappe.get_traceback(),
-                    )
-
-            frappe.db.commit()
-            processed += len(invoices)
+            if idx % 1000 == 0:
+                frappe.db.commit()
 
         except Exception:
             frappe.db.rollback()
             frappe.log_error(
-                title="Invoice Verification URL Generation Batch Failed",
+                title="Invoice Verification URL Generation Failed",
                 message=frappe.get_traceback(),
             )
-            processed += batch_size
+            frappe.db.commit()
+
+    frappe.db.commit()
 
 
 def set_etims_submission_modes():
@@ -325,7 +275,7 @@ def set_etims_submission_modes():
         limit_page_length=0,
     )
 
-    for row in settings:
+    for idx, row in enumerate(settings, start=1):
         try:
             frappe.db.set_value(
                 "Navari KRA eTims Settings",
@@ -337,11 +287,16 @@ def set_etims_submission_modes():
                 },
                 update_modified=False,
             )
-            frappe.db.commit()
+
+            if idx % 1000 == 0:
+                frappe.db.commit()
 
         except Exception:
+            frappe.db.rollback()
             frappe.log_error(
                 title="eTims Settings Submission Mode Update Failed",
                 message=frappe.get_traceback(),
             )
-            frappe.db.rollback()
+            frappe.db.commit()
+
+    frappe.db.commit()
