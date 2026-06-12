@@ -316,9 +316,8 @@ def sales_information_submission_on_success(
     frappe.db.set_value(doctype, document_name, updates)
 
     frappe.enqueue(
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_data",
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_invoices",
         document_name=document_name,
-        invoice_type=doctype,
         settings_name=settings_name,
         request_data={"reference_number": document_name},
         queue="long",
