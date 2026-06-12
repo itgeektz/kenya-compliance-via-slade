@@ -135,7 +135,7 @@ def migrate_doctype_fields(doctype, field_map, error_title):
         limit_page_length=0,
     )
 
-    for record in records:
+    for idx, record in enumerate(records, start=1):
         try:
             update_values = {}
 
@@ -154,11 +154,18 @@ def migrate_doctype_fields(doctype, field_map, error_title):
                 update_modified=False,
             )
 
+            if idx % 1000 == 0:
+                frappe.db.commit()
+
         except Exception:
+            frappe.db.rollback()
             frappe.log_error(
                 title=error_title,
                 message=frappe.get_traceback(),
             )
+            frappe.db.commit()
+
+    frappe.db.commit()
 
 
 def migrate_etims_id_mapping():
@@ -180,7 +187,7 @@ def migrate_etims_id_mapping():
         limit_page_length=0,
     )
 
-    for row in old_rows:
+    for idx, row in enumerate(old_rows, start=1):
         try:
             exists = frappe.db.exists(
                 "eTims ID Mapping",
@@ -209,11 +216,18 @@ def migrate_etims_id_mapping():
 
             doc.insert(ignore_permissions=True)
 
+            if idx % 1000 == 0:
+                frappe.db.commit()
+
         except Exception:
+            frappe.db.rollback()
             frappe.log_error(
                 title="eTims ID Mapping Migration Failed",
                 message=frappe.get_traceback(),
             )
+            frappe.db.commit()
+
+    frappe.db.commit()
 
 
 def generate_invoice_verification_urls():
@@ -224,7 +238,7 @@ def generate_invoice_verification_urls():
         limit_page_length=0,
     )
 
-    for invoice in invoices:
+    for idx, invoice in enumerate(invoices, start=1):
         try:
             doc = frappe.get_doc("Sales Invoice", invoice.name)
             url = build_verification_url(doc)
@@ -236,11 +250,19 @@ def generate_invoice_verification_urls():
                     url,
                     update_modified=False,
                 )
+
+            if idx % 1000 == 0:
+                frappe.db.commit()
+
         except Exception:
+            frappe.db.rollback()
             frappe.log_error(
                 title="Invoice Verification URL Generation Failed",
                 message=frappe.get_traceback(),
             )
+            frappe.db.commit()
+
+    frappe.db.commit()
 
 
 def set_etims_submission_modes():
@@ -253,7 +275,7 @@ def set_etims_submission_modes():
         limit_page_length=0,
     )
 
-    for row in settings:
+    for idx, row in enumerate(settings, start=1):
         try:
             frappe.db.set_value(
                 "Navari KRA eTims Settings",
@@ -265,8 +287,16 @@ def set_etims_submission_modes():
                 },
                 update_modified=False,
             )
+
+            if idx % 1000 == 0:
+                frappe.db.commit()
+
         except Exception:
+            frappe.db.rollback()
             frappe.log_error(
                 title="eTims Settings Submission Mode Update Failed",
                 message=frappe.get_traceback(),
             )
+            frappe.db.commit()
+
+    frappe.db.commit()
