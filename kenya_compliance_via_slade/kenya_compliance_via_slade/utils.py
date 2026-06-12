@@ -1606,8 +1606,8 @@ def get_etims_id(doctype: str, name: str, setting: str) -> str:
     filters = base_filters.copy()
     mapping_meta = frappe.get_meta(SLADE_ID_MAPPING_DOCTYPE_NAME)
 
-    if mapping_meta.has_field("is_active"):
-        filters["is_active"] = 1
+    if mapping_meta.has_field("disabled"):
+        filters["disabled"] = 0
 
     slade_id = frappe.db.get_value(
         SLADE_ID_MAPPING_DOCTYPE_NAME,
@@ -1616,27 +1616,28 @@ def get_etims_id(doctype: str, name: str, setting: str) -> str:
     )
 
     if (
-        mapping_meta.has_field("is_active")
+        mapping_meta.has_field("disabled")
         and not slade_id
         and frappe.db.exists(SLADE_ID_MAPPING_DOCTYPE_NAME, base_filters)
     ):
-        doc_link = frappe.utils.get_url_to_form(doctype, name)
-        settings_link = frappe.utils.get_url_to_form(SETTINGS_DOCTYPE_NAME, setting)
+        return None
+        # doc_link = frappe.utils.get_url_to_form(doctype, name)
+        # settings_link = frappe.utils.get_url_to_form(SETTINGS_DOCTYPE_NAME, setting)
 
-        frappe.throw(
-            _(
-                '<a href="{0}" style="font-weight: bold; color: var(--text-color); text-decoration: none;">{1} "{2}"</a> '
-                "is not enabled for eTIMS submission in "
-                '<a href="{3}" style="font-weight: bold; color: var(--text-color); text-decoration: none;">{4} "{5}"</a>.'
-            ).format(
-                doc_link,
-                _(doctype),
-                name,
-                settings_link,
-                _(SETTINGS_DOCTYPE_NAME),
-                setting,
-            )
-        )
+        # frappe.throw(
+        #     _(
+        #         '<a href="{0}" style="font-weight: bold; color: var(--text-color); text-decoration: none;">{1} "{2}"</a> '
+        #         "is not enabled for eTIMS submission in "
+        #         '<a href="{3}" style="font-weight: bold; color: var(--text-color); text-decoration: none;">{4} "{5}"</a>.'
+        #     ).format(
+        #         doc_link,
+        #         _(doctype),
+        #         name,
+        #         settings_link,
+        #         _(SETTINGS_DOCTYPE_NAME),
+        #         setting,
+        #     )
+        # )
 
     return slade_id
 
@@ -1923,13 +1924,18 @@ def get_invoice_reference_number(invoice: Document) -> str:
     Returns:
         str: The generated reference number for submission.
     """
-    reference_number = invoice.name
+    if invoice.is_return:
+        reference_number = invoice.return_against
+    else:
+        reference_number = invoice.name
+
+    doc = frappe.get_doc("Sales Invoice", reference_number)
     if (
-        hasattr(invoice, "revision_count")
-        and invoice.revision_count is not None
-        and int(invoice.revision_count) > 0
+        hasattr(doc, "revision_count")
+        and doc.revision_count is not None
+        and int(doc.revision_count) > 0
     ):
-        reference_number = f"{invoice.name}-REV{int(invoice.revision_count)}"
+        reference_number = f"{doc.name}-REV{int(doc.revision_count)}"
     return reference_number
 
 
@@ -2301,13 +2307,21 @@ def analyze_etims_eligibility(invoice_name):
     errors = []
     warnings = []
 
+    settings_doc = get_settings(company_name=doc.company)
+    if not settings_doc or settings_doc.get("is_active") != 1:
+        errors.append(f"No active eTIMS settings found for company {doc.company}.")
+        return {
+            "eligible": False,
+            "errors": errors,
+            "warnings": warnings,
+            "last_error": getattr(doc, "custom_etims_error_message", None),
+        }
+
     try:
         if doc.tax_id:
             validate_kra_pin(doc.tax_id)
     except Exception as e:
         errors.append(str(e))
-
-    settings_doc = get_settings(company_name=doc.company)
 
     if doc.prevent_etims_submission:
         errors.append("eTIMS submission is disabled for this invoice.")
@@ -2320,19 +2334,15 @@ def analyze_etims_eligibility(invoice_name):
     if doc.status == "Credit Note Issued":
         warnings.append("Credit Note has already been issued.")
 
-    if not settings_doc:
-        errors.append(f"No active eTIMS settings found for company {doc.company}.")
-
     if (
-        settings_doc
-        and not settings_doc.sales_auto_submission_enabled
+        not settings_doc.sales_auto_submission_enabled
         and not doc.etims_verification_url
     ):
         errors.append(
             "Sales auto submission to eTIMS is disabled and invoice has not been submitted yet."
         )
 
-    if settings_doc:
+    try:
         customer_slade_id = get_etims_id(
             "Customer",
             doc.customer,
@@ -2341,8 +2351,11 @@ def analyze_etims_eligibility(invoice_name):
 
         if not customer_slade_id:
             errors.append(f"Customer {doc.customer} is not registered in eTIMS.")
+    except Exception as e:
+        errors.append(f"Failed to validate customer {doc.customer} in eTIMS: {str(e)}")
 
-        for item in doc.items:
+    for item in doc.items:
+        try:
             slade_id = get_etims_id(
                 "Item",
                 item.item_code,
@@ -2351,8 +2364,13 @@ def analyze_etims_eligibility(invoice_name):
 
             if not slade_id:
                 errors.append(f"Item {item.item_code} is not registered in eTIMS.")
+        except Exception as e:
+            errors.append(
+                f"Failed to validate item {item.item_code} in eTIMS: {str(e)}"
+            )
 
-        if doc.is_return and doc.return_against:
+    if doc.is_return and doc.return_against:
+        try:
             return_invoice = frappe.get_doc(
                 "Sales Invoice",
                 doc.return_against,
@@ -2362,6 +2380,10 @@ def analyze_etims_eligibility(invoice_name):
                 errors.append(
                     f"Return Against Invoice {doc.return_against} was not Sent to eTims to eTIMS."
                 )
+        except Exception as e:
+            errors.append(
+                f"Failed to validate return against invoice {doc.return_against}: {str(e)}"
+            )
 
     last_error = None
 
