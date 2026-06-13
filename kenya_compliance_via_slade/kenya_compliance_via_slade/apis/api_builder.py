@@ -34,6 +34,7 @@ class BaseEndpointsBuilder:
         self._observers: list[ErrorObserver] = []
         self._doctype: str | Document | None = None
         self._document_name: str | None = None
+        self._company: str | None = None
 
     @property
     def integration_request(self) -> str | Document | None:
@@ -70,6 +71,15 @@ class BaseEndpointsBuilder:
     @document_name.setter
     def document_name(self, value: str | None) -> None:
         self._document_name = value
+
+    @property
+    def company(self) -> str | None:
+        """Company associated with the current request."""
+        return self._company
+
+    @company.setter
+    def company(self, value: str | None) -> None:
+        self._company = value
 
     def attach(self, observer: "ErrorObserver") -> None:
         """
@@ -334,6 +344,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                     response_data,
                     self.doctype,
                     self.document_name,
+                    self.company,
                 )
             else:
                 self._handle_error(
@@ -341,6 +352,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                     response_data,
                     self.doctype,
                     self.document_name,
+                    self.company,
                 )
 
                 if response.status_code == 401 and not retrying:
@@ -570,6 +582,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         response_data: dict | str | bytes | None,
         doctype: str | None,
         document_name: str | None,
+        company: str | None = None,
     ) -> None:
         """
         Handle a 200/201 response.
@@ -582,6 +595,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             response_data: Parsed response body.
             doctype: Reference doctype.
             document_name: Reference document name.
+            company: Company associated with the request.
         """
         frappe.db.set_value(
             "Integration Request",
@@ -596,6 +610,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             doctype=doctype,
             payload=self.payload,
             settings_name=self.settings.name,
+            company=company,
         )
 
         current_page = (
@@ -635,6 +650,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
         response_data: dict | str | bytes | None,
         doctype: str | None,
         document_name: str | None,
+        company: str | None = None,
     ) -> None:
         """
         Handle a non-2xx response.
@@ -650,6 +666,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             response_data: Parsed response body.
             doctype: Reference doctype.
             document_name: Reference document name.
+            company: Company associated with the request.
         """
         parsed_url = parse.urlparse(self.url)
 
@@ -694,6 +711,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                 document_name=document_name,
                 payload=self.payload,
                 settings_name=self.settings.name,
+                company=company,
             )
 
 
