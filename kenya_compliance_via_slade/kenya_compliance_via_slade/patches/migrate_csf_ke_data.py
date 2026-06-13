@@ -69,37 +69,37 @@ def execute():
         "eTims Sales Taxes and Charges Template Field Migration Failed",
     )
 
-    migrate_doctype_fields(
-        "Stock Ledger Entry",
-        {
-            "custom_submitted_successfully": "sent_to_etims",
-            "custom_submission_tries": "etims_submission_attempts",
-            "custom_slade_id": "etims_id",
-        },
-        "eTims Stock Ledger Entry Field Migration Failed",
-    )
+    # migrate_doctype_fields(
+    #     "Stock Ledger Entry",
+    #     {
+    #         "custom_submitted_successfully": "sent_to_etims",
+    #         "custom_submission_tries": "etims_submission_attempts",
+    #         "custom_slade_id": "etims_id",
+    #     },
+    #     "eTims Stock Ledger Entry Field Migration Failed",
+    # )
 
-    migrate_doctype_fields(
-        "Sales Invoice",
-        {
-            "custom_successfully_submitted": "sent_to_etims",
-            "custom_slade_id": "etims_id",
-            "custom_qr_code_url": "etims_qr_code_url",
-            "custom_submission_attempts": "etims_submission_attempts",
-            "custom_qr_code": "etims_qr_image",
-        },
-        "eTims Sales Invoice Field Migration Failed",
-    )
+    # migrate_doctype_fields(
+    #     "Sales Invoice",
+    #     {
+    #         "custom_successfully_submitted": "sent_to_etims",
+    #         "custom_slade_id": "etims_id",
+    #         "custom_qr_code_url": "etims_qr_code_url",
+    #         "custom_submission_attempts": "etims_submission_attempts",
+    #         "custom_qr_code": "etims_qr_image",
+    #     },
+    #     "eTims Sales Invoice Field Migration Failed",
+    # )
 
-    migrate_doctype_fields(
-        "Sales Invoice Item",
-        {
-            "custom_tax_amount": "etims_tax_amount",
-            "custom_base_tax_amount": "etims_base_tax_amount",
-            "custom_tax_rate": "etims_tax_rate",
-        },
-        "eTims Sales Invoice Item Field Migration Failed",
-    )
+    # migrate_doctype_fields(
+    #     "Sales Invoice Item",
+    #     {
+    #         "custom_tax_amount": "etims_tax_amount",
+    #         "custom_base_tax_amount": "etims_base_tax_amount",
+    #         "custom_tax_rate": "etims_tax_rate",
+    #     },
+    #     "eTims Sales Invoice Item Field Migration Failed",
+    # )
 
     migrate_doctype_fields(
         "Customer",
@@ -109,7 +109,7 @@ def execute():
         "eTims Customer Field Migration Failed",
     )
 
-    generate_invoice_verification_urls()
+    # generate_invoice_verification_urls()
     set_etims_submission_modes()
 
 
