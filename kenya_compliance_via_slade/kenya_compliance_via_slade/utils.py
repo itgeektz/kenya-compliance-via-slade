@@ -762,7 +762,7 @@ def _get_item_tax_template_rate(template_name: str) -> float:
     """
     tax_template = frappe.get_doc("Item Tax Template", template_name)
     return (
-        sum(float(tax.etims_tax_rate or 0) for tax in tax_template.taxes)
+        sum(float(tax.tax_rate or 0) for tax in tax_template.taxes)
         if tax_template.taxes
         else 0.0
     )
