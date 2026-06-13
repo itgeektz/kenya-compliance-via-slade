@@ -119,6 +119,7 @@ def process_request(
                     job_queue=None,
                     page_size=page_size,
                     page=page,
+                    company=company_name,
                 )
 
     except Exception:
@@ -181,6 +182,7 @@ def execute_remote_request(
     job_queue: Document | None,
     page_size: int = 1000,
     page: int = 1,
+    company: str = None,
 ) -> None:
     """
     Configure ``EndpointsBuilder`` and issue the remote HTTP call.
@@ -217,6 +219,7 @@ def execute_remote_request(
     endpoints_builder.document_name = document_name
     endpoints_builder.page_size = page_size
     endpoints_builder.page = page
+    endpoints_builder.company = company
 
     response = endpoints_builder.make_remote_call()
 
