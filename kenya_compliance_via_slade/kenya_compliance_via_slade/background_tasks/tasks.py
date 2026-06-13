@@ -675,15 +675,37 @@ def fetch_etims_sales_data(
 ) -> None:
     request_data = parse_request_data(request_data)
 
-    if invoice_type in ("Sales Invoice", "Both"):
-        fetch_etims_sales_invoices(
-            request_data, settings_name, document_name=document_name
-        )
+    if document_name:
+        sales_invoice = frappe.get_doc("Sales Invoice", document_name)
+        company = sales_invoice.company
 
-    if invoice_type in ("Credit Note", "Both"):
-        fetch_etims_credit_notes(
-            request_data, settings_name, document_name=document_name
-        )
+        if invoice_type in ("Sales Invoice", "Both"):
+            fetch_etims_sales_invoices(
+                request_data,
+                settings_name,
+                document_name=document_name,
+                company=company,
+            )
+
+        if invoice_type in ("Credit Note", "Both"):
+            fetch_etims_credit_notes(
+                request_data,
+                settings_name,
+                document_name=document_name,
+                company=company,
+            )
+
+    else:
+        settings = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
+
+        for mapping in settings.organisation_mapping:
+            company = mapping.company
+
+            if invoice_type in ("Sales Invoice", "Both"):
+                fetch_etims_sales_invoices(request_data, settings_name, company=company)
+
+            if invoice_type in ("Credit Note", "Both"):
+                fetch_etims_credit_notes(request_data, settings_name, company=company)
 
 
 @frappe.whitelist()
@@ -691,6 +713,7 @@ def fetch_etims_sales_invoices(
     request_data: str | dict = None,
     settings_name: str = None,
     document_name: str = None,
+    company: str = None,
 ) -> None:
     request_data = parse_request_data(request_data)
 
@@ -705,6 +728,7 @@ def fetch_etims_sales_invoices(
         settings_name=settings_name,
         document_name=document_name,
         handler_function=fetch_etims_sales_invoices_on_success,
+        company=company,
     )
 
 
@@ -713,6 +737,7 @@ def fetch_etims_credit_notes(
     request_data: str | dict = None,
     settings_name: str = None,
     document_name: str = None,
+    company: str = None,
 ) -> None:
     # request_data = parse_request_data(request_data)
     request_data = {}
@@ -731,6 +756,7 @@ def fetch_etims_credit_notes(
         document_name=document_name,
         handler_function=fetch_etims_credit_notes_on_success,
         page_size=50,
+        company=company,
     )
 
 

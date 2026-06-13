@@ -563,6 +563,7 @@ function addCustomButtons(frm, activeSetting, summaryData) {
           args: {
             settings_name: settings_name,
             document_name: frm.doc.name,
+            company: frm.doc.company,
             request_data: {
               reference_number: frm.doc.is_return
                 ? frm.doc.return_against
