@@ -738,8 +738,176 @@ def update_clusters(response: dict, settings_name: str, **kwargs) -> None:
     # })
 
 
+def fetch_etims_sales_invoices_on_success(
+    response: dict, company: str, **kwargs
+) -> None:
+    data = response.get("results")
+    if not data or not isinstance(data, list):
+        return
+
+    settings_name = kwargs.get("settings_name")
+    if not settings_name:
+        frappe.log_error(
+            title="eTIMS Fetch Error", message="Settings name not provided in kwargs"
+        )
+        return
+
+    errors = []
+    processed_ids = set()
+
+    for invoice_data in data:
+        try:
+            slade_id = invoice_data.get("id")
+            if slade_id in processed_ids:
+                errors.append(
+                    {
+                        "document": invoice_data.get(
+                            "document_number", "Unknown Document"
+                        ),
+                        "etims_id": slade_id,
+                        "error": "Duplicate record in same batch",
+                        "type": "Sales Invoice",
+                    }
+                )
+                continue
+
+            process_single_etims_entry(
+                invoice_data, "Sales Invoice", settings_name, company=company
+            )
+            processed_ids.add(slade_id)
+
+            credit_notes = invoice_data.get("credit_notes") or []
+            for cn_data in credit_notes:
+                cn_slade_id = cn_data.get("id")
+                if cn_slade_id in processed_ids:
+                    errors.append(
+                        {
+                            "document": cn_data.get(
+                                "document_number", "Unknown Document"
+                            ),
+                            "etims_id": cn_slade_id,
+                            "error": "Duplicate record in same batch",
+                            "type": "Credit Note",
+                        }
+                    )
+                    continue
+
+                process_single_etims_entry(
+                    cn_data, "Credit Note", settings_name, company=company
+                )
+                processed_ids.add(cn_slade_id)
+
+        except Exception as e:
+            doc_ref = invoice_data.get("document_number", "Unknown Document")
+            error_detail = {
+                "document": doc_ref,
+                "etims_id": invoice_data.get("id"),
+                "error": str(e),
+                "traceback": frappe.get_traceback(),
+                "type": "Sales Invoice",
+            }
+            errors.append(error_detail)
+
+            frappe.log_error(
+                title=f"eTIMS Sync Error - {doc_ref}",
+                message=f"Error: {str(e)}\nTraceback: {frappe.get_traceback()}",
+            )
+
+    if errors:
+        save_etims_sync_errors(errors, "Sales Invoice", settings_name)
+
+
+def fetch_etims_credit_notes_on_success(response: dict, company: str, **kwargs) -> None:
+    data = response.get("results")
+    if not data or not isinstance(data, list):
+        return
+
+    settings_name = kwargs.get("settings_name")
+    if not settings_name:
+        frappe.log_error(
+            title="eTIMS Fetch Error", message="Settings name not provided in kwargs"
+        )
+        return
+
+    errors = []
+    processed_ids = set()
+
+    for cn_data in data:
+        try:
+            slade_id = cn_data.get("id")
+            if slade_id in processed_ids:
+                errors.append(
+                    {
+                        "document": cn_data.get("document_number", "Unknown Document"),
+                        "etims_id": slade_id,
+                        "error": "Duplicate record in same batch",
+                        "type": "Credit Note",
+                    }
+                )
+                continue
+
+            process_single_etims_entry(
+                cn_data, "Credit Note", settings_name, company=company
+            )
+            processed_ids.add(slade_id)
+
+        except Exception as e:
+            doc_ref = cn_data.get("document_number", "Unknown Document")
+            error_detail = {
+                "document": doc_ref,
+                "etims_id": cn_data.get("id"),
+                "error": str(e),
+                "traceback": frappe.get_traceback(),
+                "type": "Credit Note",
+            }
+            errors.append(error_detail)
+
+            frappe.log_error(
+                title=f"eTIMS Sync Error - {doc_ref}",
+                message=f"Error: {str(e)}\nTraceback: {frappe.get_traceback()}",
+            )
+
+    if errors:
+        save_etims_sync_errors(errors, "Credit Note", settings_name)
+
+
+def save_etims_sync_errors(errors: list, entry_type: str, settings_name: str) -> None:
+    if not errors:
+        return
+
+    try:
+        error_doc = frappe.new_doc("eTIMS Sync Error Log")
+        error_doc.settings_name = settings_name
+        error_doc.entry_type = entry_type
+        error_doc.total_errors = len(errors)
+        error_doc.sync_date = frappe.utils.now_datetime()
+
+        error_details = []
+        for error in errors:
+            error_details.append(
+                {
+                    "document_number": error.get("document", "Unknown"),
+                    "etims_id": error.get("etims_id", "Unknown"),
+                    "error_message": str(error.get("error", "Unknown error"))[:1000],
+                    "error_traceback": error.get("traceback", "")[:2000],
+                    "error_type": error.get("type", entry_type),
+                }
+            )
+
+        error_doc.errors_json = frappe.as_json(error_details)
+        error_doc.insert(ignore_permissions=True)
+
+        frappe.db.commit()
+
+    except Exception as e:
+        frappe.log_error(
+            title="eTIMS Error Batch Save Failed",
+            message=f"Failed to save error batch: {str(e)}\nErrors: {frappe.as_json(errors)}",
+        )
+
+
 def process_single_etims_entry(
-    entry_data: dict, entry_type: str, settings_name: str
+    entry_data: dict, entry_type: str, settings_name: str, company: str = None
 ) -> None:
     slade_id = entry_data.get("id")
     if not slade_id:
@@ -772,6 +940,7 @@ def process_single_etims_entry(
 
     update_values = {
         "etims_settings": settings_name,
+        "company": company,
         "type": entry_type,
         "invoice_date": invoice_date,
         "reference_number": entry_data.get("reference_number"),
@@ -825,6 +994,7 @@ def process_single_etims_entry(
                 frappe.db.set_value(
                     "eTIMS Sales Ledger Entry", existing_name, field, value
                 )
+
         sales_ledger_name = existing_name
 
         existing_child_records = frappe.get_all(
@@ -840,7 +1010,13 @@ def process_single_etims_entry(
         for field, value in update_values.items():
             if value is not None:
                 setattr(sales_ledger, field, value)
-        sales_ledger.insert(ignore_permissions=True)
+
+        try:
+            sales_ledger.insert(ignore_permissions=True)
+        except frappe.UniqueValidationError:
+            frappe.db.rollback()
+            return
+
         sales_ledger_name = sales_ledger.name
 
     if is_cn:
@@ -923,54 +1099,3 @@ def process_single_etims_entry(
         )
         if sales_invoice:
             update_sales_invoice_etims_details(sales_invoice)
-
-
-def fetch_etims_sales_invoices_on_success(response: dict, **kwargs) -> None:
-    data = response.get("results")
-    if not data or not isinstance(data, list):
-        return
-
-    settings_name = kwargs.get("settings_name")
-    if not settings_name:
-        frappe.log_error(
-            title="eTIMS Fetch Error", message="Settings name not provided in kwargs"
-        )
-        return
-
-    for invoice_data in data:
-        try:
-            process_single_etims_entry(invoice_data, "Sales Invoice", settings_name)
-
-            credit_notes = invoice_data.get("credit_notes") or []
-            for cn_data in credit_notes:
-                process_single_etims_entry(cn_data, "Credit Note", settings_name)
-
-        except Exception as e:
-            doc_ref = invoice_data.get("document_number", "Unknown Document")
-            frappe.log_error(
-                title=f"eTIMS Sync Error - {doc_ref}",
-                message=f"Error: {str(e)}\nTraceback: {frappe.get_traceback()}",
-            )
-
-
-def fetch_etims_credit_notes_on_success(response: dict, **kwargs) -> None:
-    data = response.get("results")
-    if not data or not isinstance(data, list):
-        return
-
-    settings_name = kwargs.get("settings_name")
-    if not settings_name:
-        frappe.log_error(
-            title="eTIMS Fetch Error", message="Settings name not provided in kwargs"
-        )
-        return
-
-    for cn_data in data:
-        try:
-            process_single_etims_entry(cn_data, "Credit Note", settings_name)
-        except Exception as e:
-            doc_ref = cn_data.get("document_number", "Unknown Document")
-            frappe.log_error(
-                title=f"eTIMS Sync Error - {doc_ref}",
-                message=f"Error: {str(e)}\nTraceback: {frappe.get_traceback()}",
-            )
