@@ -87,7 +87,6 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
               });
             },
             error: (error) => {
-              // Error Handling is Defered to the Server
               frappe.msgprint({
                 title: __("Error"),
                 indicator: "red",
@@ -135,7 +134,6 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
                   });
                 },
                 error: (error) => {
-                  // Error Handling is Defered to the Server
                   frappe.msgprint({
                     title: __("Error"),
                     indicator: "red",
@@ -145,7 +143,6 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
               });
             },
             error: (error) => {
-              // Error Handling is Defered to the Server
               frappe.msgprint({
                 title: __("Error"),
                 indicator: "red",
@@ -285,7 +282,6 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
       },
       __("eTims Actions"),
     );
-
     frappe.call({
       method:
         "kenya_compliance_via_slade.kenya_compliance_via_slade.utils.check_hanging_custom_fields",
@@ -293,7 +289,84 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
         let fields = r.message || [];
         if (fields.length > 0) {
           frm.add_custom_button(
-            __("Clear Hanging Custom Fields"),
+            __("Run Data Migration"),
+            function () {
+              let d = new frappe.ui.Dialog({
+                title: __("Configure Data Migration Range"),
+                fields: [
+                  {
+                    label: __("Migrate Records From"),
+                    fieldname: "from_date",
+                    fieldtype: "Date",
+                    default: frappe.datetime.add_months(
+                      frappe.datetime.get_today(),
+                      -12,
+                    ),
+                    reqd: 1,
+                    description: __(
+                      "Historical cutoff boundary for heavy transaction tables (Sales Invoice, Stock Ledger, etc.).",
+                    ),
+                  },
+                ],
+                primary_action_label: __("Start Pipeline"),
+                primary_action: function (values) {
+                  d.hide();
+
+                  frappe.show_progress(
+                    __("Migrating Legacy eTims Data"),
+                    1,
+                    100,
+                    __("Initiating background job component..."),
+                  );
+
+                  frappe.call({
+                    method:
+                      "kenya_compliance_via_slade.kenya_compliance_via_slade.patches.migrate_csf_ke_data.migrate",
+                    args: {
+                      from_date: values.from_date,
+                    },
+                    callback: function (response) {
+                      frappe.show_alert({
+                        title: __("Pipeline Initialized"),
+                        indicator: "green",
+                        message: __(
+                          "Background worker dispatched. Reloading context...",
+                        ),
+                      });
+
+                      frappe.msgprint({
+                        title: __("Migration Job Started"),
+                        indicator: "blue",
+                        message: __(`
+                          The migration process is running asynchronously in the background.<br><br>
+                          <b>How to Cancel / Stop:</b><br>
+                          If you need to terminate this process, you can track and stop it directly via the 
+                          <a href="/app/rq-job?job_name=%5B%22like%22%2C%22%25kenya_compliance_via_slade.kenya_compliance_via_slade.patches.migrate_csf_ke_data.run_heavy_migrations%25%22%5D" target="_blank" rel="noopener noreferrer" style="text-decoration: underline; font-weight: bold;">
+                            Active RQ Migration Jobs
+                          </a> view by clicking <b>Force Stop Job</b> on the running task instance under the worker queue.
+                        `),
+                      });
+                    },
+                    error: function (error) {
+                      frappe.hide_progress();
+                      frappe.msgprint({
+                        title: __("Pipeline Error"),
+                        indicator: "red",
+                        message: __(
+                          "Failed to queue background worker process. Check error logs.",
+                        ),
+                      });
+                    },
+                  });
+                },
+              });
+              d.show();
+            },
+            __("CSF KE Migration"),
+          );
+
+          frm.add_custom_button(
+            __("Clear Hanging Fields"),
             function () {
               let field_list_html = fields
                 .map(
@@ -303,9 +376,13 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
                 .join("");
 
               frappe.confirm(
-                __(
-                  `Are you sure you want to delete the following hanging custom fields?<br><br><ul style="max-height: 200px; overflow-y: auto;">${field_list_html}</ul>`,
-                ),
+                __(`
+              <div class="alert alert-warning" style="margin-bottom: 15px;">
+                <strong>⚠️ Warning:</strong> Ensure you have successfully executed the <b>Run Data Migration</b> routine first. Dropping these custom fields before running migration will result in permanent loss of legacy eTims history.
+              </div>
+              Are you sure you want to delete the following hanging custom fields?<br><br>
+              <ul style="max-height: 200px; overflow-y: auto;">${field_list_html}</ul>
+            `),
                 function () {
                   frappe.call({
                     method:
@@ -320,8 +397,8 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
                           message: __(res.message.message),
                         });
                         frm.remove_custom_button(
-                          __("Clear Hanging Custom Fields"),
-                          __("eTims Actions"),
+                          __("Clear Hanging Fields"),
+                          __("CSF KE Migration"),
                         );
                       }
                     },
@@ -329,7 +406,7 @@ frappe.ui.form.on("Navari KRA eTims Settings", {
                 },
               );
             },
-            __("eTims Actions"),
+            __("CSF KE Migration"),
           );
         }
       },
