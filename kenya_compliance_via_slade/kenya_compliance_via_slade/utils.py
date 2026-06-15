@@ -2423,7 +2423,7 @@ def check_hanging_custom_fields():
     hanging_fields = frappe.get_all(
         "Custom Field",
         filters={
-            "dt": ["in", doctypes],
+            # "dt": ["in", doctypes],
             "module": "Kenya Compliance Via Slade",
         },
         fields=["name", "dt", "fieldname", "label"],
