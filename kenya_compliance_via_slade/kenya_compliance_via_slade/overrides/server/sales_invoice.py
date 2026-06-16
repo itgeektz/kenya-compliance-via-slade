@@ -6,6 +6,8 @@ from frappe.utils import add_to_date, flt, getdate
 
 from ...utils import (
     apply_item_taxes_and_codes,
+    build_verification_url,
+    generate_and_attach_qr_code,
     get_settings,
 )
 from .shared_overrides import generic_invoices_on_submit_override
@@ -302,3 +304,65 @@ def _calculate_reconciliation_summary(
         "details": etims_data["details"],
         "sent_to_etims": invoice.sent_to_etims,
     }
+
+
+@frappe.whitelist()
+def regenerate_qr_code(names):
+    if isinstance(names, str):
+        try:
+            names = frappe.parse_json(names)
+        except:
+            names = [names]
+
+    if not isinstance(names, list):
+        names = [names]
+
+    if not names:
+        frappe.throw("No invoice names provided")
+
+    results = []
+    errors = []
+
+    for name in names:
+        try:
+            doc = frappe.get_doc("Sales Invoice", name)
+
+            etims_verification_url = build_verification_url(doc)
+
+            if etims_verification_url and doc.etims_qr_image:
+                doc.db_set(
+                    "etims_verification_url",
+                    etims_verification_url,
+                    update_modified=False,
+                )
+
+                etims_qr_image = generate_and_attach_qr_code(
+                    etims_verification_url, name, doc.doctype
+                )
+
+                doc.db_set("etims_qr_image", etims_qr_image, update_modified=False)
+
+                frappe.db.commit()
+
+                results.append(
+                    {
+                        "invoice": name,
+                        "status": "success",
+                        "message": "Verification URL and QR Code regenerated successfully",
+                    }
+                )
+            else:
+                results.append(
+                    {
+                        "invoice": name,
+                        "status": "skipped",
+                        "message": "Unable to build verification URL",
+                    }
+                )
+
+        except Exception as e:
+            frappe.db.rollback()
+            errors.append({"invoice": name, "error": str(e)})
+            results.append({"invoice": name, "status": "error", "message": str(e)})
+
+    return {"results": results, "total": len(results), "errors": len(errors)}
