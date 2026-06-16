@@ -595,6 +595,16 @@ function addCustomButtons(frm, activeSetting, summaryData) {
     );
   }
 
+  if (frm.doc.etims_qr_image) {
+    frm.add_custom_button(
+      __("Regenerate QR Code"),
+      function () {
+        regenerateQRCode(frm, activeSetting);
+      },
+      __("eTims Actions"),
+    );
+  }
+
   frm.add_custom_button(
     __("Sync or Check Status"),
     function () {
@@ -642,6 +652,108 @@ function addCustomButtons(frm, activeSetting, summaryData) {
       __("eTims Actions"),
     );
   }
+}
+
+async function regenerateQRCode(frm, activeSetting) {
+  frappe.confirm(
+    __("Are you sure you want to regenerate the QR code for this invoice?"),
+    function () {
+      frappe.call({
+        method:
+          "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.regenerate_qr_code",
+        args: {
+          names: [frm.doc.name],
+        },
+        freeze: true,
+        freeze_message: "Regenerating QR Code...",
+        callback: function (response) {
+          if (response.message && response.message.results) {
+            const result = response.message;
+            const invoiceResult = result.results[0];
+
+            if (invoiceResult.status === "success") {
+              frappe.msgprint({
+                title: __("✅ QR Code Regenerated Successfully"),
+                indicator: "green",
+                message: `
+                  <div style="margin: 10px 0; padding: 15px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">
+                    <div style="font-size: 15px; font-weight: 600; color: #166534; margin-bottom: 8px;">
+                      ${frappe.utils.escape_html(frm.doc.name)}
+                    </div>
+                    <div style="color: #14532d;">
+                      <strong>Status:</strong> ${invoiceResult.message}
+                    </div>
+                    <div style="margin-top: 5px; color: #166534;">
+                      <span style="display: inline-block; padding: 3px 10px; background: #d1fae5; border-radius: 4px; font-size: 12px;">
+                        ${__("QR Code Updated")}
+                      </span>
+                    </div>
+                  </div>
+                `,
+              });
+            } else if (invoiceResult.status === "skipped") {
+              frappe.msgprint({
+                title: __("⏭️ QR Code Regeneration Skipped"),
+                indicator: "orange",
+                message: `
+                  <div style="margin: 10px 0; padding: 15px; background: #fffbeb; border-radius: 6px; border: 1px solid #fde68a;">
+                    <div style="font-size: 15px; font-weight: 600; color: #92400e; margin-bottom: 8px;">
+                      ${frappe.utils.escape_html(frm.doc.name)}
+                    </div>
+                    <div style="color: #78350f;">
+                      <strong>Reason:</strong> ${invoiceResult.message}
+                    </div>
+                    <div style="margin-top: 8px; padding: 8px 12px; background: #fef3c7; border-radius: 4px; font-size: 13px;">
+                      ${__("No verification URL found. Please ensure the invoice has been submitted to eTIMS first.")}
+                    </div>
+                  </div>
+                `,
+              });
+            } else if (invoiceResult.status === "error") {
+              frappe.msgprint({
+                title: __("❌ QR Code Regeneration Failed"),
+                indicator: "red",
+                message: `
+                  <div style="margin: 10px 0; padding: 15px; background: #fef2f2; border-radius: 6px; border: 1px solid #fecaca;">
+                    <div style="font-size: 15px; font-weight: 600; color: #991b1b; margin-bottom: 8px;">
+                      ${frappe.utils.escape_html(frm.doc.name)}
+                    </div>
+                    <div style="color: #7f1d1d;">
+                      <strong>Error:</strong> ${invoiceResult.message}
+                    </div>
+                    <div style="margin-top: 8px; padding: 8px 12px; background: #fee2e2; border-radius: 4px; font-size: 13px;">
+                      ${__("Please check the logs or contact support if the issue persists.")}
+                    </div>
+                  </div>
+                `,
+              });
+            }
+          }
+          frm.reload_doc();
+        },
+        error: function (err) {
+          frappe.msgprint({
+            title: __("❌ QR Code Regeneration Failed"),
+            indicator: "red",
+            message: `
+              <div style="margin: 10px 0; padding: 15px; background: #fef2f2; border-radius: 6px; border: 1px solid #fecaca;">
+                <div style="font-size: 15px; font-weight: 600; color: #991b1b; margin-bottom: 8px;">
+                  ${frappe.utils.escape_html(frm.doc.name)}
+                </div>
+                <div style="color: #7f1d1d;">
+                  <strong>Error:</strong> ${err.message || err}
+                </div>
+                <div style="margin-top: 8px; padding: 8px 12px; background: #fee2e2; border-radius: 4px; font-size: 13px;">
+                  ${__("An unexpected error occurred. Please try again or contact support.")}
+                </div>
+              </div>
+            `,
+          });
+          console.error("QR Code regeneration error:", err);
+        },
+      });
+    },
+  );
 }
 
 function showCorrectionDialog(frm, activeSetting, summaryData) {
