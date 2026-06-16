@@ -125,68 +125,171 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
       return null;
     }
 
-    const postingDate = frappe.datetime.str_to_obj(frm.doc.posting_date);
-    const creationDate = frappe.datetime.str_to_obj(
-      (frm.doc.creation || "").split(" ")[0],
-    );
-    const startDate =
-      creationDate && creationDate < postingDate
-        ? frappe.datetime.obj_to_str(creationDate)
-        : frappe.datetime.add_months(frm.doc.posting_date, -3);
-    const endDate = frappe.datetime.get_today();
-
-    const referenceNumber =
+    const invoiceName =
       frm.doc.is_return && frm.doc.return_against
         ? frm.doc.return_against
         : frm.doc.name;
 
     const response = await frappe.call({
-      method: "frappe.desk.query_report.run",
-      args: {
-        report_name: "eTIMS Sales Ledger",
-        filters: {
-          company: frm.doc.company,
-          from_date: startDate,
-          to_date: endDate,
-          sales_invoice: referenceNumber,
-          show_details: 1,
-        },
-      },
+      method:
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.get_single_invoice_reconciliation",
+      args: { invoice_name: invoiceName },
       freeze: false,
     });
 
-    const rows = response.message.result || [];
-    const totalRow = rows.find((d) => d.sales_invoice === "TOTAL") || {};
-    let detailRows = rows.filter(
-      (d) =>
-        d.indent === 1 &&
-        (flt2(d.etims_invoice_amount) ||
-          flt2(d.etims_credit_amount) ||
-          flt2(d.etims_total_tax)),
-    );
+    const data = response.message || {};
 
-    if (frm.doc.is_return && frm.doc.return_against) {
-      const matchedCreditNote = detailRows.find(
-        (row) =>
-          row.type === "Credit Note" && row.reference_number === frm.doc.name,
-      );
-
-      if (matchedCreditNote) {
-        detailRows = [matchedCreditNote];
-      } else {
-        const unmatchedCreditNote = {
-          invoice_date: frm.doc.posting_date,
-          customer: frm.doc.customer_name,
-          type: "Credit Note (Unmatched)",
-          etims_invoice_amount: 0,
-          etims_credit_amount: Math.abs(flt2(frm.doc.grand_total)),
-          etims_total_tax: Math.abs(flt2(frm.doc.total_taxes_and_charges)),
-          reference_number: "Not Found on eTIMS",
-          is_signed: 0,
-        };
-        detailRows = [unmatchedCreditNote];
-      }
+    if (!data || !data.details) {
+      renderErrorBlock(htmlField);
+      return null;
     }
+
+    if (frm.doc.is_return) {
+      htmlField.$wrapper.html(`
+        ${SHARED_ETIMS_STYLES}
+        <div class="etims-root">
+          <div class="etims-hero">
+            <div>
+              <div class="etims-hero-title">Return / Credit Note - Original Invoice Reconciliation</div>
+              <div class="etims-hero-sub">${data.from_date} — ${data.to_date}</div>
+              <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">
+                Original Invoice: <strong>${frappe.utils.escape_html(invoiceName)}</strong>
+              </div>
+            </div>
+            <span class="etims-pill etims-pill-info">
+              ${ETIMS_ICONS.info} Return Invoice
+            </span>
+          </div>
+
+          <div class="etims-stats-grid-2x2">
+            <div class="etims-stat-card">
+              <div class="etims-stat-header">Invoices</div>
+              <div class="etims-stat-body">
+                <div class="etims-compare-row"><span class="etims-compare-label">ERP</span><span class="etims-compare-value erp">${fmt(data.erp_invoice_amount)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${fmt(data.etims_invoice_amount)}</span></div>
+                <div class="etims-diff-section">
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.invoice_difference >= 0 ? "positive" : "negative"}">${fmt(data.invoice_difference)}</span></div>
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.invoice_diff_percent.toFixed(2)}%</span></div></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="etims-stat-card">
+              <div class="etims-stat-header">Credit Notes</div>
+              <div class="etims-stat-body">
+                <div class="etims-compare-row"><span class="etims-compare-label">ERP</span><span class="etims-compare-value erp">${fmt(data.erp_credit_amount)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${fmt(data.etims_credit_amount)}</span></div>
+                <div class="etims-diff-section">
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.credit_difference >= 0 ? "positive" : "negative"}">${fmt(data.credit_difference)}</span></div>
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.credit_diff_percent.toFixed(2)}%</span></div></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="etims-stat-card">
+              <div class="etims-stat-header">Net Values</div>
+              <div class="etims-stat-body">
+                <div class="etims-compare-row"><span class="etims-compare-label">ERP Net</span><span class="etims-compare-value erp">${fmt(data.erp_net_amount)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Net</span><span class="etims-compare-value etims">${fmt(data.etims_net_amount)}</span></div>
+                <div class="etims-diff-section">
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.net_difference >= 0 ? "positive" : "negative"}">${fmt(data.net_difference)}</span></div>
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.net_diff_percent.toFixed(2)}%</span></div></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="etims-stat-card">
+              <div class="etims-stat-header">Tax</div>
+              <div class="etims-stat-body">
+                <div class="etims-compare-row"><span class="etims-compare-label">ERP Tax</span><span class="etims-compare-value erp">${fmt(data.erp_tax_amount)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Tax</span><span class="etims-compare-value etims">${fmt(data.etims_tax_amount)}</span></div>
+                <div class="etims-diff-section">
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.tax_difference >= 0 ? "positive" : "negative"}">${fmt(data.tax_difference)}</span></div>
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.tax_diff_percent ? data.tax_diff_percent.toFixed(2) : "0.00"}%</span></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="etims-card">
+            <div class="etims-card-header">
+              <span class="etims-card-header-title">Transaction Records (Original Invoice)</span>
+              <span class="etims-pill etims-pill-neutral">${data.details.length} entr${data.details.length !== 1 ? "ies" : "y"}</span>
+            </div>
+            <div class="etims-table-wrap">
+              <table class="etims-table">
+                <thead>
+                  <tr><th>Date</th><th>Customer</th><th>Type</th><th class="r">Invoice Amt</th><th class="r">Credit Amt</th><th class="r">Tax</th><th>Reference</th><th class="c">Status</th></tr>
+                </thead>
+                <tbody>
+                  ${data.details
+                    .map(
+                      (row, i) => `
+                    <tr class="${i % 2 === 0 ? "row-even" : "row-odd"}">
+                      <td class="muted">${frappe.datetime.str_to_user(row.invoice_date)}</td>
+                      <td class="bold">${frappe.utils.escape_html(row.customer || "—")}</td>
+                      <td><span class="etims-type-chip">${row.type || "—"}</span></td>
+                      <td class="r mono">${row.type === "Sales Invoice" ? fmt(row.amount) : "—"}</td>
+                      <td class="r mono" style="color:var(--text-muted);">${row.type === "Credit Note" ? fmt(row.amount) : "—"}</td>
+                      <td class="r mono" style="color:var(--text-muted);">${row.type === "Sales Invoice" ? fmt(row.tax) : "—"}</td>
+                      <td class="muted" style="font-family:monospace;font-size:11px;">${frappe.utils.escape_html(row.reference_number || "—")}</td>
+                      <td class="c">${row.is_signed ? `<span class="etims-pill etims-pill-success">${ETIMS_ICONS.check} Signed</span>` : `<span class="etims-pill etims-pill-danger">${ETIMS_ICONS.x} Unsigned</span>`}</td>
+                    </tr>
+                  `,
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="etims-card" style="border:2px solid #fcd34d;background:#fffbeb;">
+            <div class="etims-card-header" style="background:#fef3c7;border-bottom-color:#fcd34d;">
+              <div style="display:flex;align-items:center;gap:10px;color:#92400e;">
+                ${ETIMS_ICONS.info}
+                <span class="etims-card-header-title" style="color:#92400e;">Return Invoice Information</span>
+              </div>
+              <span class="etims-pill etims-pill-warn">Credit Note</span>
+            </div>
+            <div class="etims-card-body">
+              <p style="margin:0;font-size:13px;color:var(--text-color);line-height:1.8;">
+                <strong>Return Invoice:</strong> ${frappe.utils.escape_html(frm.doc.name)}<br>
+                <strong>Original Invoice:</strong> ${frappe.utils.escape_html(invoiceName)}<br>
+                <strong>Return Amount:</strong> ${fmt(Math.abs(frm.doc.grand_total))}<br>
+                <strong>Return Tax:</strong> ${fmt(Math.abs(frm.doc.total_taxes_and_charges))}
+              </p>
+            </div>
+          </div>
+        </div>
+      `);
+
+      return {
+        hasSignificantMismatch: data.has_significant_mismatch,
+        invoiceDiffPercent: data.invoice_diff_percent,
+        creditDiffPercent: data.credit_diff_percent,
+        netDiffPercent: data.net_diff_percent,
+        erp_invoice_period_amount: data.erp_invoice_amount,
+        erp_credit_period_amount: data.erp_credit_amount,
+        etims_invoice_amount: data.etims_invoice_amount,
+        etims_credit_amount: data.etims_credit_amount,
+        difference: data.net_difference,
+        tax_difference: data.tax_difference,
+        erp_tax_amount: data.erp_tax_amount,
+        etims_total_tax: data.etims_tax_amount,
+        tax_diff_percent: data.tax_diff_percent || 0,
+      };
+    }
+
+    const detailRows = data.details.map((d) => ({
+      invoice_date: d.invoice_date,
+      customer: d.customer,
+      type: d.type,
+      etims_invoice_amount: d.type === "Sales Invoice" ? d.amount : 0,
+      etims_credit_amount: d.type === "Credit Note" ? d.amount : 0,
+      etims_total_tax: d.type === "Sales Invoice" ? d.tax : 0,
+      reference_number: d.reference_number,
+      is_signed: d.is_signed,
+    }));
 
     const badge = (ok) =>
       ok
@@ -202,7 +305,7 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
         <div class="etims-table-wrap">
           <table class="etims-table">
             <thead>
-              <tr><th>Date</th><th>Customer</th><th>Type</th><th class="r">Invoice Amt</th><th class="r">Credit Amt</th><th class="r">VAT</th><th>Reference</th><th class="c">Status</th></tr>
+              <tr><th>Date</th><th>Customer</th><th>Type</th><th class="r">Invoice Amt</th><th class="r">Credit Amt</th><th class="r">Tax</th><th>Reference</th><th class="c">Status</th></tr>
             </thead>
             <tbody>
               ${
@@ -241,115 +344,44 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
       return null;
     }
 
-    if (frm.doc.is_return) {
-      htmlField.$wrapper.html(`
-        ${SHARED_ETIMS_STYLES}
-        <div class="etims-root">
-          <div class="etims-empty">
-            <div class="etims-empty-icon" style="color:#d97706;background:#fffbeb;">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 14L4 9l5-5M4 9h11a6 6 0 010 12h-2"/></svg>
-            </div>
-            <div class="etims-empty-title">Return Invoice</div>
-            <div class="etims-empty-sub">
-              This is a credit note / return transaction. Please refer to the original invoice 
-              for the complete eTIMS reconciliation ledger and dashboard metrics.
-            </div>
-          </div>
-        </div>
-      `);
-      return {
-        hasSignificantMismatch: false,
-        invoiceDiffPercent: 0,
-        creditDiffPercent: 0,
-        netDiffPercent: 0,
-      };
-    }
-
-    let erpInvoiceAmount = flt2(totalRow.erp_invoice_period_amount || 0);
-    let etimsInvoiceAmount = flt2(totalRow.etims_invoice_amount || 0);
-    let erpCreditAmount = flt2(totalRow.erp_credit_period_amount || 0);
-    let etimsCreditAmount = flt2(totalRow.etims_credit_amount || 0);
-
-    if (frm.doc.is_return) {
-      const returnGrandTotal = Math.abs(flt2(frm.doc.grand_total));
-      const returnTaxTotal = Math.abs(flt2(frm.doc.total_taxes_and_charges));
-
-      erpInvoiceAmount = 0;
-      erpCreditAmount = returnGrandTotal;
-      etimsInvoiceAmount = 0;
-      etimsCreditAmount =
-        detailRows.length > 0 &&
-        detailRows[0].type !== "Credit Note (Unmatched)"
-          ? Math.abs(flt2(detailRows[0].etims_credit_amount))
-          : 0;
-
-      if (
-        detailRows.length > 0 &&
-        detailRows[0].type === "Credit Note (Unmatched)"
-      ) {
-        etimsCreditAmount = 0;
-      }
-    }
-
-    const invoiceDifference = erpInvoiceAmount - etimsInvoiceAmount;
-    const invoiceDiffPercent =
-      erpInvoiceAmount > 0
-        ? (Math.abs(invoiceDifference) / erpInvoiceAmount) * 100
-        : 0;
-
-    const creditDifference = erpCreditAmount - etimsCreditAmount;
-    const creditDiffPercent =
-      erpCreditAmount > 0
-        ? (Math.abs(creditDifference) / erpCreditAmount) * 100
-        : 0;
-
-    const erpNetAmount = erpInvoiceAmount + erpCreditAmount;
-    const etimsNetAmount = etimsInvoiceAmount + etimsCreditAmount;
-    const netDifference = erpNetAmount - etimsNetAmount;
-    const netDiffPercent =
-      Math.abs(erpNetAmount) > 0
-        ? (Math.abs(netDifference) / Math.abs(erpNetAmount)) * 100
-        : 0;
-
-    const hasSignificantMismatch =
-      invoiceDiffPercent > 0.5 ||
-      creditDiffPercent > 0.5 ||
-      netDiffPercent > 0.5;
-
     renderSummaryDashboard(htmlField, {
-      startDate,
-      endDate,
-      hasSignificantMismatch,
-      erpInvoiceAmount,
-      etimsInvoiceAmount,
-      invoiceDifference,
-      invoiceDiffPercent,
-      erpCreditAmount,
-      etimsCreditAmount,
-      creditDifference,
-      creditDiffPercent,
-      erpNetAmount,
-      etimsNetAmount,
-      netDifference,
-      netDiffPercent,
+      startDate: data.from_date,
+      endDate: data.to_date,
+      hasSignificantMismatch: data.has_significant_mismatch,
+      erpInvoiceAmount: data.erp_invoice_amount,
+      etimsInvoiceAmount: data.etims_invoice_amount,
+      invoiceDifference: data.invoice_difference,
+      invoiceDiffPercent: data.invoice_diff_percent,
+      erpCreditAmount: data.erp_credit_amount,
+      etimsCreditAmount: data.etims_credit_amount,
+      creditDifference: data.credit_difference,
+      creditDiffPercent: data.credit_diff_percent,
+      erpNetAmount: data.erp_net_amount,
+      etimsNetAmount: data.etims_net_amount,
+      netDifference: data.net_difference,
+      netDiffPercent: data.net_diff_percent,
+      erpTaxAmount: data.erp_tax_amount,
+      etimsTaxAmount: data.etims_tax_amount,
+      taxDifference: data.tax_difference,
+      taxDiffPercent: data.tax_diff_percent || 0,
       tableHtml,
       fmt,
     });
 
     return {
-      hasSignificantMismatch,
-      invoiceDiffPercent,
-      creditDiffPercent,
-      netDiffPercent,
-      totalRow,
-      erp_invoice_period_amount: erpInvoiceAmount,
-      erp_credit_period_amount: erpCreditAmount,
-      etims_invoice_amount: etimsInvoiceAmount,
-      etims_credit_amount: etimsCreditAmount,
-      difference: netDifference,
-      tax_difference: flt2(totalRow.tax_difference || 0),
-      erp_tax_amount: flt2(totalRow.erp_tax_amount || 0),
-      etims_total_tax: flt2(totalRow.etims_total_tax || 0),
+      hasSignificantMismatch: data.has_significant_mismatch,
+      invoiceDiffPercent: data.invoice_diff_percent,
+      creditDiffPercent: data.credit_diff_percent,
+      netDiffPercent: data.net_diff_percent,
+      erp_invoice_period_amount: data.erp_invoice_amount,
+      erp_credit_period_amount: data.erp_credit_amount,
+      etims_invoice_amount: data.etims_invoice_amount,
+      etims_credit_amount: data.etims_credit_amount,
+      difference: data.net_difference,
+      tax_difference: data.tax_difference,
+      erp_tax_amount: data.erp_tax_amount,
+      etims_total_tax: data.etims_tax_amount,
+      tax_diff_percent: data.tax_diff_percent || 0,
     };
   } catch (error) {
     console.error("eTIMS summary error:", error);
@@ -454,7 +486,7 @@ function renderSummaryDashboard(htmlField, data) {
         </span>
       </div>
 
-      <div class="etims-stats-grid">
+      <div class="etims-stats-grid-2x2">
         <div class="etims-stat-card">
           <div class="etims-stat-header">Invoices</div>
           <div class="etims-stat-body">
@@ -487,6 +519,18 @@ function renderSummaryDashboard(htmlField, data) {
             <div class="etims-diff-section">
               <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.netDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.netDifference)}</span></div>
               <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.netDiffPercent.toFixed(2)}%</span></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="etims-stat-card">
+          <div class="etims-stat-header">Tax</div>
+          <div class="etims-stat-body">
+            <div class="etims-compare-row"><span class="etims-compare-label">ERP Tax</span><span class="etims-compare-value erp">${data.fmt(data.erpTaxAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Tax</span><span class="etims-compare-value etims">${data.fmt(data.etimsTaxAmount)}</span></div>
+            <div class="etims-diff-section">
+              <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.taxDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.taxDifference)}</span></div>
+              <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.taxDiffPercent ? data.taxDiffPercent.toFixed(2) : "0.00"}%</span></div></div>
             </div>
           </div>
         </div>
@@ -613,13 +657,13 @@ function showCorrectionDialog(frm, activeSetting, summaryData) {
     etimsCreditAmount = Math.abs(etimsCreditAmount);
   }
 
-  const erpVat = flt(summaryData?.erp_tax_amount || 0);
-  const etimsVat = flt(summaryData?.etims_total_tax || 0);
+  const erpTax = flt(summaryData?.erp_tax_amount || 0);
+  const etimsTax = flt(summaryData?.etims_total_tax || 0);
   const difference =
     erpInvoiceAmount -
     erpCreditAmount -
     (etimsInvoiceAmount - etimsCreditAmount);
-  const vatDifference = flt(summaryData?.tax_difference || 0);
+  const taxDifference = flt(summaryData?.tax_difference || 0);
   const erpNet = erpInvoiceAmount - erpCreditAmount;
   const etimsNet = etimsInvoiceAmount - etimsCreditAmount;
   const differencePercent =
@@ -636,9 +680,9 @@ function showCorrectionDialog(frm, activeSetting, summaryData) {
     );
   }
 
-  if (Math.abs(vatDifference) > 1) {
+  if (Math.abs(taxDifference) > 1) {
     issueNotes.push(
-      `<li style="margin-bottom:10px;">ERPNext VAT totals do not match eTIMS VAT totals.</li>`,
+      `<li style="margin-bottom:10px;">ERPNext Tax totals do not match eTIMS Tax totals.</li>`,
     );
   }
 
@@ -708,8 +752,8 @@ function showCorrectionDialog(frm, activeSetting, summaryData) {
                 <div style="margin-top:8px;font-size:24px;font-weight:700;color:#991b1b;">${formatValue(difference)}</div>
               </div>
               <div style="padding:16px;border-radius:10px;border:1px solid #fecaca;background:#fef2f2;">
-                <div style="font-size:12px;color:#991b1b;">VAT Difference</div>
-                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#991b1b;">${formatValue(vatDifference)}</div>
+                <div style="font-size:12px;color:#991b1b;">Tax Difference</div>
+                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#991b1b;">${formatValue(taxDifference)}</div>
               </div>
               <div style="padding:16px;border-radius:10px;border:1px solid #e5e7eb;background:#ffffff;">
                 <div style="font-size:12px;color:#64748b;">ERPNext Net Value</div>
@@ -1021,9 +1065,9 @@ const SHARED_ETIMS_STYLES = `
     html[data-theme="dark"] .etims-pill-neutral { background: rgba(107,114,128,0.2); color: #9ca3af; }
     html[data-theme="dark"] .etims-pill-info    { background: rgba(59,130,246,0.2); color: #60a5fa; }
 
-    .etims-stats-grid {
+    .etims-stats-grid-2x2 {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 16px;
     }
     .etims-stat-card {
@@ -1380,6 +1424,12 @@ const SHARED_ETIMS_STYLES = `
     }
     html[data-theme="dark"] .btn-etims:hover {
       background: #1d4ed8;
+    }
+
+    @media (max-width: 768px) {
+      .etims-stats-grid-2x2 {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 `;
