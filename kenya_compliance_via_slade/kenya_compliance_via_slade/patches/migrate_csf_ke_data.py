@@ -48,7 +48,6 @@ def update_migration_progress(percent, description):
 def run_heavy_migrations(from_date):
     try:
         update_migration_progress(1, "Populating Master Child Table Mapping Records...")
-        migrate_master_child_tables(["Item", "Customer", "Supplier"])
 
         update_migration_progress(20, "Re-mapping Master Target ID Configurations...")
         reconcile_master_id_mappings()
@@ -260,15 +259,11 @@ def reconcile_master_id_mappings():
                     continue
 
                 for child in setup_mappings:
-                    child_setup = getattr(child, "etims_setup", None) or getattr(
-                        child, "setup_docname", None
+                    child_setup = getattr(child, "etims_setup", None)
+                    child_id = getattr(child, "slade360_id", None) or getattr(
+                        child, "etims_id", None
                     )
-                    child_id = getattr(child, "etims_id", None) or getattr(
-                        child, "custom_slade_id", None
-                    )
-                    child_active = not getattr(child, "disabled", 0) and getattr(
-                        child, "registered", 1
-                    )
+                    child_active = getattr(child, "is_active", 1)
 
                     if not child_setup or not child_id:
                         continue
@@ -309,11 +304,9 @@ def reconcile_master_id_mappings():
                 for entry in existing_global_entries:
                     child_match = False
                     for child in setup_mappings:
-                        child_setup = getattr(child, "etims_setup", None) or getattr(
-                            child, "setup_docname", None
-                        )
-                        child_id = getattr(child, "etims_id", None) or getattr(
-                            child, "custom_slade_id", None
+                        child_setup = getattr(child, "etims_setup", None)
+                        child_id = getattr(child, "slade360_id", None) or getattr(
+                            child, "etims_id", None
                         )
                         if (
                             child_setup == entry.setup_docname
@@ -338,73 +331,6 @@ def reconcile_master_id_mappings():
                 frappe.db.rollback()
                 frappe.log_error(
                     title=f"Mapping Synchronization Broken for {doctype} {row.name}",
-                    message=frappe.get_traceback(),
-                )
-                frappe.db.commit()
-
-        frappe.db.commit()
-
-
-def migrate_master_child_tables(doctypes):
-    for d_idx, doctype in enumerate(doctypes, start=1):
-        if not frappe.db.exists("DocType", doctype):
-            continue
-
-        meta = frappe.get_meta(doctype)
-        if not meta.has_field("etims_setup_mapping"):
-            continue
-
-        records = frappe.get_all(
-            doctype,
-            filters={"custom_item_classification_code": ("is", "set")}
-            if doctype == "Item"
-            else {},
-            fields=["name"],
-            limit_page_length=0,
-        )
-        total_records = len(records)
-        if not total_records:
-            continue
-
-        for idx, row in enumerate(records, start=1):
-            if idx % 10 == 0 or idx == total_records:
-                current_perc = int(((d_idx - 1) / len(doctypes)) * 15) + 1
-                update_migration_progress(
-                    current_perc,
-                    f"Mapping {doctype} setups ({idx}/{total_records})...",
-                )
-
-            try:
-                doc = frappe.get_doc(doctype, row.name)
-                has_changes = False
-
-                for child in doc.get("etims_setup_mapping"):
-                    if (
-                        hasattr(child, "custom_slade_id")
-                        and child.custom_slade_id
-                        and not child.etims_id
-                    ):
-                        child.etims_id = child.custom_slade_id
-                        has_changes = True
-
-                    if (
-                        hasattr(child, "custom_submitted_successfully")
-                        and child.custom_submitted_successfully
-                        and not child.registered
-                    ):
-                        child.registered = child.custom_submitted_successfully
-                        has_changes = True
-
-                if has_changes:
-                    doc.save(ignore_permissions=True, ignore_version=True)
-
-                if idx % 100 == 0:
-                    frappe.db.commit()
-
-            except Exception:
-                frappe.db.rollback()
-                frappe.log_error(
-                    title=f"eTims Setup Mapping Child Table Migration Failed for {doctype}",
                     message=frappe.get_traceback(),
                 )
                 frappe.db.commit()
@@ -559,7 +485,6 @@ def migrate_doctype_fields_batched(
 def generate_invoice_verification_urls(from_date=None):
     filters = {
         "docstatus": 1,
-        "etims_verification_url": ("is", None),
         "etims_id": ("is", "set"),
     }
     if from_date:
