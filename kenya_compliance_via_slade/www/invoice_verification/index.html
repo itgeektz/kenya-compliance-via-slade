@@ -26,32 +26,156 @@ Verification") }} {% endblock %} {% block header %}
   <div
     id="state-success"
     class="invoice-card success-card"
-    style="display: none"
+    style="display: {{ 'block' if redirect_url else 'none' }}"
   >
     <div class="status-icon success">✓</div>
     <h1>{{ _("Verification Successful") }}</h1>
-    <p>
-      {{ _("The invoice has been verified. You will be redirected to the KRA
-      eTIMS page in 3 seconds.") }}
-    </p>
+
+    <div id="redirect-status-container">
+      <p id="success-message">
+        {{ _("The invoice has been verified. You will be redirected to the KRA
+        eTIMS page in 3 seconds.") }}
+      </p>
+      <div
+        id="redirect-mini-loader"
+        class="mini-loader"
+        style="display: none"
+      ></div>
+    </div>
+
+    <div
+      id="etims-server-warning"
+      class="status-banner warning-banner"
+      style="display: none; margin-bottom: 2rem"
+    >
+      <div class="status-banner-title">
+        ⚠️ {{ _("KRA eTIMS Servers Responding Slowly") }}
+      </div>
+      <div class="status-banner-text">
+        {{ _("The official KRA verification gateway is taking longer than
+        expected to respond. We are still attempting to redirect you.") }}
+      </div>
+    </div>
+
+    <div
+      id="success-ledger-details"
+      class="invoice-details"
+      style="display: {{ 'block' if invoice else 'none' }}; margin-bottom: 2rem;"
+    >
+      <div class="details-header">{{ _("eTIMS Details") }}</div>
+
+      <div class="detail-row">
+        <span>{{ _("Transaction Type") }}</span>
+        <strong id="success-scu-type" class="badge-text"
+          >{{ invoice.type if invoice else '-' }}</strong
+        >
+      </div>
+      <div class="detail-row">
+        <span>{{ _("SCU Invoice Number") }}</span>
+        <strong id="success-scu-invoice"
+          >{{ invoice.scu_invoice_number if invoice else '-' }}</strong
+        >
+      </div>
+      <div class="detail-row">
+        <span>{{ _("Receipt Number") }}</span>
+        <strong id="success-scu-receipt"
+          >{{ invoice.scu_receipt_number if invoice else '-' }}</strong
+        >
+      </div>
+      <div class="detail-row">
+        <span>{{ _("Customer Name") }}</span>
+        <strong id="success-scu-customer"
+          >{{ invoice.customer_name or invoice.customer if invoice else '-'
+          }}</strong
+        >
+      </div>
+      <div class="detail-row">
+        <span>{{ _("Invoice Date") }}</span>
+        <strong id="success-scu-date"
+          >{{ invoice.invoice_date or invoice.posting_date if invoice else '-'
+          }}</strong
+        >
+      </div>
+
+      <div class="details-header secondary-header">
+        {{ _("Financial Breakdown") }}
+      </div>
+      <div class="detail-row">
+        <span>{{ _("Total VAT") }}</span>
+        <strong id="success-scu-vat">
+          {{ (invoice.currency or 'KES') if invoice else 'KES' }} {{
+          invoice.total_vat if invoice else '-' }}
+        </strong>
+      </div>
+      <div class="detail-row highlighted-row">
+        <span>{{ _("Tax Amount") }}</span>
+        <strong id="success-scu-amount">
+          {{ (invoice.currency or 'KES') if invoice else 'KES' }} {{
+          invoice.tax_inclusive_amount if invoice else '-' }}
+        </strong>
+      </div>
+
+      <div class="details-header secondary-header">
+        {{ _("KRA SCU Device Identity") }}
+      </div>
+      <div class="detail-row">
+        <span>{{ _("SCU ID") }}</span>
+        <strong id="success-scu-id" class="monospace-text"
+          >{{ invoice.scu_id if invoice else '-' }}</strong
+        >
+      </div>
+      <div class="detail-row">
+        <span>{{ _("Device MRC Number") }}</span>
+        <strong id="success-scu-mrc"
+          >{{ invoice.scu_mrc_number if invoice else '-' }}</strong
+        >
+      </div>
+      <div class="detail-row">
+        <span>{{ _("Receipt Signature") }}</span>
+        <strong id="success-scu-signature" class="monospace-text"
+          >{{ invoice.scu_receipt_signature if invoice else '-' }}</strong
+        >
+      </div>
+      <div class="detail-row">
+        <span>{{ _("SCU Signing Timeline") }}</span>
+        <strong id="success-scu-time">
+          {{ invoice.scu_receipt_date if invoice else '-' }} {{
+          invoice.scu_receipt_time if invoice else '' }}
+        </strong>
+      </div>
+      {% if invoice and invoice.scu_internal_data %}
+      <div class="detail-row complex-data-row">
+        <span>{{ _("Internal Security Data") }}</span>
+        <strong id="success-scu-internal" class="monospace-text small-block"
+          >{{ invoice.scu_internal_data }}</strong
+        >
+      </div>
+      {% endif %}
+    </div>
+
     <p class="subtitle">
-      {{ _("If you are not redirected automatically, please click the button
-      below:") }}
+      {{ _("If you are not redirected automatically, or wish to open it
+      separately, please use the button below:") }}
     </p>
     <a
       id="success-redirect-btn"
-      href="#"
+      href="{{ redirect_url or '#' }}"
+      target="_blank"
+      rel="noopener noreferrer"
       class="primary-button"
-      style="text-decoration: none; display: inline-block; text-align: center"
     >
-      {{ _("Open KRA eTIMS Link") }}
+      {{ _("Open KRA eTIMS (New Window)") }}
     </a>
   </div>
 
-  <div id="state-error" class="invoice-card error-card" style="display: none">
+  <div
+    id="state-error"
+    class="invoice-card error-card"
+    style="display: {{ 'block' if error else 'none' }}"
+  >
     <div class="status-icon error">⚠</div>
     <h1>{{ _("Verification Failed") }}</h1>
-    <p id="error-message"></p>
+    <p id="error-message">{{ error or '' }}</p>
   </div>
 
   <div id="state-pending" class="invoice-card" style="display: none">
@@ -73,19 +197,15 @@ Verification") }} {% endblock %} {% block header %}
     <div class="invoice-details">
       <div class="detail-row">
         <span>{{ _("Invoice Number") }}</span>
-        <strong id="detail-name">{{ invoice.name if invoice else '' }}</strong>
+        <strong id="detail-name"></strong>
       </div>
       <div class="detail-row">
         <span>{{ _("Customer") }}</span>
-        <strong id="detail-customer"
-          >{{ invoice.customer if invoice else '' }}</strong
-        >
+        <strong id="detail-customer"></strong>
       </div>
       <div class="detail-row">
         <span>{{ _("Posting Date") }}</span>
-        <strong id="detail-date"
-          >{{ invoice.posting_date if invoice else '' }}</strong
-        >
+        <strong id="detail-date"></strong>
       </div>
       <div class="detail-row" id="detail-amount-row" style="display: none">
         <span>{{ _("Total Amount") }}</span>

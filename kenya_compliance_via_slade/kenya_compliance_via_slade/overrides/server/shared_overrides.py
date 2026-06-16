@@ -1,7 +1,9 @@
 from typing import Literal
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
+from frappe.utils import add_months, flt, getdate
 
 from ...apis.api_builder import EndpointsBuilder
 from ...apis.process_request import process_request
@@ -135,9 +137,72 @@ def generic_invoices_on_submit_override(
         )
 
 
-def validate(doc: Document, method: str) -> None:
+def validate(doc: "Document", method: str) -> None:
     if doc.tax_id:
         validate_kra_pin(doc.tax_id)
+
+    if doc.is_return and doc.return_against:
+        original_invoice = frappe.db.get_value(
+            "Sales Invoice",
+            doc.return_against,
+            ["name", "posting_date", "sent_to_etims", "grand_total"],
+            as_dict=True,
+        )
+
+        if not original_invoice:
+            frappe.throw(
+                _(
+                    "eTIMS Compliance Error: The source Sales Invoice ({0}) could not be found. Credit Notes must reference a valid active invoice record."
+                ).format(doc.return_against)
+            )
+
+        if not original_invoice.sent_to_etims:
+            return
+
+        six_months_cutoff = add_months(original_invoice.posting_date, 6)
+        if getdate(doc.posting_date) > getdate(six_months_cutoff):
+            frappe.throw(
+                _(
+                    "KRA eTIMS Regulation Violation: Credit Note posting date exceeds the statutory 6-month window allowed for transaction reversals. The original invoice was posted on {0}."
+                ).format(original_invoice.posting_date)
+            )
+
+        existing_credit_notes = frappe.get_all(
+            "Sales Invoice",
+            filters={
+                "return_against": doc.return_against,
+                "is_return": 1,
+                "docstatus": ["=", 1],
+                "name": ["!=", doc.name],
+            },
+            fields=["name", "grand_total"],
+        )
+
+        if len(existing_credit_notes) >= 2:
+            frappe.throw(
+                _(
+                    "KRA eTIMS Protocol Limit: Maximum threshold reached. A single Sales Invoice can only be matched against a maximum of 2 sequential Credit Notes."
+                )
+            )
+
+        total_returned_amount = sum(
+            abs(flt(cn.grand_total)) for cn in existing_credit_notes
+        )
+        remaining_balance = (
+            abs(flt(original_invoice.grand_total)) - total_returned_amount
+        )
+        current_cn_amount = abs(flt(doc.grand_total))
+
+        if len(existing_credit_notes) == 1:
+            variance = abs(current_cn_amount - remaining_balance)
+            allowance = remaining_balance * 0.01
+
+            if variance > allowance:
+                frappe.throw(
+                    _(
+                        "KRA eTIMS Validation Error: This is the second Credit Note against this invoice. Current Credit Note grand total is {0}, but it must match the remaining balance of {1} (allowing for a maximum 1% variance). Multiple partial reversals are restricted."
+                    ).format(current_cn_amount, remaining_balance)
+                )
 
 
 def before_submit(doc: Document, method: str) -> None:
