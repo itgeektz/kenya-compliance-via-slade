@@ -607,6 +607,7 @@ function addCustomButtons(frm, activeSetting, summaryData) {
           args: {
             settings_name: settings_name,
             document_name: frm.doc.name,
+            company: frm.doc.company,
             request_data: {
               reference_number: frm.doc.is_return
                 ? frm.doc.return_against
@@ -656,13 +657,13 @@ function showCorrectionDialog(frm, activeSetting, summaryData) {
     etimsCreditAmount = Math.abs(etimsCreditAmount);
   }
 
-  const erpVat = flt(summaryData?.erp_tax_amount || 0);
-  const etimsVat = flt(summaryData?.etims_total_tax || 0);
+  const erpTax = flt(summaryData?.erp_tax_amount || 0);
+  const etimsTax = flt(summaryData?.etims_total_tax || 0);
   const difference =
     erpInvoiceAmount -
     erpCreditAmount -
     (etimsInvoiceAmount - etimsCreditAmount);
-  const vatDifference = flt(summaryData?.tax_difference || 0);
+  const taxDifference = flt(summaryData?.tax_difference || 0);
   const erpNet = erpInvoiceAmount - erpCreditAmount;
   const etimsNet = etimsInvoiceAmount - etimsCreditAmount;
   const differencePercent =
@@ -679,9 +680,9 @@ function showCorrectionDialog(frm, activeSetting, summaryData) {
     );
   }
 
-  if (Math.abs(vatDifference) > 1) {
+  if (Math.abs(taxDifference) > 1) {
     issueNotes.push(
-      `<li style="margin-bottom:10px;">ERPNext VAT totals do not match eTIMS VAT totals.</li>`,
+      `<li style="margin-bottom:10px;">ERPNext Tax totals do not match eTIMS Tax totals.</li>`,
     );
   }
 
@@ -751,8 +752,8 @@ function showCorrectionDialog(frm, activeSetting, summaryData) {
                 <div style="margin-top:8px;font-size:24px;font-weight:700;color:#991b1b;">${formatValue(difference)}</div>
               </div>
               <div style="padding:16px;border-radius:10px;border:1px solid #fecaca;background:#fef2f2;">
-                <div style="font-size:12px;color:#991b1b;">VAT Difference</div>
-                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#991b1b;">${formatValue(vatDifference)}</div>
+                <div style="font-size:12px;color:#991b1b;">Tax Difference</div>
+                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#991b1b;">${formatValue(taxDifference)}</div>
               </div>
               <div style="padding:16px;border-radius:10px;border:1px solid #e5e7eb;background:#ffffff;">
                 <div style="font-size:12px;color:#64748b;">ERPNext Net Value</div>
