@@ -2402,8 +2402,18 @@ def build_verification_url(doc) -> str:
     creation = get_datetime(doc.creation) if doc.creation else None
 
     key = creation.strftime("%Y%m%d%H%M%S%f") if creation else ""
+    base_url = frappe.utils.get_url()
 
-    return f"/invoice-verification?id={quote(str(doc.name))}&key={quote(key)}"
+    parsed_url = urlparse(base_url)
+
+    if parsed_url.hostname:
+        if not (
+            parsed_url.hostname == "localhost"
+            or parsed_url.hostname.replace(".", "").isdigit()
+        ):
+            base_url = f"{parsed_url.scheme}://{parsed_url.hostname}"
+
+    return f"{base_url}/invoice-verification?id={quote(str(doc.name))}&key={quote(key)}"
 
 
 @frappe.whitelist()
@@ -2423,7 +2433,7 @@ def check_hanging_custom_fields():
     hanging_fields = frappe.get_all(
         "Custom Field",
         filters={
-            "dt": ["in", doctypes],
+            # "dt": ["in", doctypes],
             "module": "Kenya Compliance Via Slade",
         },
         fields=["name", "dt", "fieldname", "label"],
