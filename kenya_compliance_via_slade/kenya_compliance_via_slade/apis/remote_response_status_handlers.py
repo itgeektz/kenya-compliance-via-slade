@@ -319,6 +319,7 @@ def sales_information_submission_on_success(
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_invoices",
         document_name=document_name,
         settings_name=settings_name,
+        company=frappe.get_value(doctype, document_name, "company"),
         request_data={"reference_number": document_name},
         queue="long",
     )
