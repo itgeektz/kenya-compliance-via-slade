@@ -8,31 +8,89 @@ document.addEventListener("DOMContentLoaded", function () {
   const errorMessage = document.getElementById("error-message");
   const successBtn = document.getElementById("success-redirect-btn");
 
+  const successMessage = document.getElementById("success-message");
+  const miniLoader = document.getElementById("redirect-mini-loader");
+  const serverWarning = document.getElementById("etims-server-warning");
+  const successLedgerDetails = document.getElementById(
+    "success-ledger-details",
+  );
+
   const initialRedirect = document.getElementById("initial_redirect")?.value;
   const initialError = document.getElementById("initial_error")?.value;
 
   let redirectTimer = null;
+  let serverDownTimer = null;
 
-  function handleSuccess(url) {
+  function handleSuccess(url, ledgerData = null) {
     loadingState.style.display = "none";
     successBtn.href = url;
     successState.style.display = "block";
 
+    if (ledgerData) {
+      const currency = ledgerData.currency || "KES";
+
+      document.getElementById("success-scu-type").innerText =
+        ledgerData.type || "-";
+      document.getElementById("success-scu-invoice").innerText =
+        ledgerData.scu_invoice_number || "-";
+      document.getElementById("success-scu-receipt").innerText =
+        ledgerData.scu_receipt_number || "-";
+      document.getElementById("success-scu-customer").innerText =
+        ledgerData.customer_name || ledgerData.customer || "-";
+      document.getElementById("success-scu-date").innerText =
+        ledgerData.invoice_date || ledgerData.posting_date || "-";
+
+      document.getElementById("success-scu-gross").innerText =
+        `${currency} ${ledgerData.total_gross_amount || "0.00"}`;
+      document.getElementById("success-scu-vat").innerText =
+        `${currency} ${ledgerData.total_vat || "0.00"}`;
+      document.getElementById("success-scu-amount").innerText =
+        `${currency} ${ledgerData.tax_inclusive_amount || "0.00"}`;
+
+      document.getElementById("success-scu-id").innerText =
+        ledgerData.scu_id || "-";
+      document.getElementById("success-scu-mrc").innerText =
+        ledgerData.scu_mrc_number || "-";
+      document.getElementById("success-scu-signature").innerText =
+        ledgerData.scu_receipt_signature || "-";
+      document.getElementById("success-scu-time").innerText =
+        `${ledgerData.scu_receipt_date || "-"} ${ledgerData.scu_receipt_time || ""}`.trim();
+
+      const internalField = document.getElementById("success-scu-internal");
+      if (internalField && ledgerData.scu_internal_data) {
+        internalField.innerText = ledgerData.scu_internal_data;
+        internalField.closest(".detail-row").style.display = "flex";
+      }
+
+      successLedgerDetails.style.display = "block";
+    }
+
     redirectTimer = setTimeout(function () {
+      successMessage.innerText =
+        "Attempting connection to KRA eTIMS Gateway servers...";
+      miniLoader.style.display = "block";
+
+      serverDownTimer = setTimeout(function () {
+        serverWarning.style.display = "block";
+        successMessage.innerText =
+          "The KRA gateway is unresponsive. Attempting to keep connection alive; you may also try launching manually below:";
+      }, 4000);
+
       window.location.href = url;
     }, 3000);
   }
 
   if (successBtn) {
-    successBtn.addEventListener("click", function (e) {
-      if (redirectTimer) {
-        clearTimeout(redirectTimer);
-      }
+    successBtn.addEventListener("click", function () {
+      if (redirectTimer) clearTimeout(redirectTimer);
+      if (serverDownTimer) clearTimeout(serverDownTimer);
+      miniLoader.style.display = "none";
     });
   }
 
   if (initialRedirect) {
-    handleSuccess(initialRedirect);
+    loadingState.style.display = "none";
+    handleSuccess(initialRedirect, null);
     return;
   }
 
@@ -73,22 +131,24 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       if (r.message.etims_qr_code_url) {
-        handleSuccess(r.message.etims_qr_code_url);
+        handleSuccess(r.message.etims_qr_code_url, r.message);
         return;
       }
 
       loadingState.style.display = "none";
 
-      document.getElementById("detail-name").innerText = r.message.name || "";
+      document.getElementById("detail-name").innerText =
+        r.message.name || r.message.scu_invoice_number || "";
       document.getElementById("detail-customer").innerText =
-        r.message.customer || "";
+        r.message.customer || r.message.customer_name || "";
       document.getElementById("detail-date").innerText =
-        r.message.posting_date || "";
+        r.message.posting_date || r.message.invoice_date || "";
 
-      if (r.message.grand_total) {
-        const currency = r.message.currency || "";
+      if (r.message.grand_total || r.message.tax_inclusive_amount) {
+        const amount = r.message.grand_total || r.message.tax_inclusive_amount;
+        const currency = r.message.currency || "KES";
         document.getElementById("detail-amount").innerText =
-          `${currency} ${r.message.grand_total}`.trim();
+          `${currency} ${amount}`.trim();
         document.getElementById("detail-amount-row").style.display = "flex";
       }
 
