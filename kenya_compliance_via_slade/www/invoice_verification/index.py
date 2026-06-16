@@ -35,11 +35,11 @@ def get_context(context):
             context.error = response.get("error")
             return
 
-        if isinstance(response, dict) and response.get("etims_qr_code_url"):
-            context.redirect_url = response.get("etims_qr_code_url")
-            return
+        if isinstance(response, dict):
+            if response.get("etims_qr_code_url"):
+                context.redirect_url = response.get("etims_qr_code_url")
 
-        context.invoice = response
+            context.invoice = response
 
     except Exception:
         context.error = _("Unable to verify invoice.")

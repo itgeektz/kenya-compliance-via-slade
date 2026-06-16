@@ -20,6 +20,11 @@ frappe.ui.form.on(parentDoctype, {
       clearEtimsHtmlAndWarnings(frm);
       return;
     }
+    if (frm.doc.is_opening) {
+      clearEtimsHtmlAndWarnings(frm);
+      frm.set_value("prevent_etims_submission", 1);
+      return;
+    }
 
     const { message: activeSetting } = await frappe.call({
       method:
