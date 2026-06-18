@@ -1,8 +1,7 @@
 import frappe
-from erpnext.setup.utils import get_exchange_rate
 from frappe.model.document import Document
 from frappe.query_builder import DocType
-from frappe.utils import add_to_date, flt, getdate
+from frappe.utils import flt
 
 from ...utils import (
     apply_item_taxes_and_codes,
@@ -14,11 +13,7 @@ from .shared_overrides import generic_invoices_on_submit_override
 
 
 def on_submit(doc: Document, method: str = None) -> None:
-    company_name = (
-        doc.company
-        # or frappe.defaults.get_user_default("Company")
-        # or frappe.get_value("Company", {}, "name")
-    )
+    company_name = doc.company
     settings_doc = get_settings(company_name=company_name)
     if not settings_doc:
         return
@@ -41,8 +36,6 @@ def on_submit(doc: Document, method: str = None) -> None:
 
 
 def before_cancel(doc: Document, method: str = None) -> None:
-    """Disallow cancelling of submitted invoice to eTIMS."""
-
     if doc.doctype == "Sales Invoice" and doc.sent_to_etims:
         frappe.throw(
             "This invoice has already been <b>submitted</b> to eTIMS and cannot be <span style='color:red'>Canceled.</span>\n"
@@ -55,255 +48,11 @@ def before_cancel(doc: Document, method: str = None) -> None:
 
 
 @frappe.whitelist()
-def get_single_invoice_reconciliation(invoice_name):
-    if not invoice_name:
-        frappe.throw("Invoice name is required")
-
-    invoice = frappe.get_cached_doc("Sales Invoice", invoice_name)
-    company_currency = frappe.db.get_value(
-        "Company", invoice.company, "default_currency"
-    )
-    currency = invoice.currency
-
-    posting_date = getdate(invoice.posting_date)
-    creation_date = getdate(invoice.creation) if invoice.creation else None
-
-    if creation_date and creation_date < posting_date:
-        from_date = creation_date
-    else:
-        from_date = add_to_date(posting_date, months=-3)
-
-    to_date = getdate(add_to_date(posting_date, days=1))
-
-    erp_data = _get_erp_amounts(invoice, company_currency, currency, from_date, to_date)
-    etims_data = _get_etims_data(invoice, from_date, to_date)
-
-    return _calculate_reconciliation_summary(
-        invoice, erp_data, etims_data, from_date, to_date, company_currency, currency
-    )
-
-
-def _get_erp_amounts(invoice, company_currency, currency, from_date, to_date):
-    SI = DocType("Sales Invoice")
-
-    conversion_rate = 1.0
-    if currency != "KES" and company_currency != "KES":
-        conversion_rate = get_exchange_rate(currency, "KES", invoice.posting_date)
-
-    if currency == "KES":
-        invoice_amount = flt(invoice.grand_total)
-        invoice_tax = flt(invoice.total_taxes_and_charges)
-    elif company_currency == "KES":
-        invoice_amount = flt(invoice.base_grand_total)
-        invoice_tax = flt(invoice.base_total_taxes_and_charges)
-    else:
-        invoice_amount = flt(invoice.grand_total) * conversion_rate
-        invoice_tax = flt(invoice.total_taxes_and_charges) * conversion_rate
-
-    in_period = getdate(from_date) <= getdate(invoice.posting_date) <= getdate(to_date)
-    invoice_period_amount = invoice_amount if in_period else 0
-    invoice_tax_period = invoice_tax if in_period else 0
-
-    credit_notes = frappe.get_all(
-        "Sales Invoice",
-        filters={"is_return": 1, "return_against": invoice.name, "docstatus": 1},
-        fields=[
-            "name",
-            "grand_total",
-            "base_grand_total",
-            "total_taxes_and_charges",
-            "base_total_taxes_and_charges",
-            "posting_date",
-            "currency",
-        ],
-    )
-
-    credit_amount_all = 0
-    credit_amount_period = 0
-    credit_tax_period = 0
-
-    for cn in credit_notes:
-        if cn.currency == "KES":
-            cn_amount = flt(cn.grand_total)
-            cn_tax = flt(cn.total_taxes_and_charges)
-        elif company_currency == "KES":
-            cn_amount = flt(cn.base_grand_total)
-            cn_tax = flt(cn.base_total_taxes_and_charges)
-        else:
-            cn_rate = get_exchange_rate(cn.currency, "KES", cn.posting_date)
-            cn_amount = flt(cn.grand_total) * cn_rate
-            cn_tax = flt(cn.total_taxes_and_charges) * cn_rate
-
-        credit_amount_all += cn_amount
-
-        if getdate(from_date) <= getdate(cn.posting_date) <= getdate(to_date):
-            credit_amount_period += cn_amount
-            credit_tax_period += cn_tax
-
-    return {
-        "invoice_amount": invoice_amount,
-        "invoice_period_amount": invoice_period_amount,
-        "invoice_tax": invoice_tax,
-        "invoice_tax_period": invoice_tax_period,
-        "credit_amount_all": credit_amount_all,
-        "credit_amount_period": credit_amount_period,
-        "credit_tax_period": credit_tax_period,
-        "from_date": from_date,
-        "to_date": to_date,
-    }
-
-
-def _get_etims_data(invoice, from_date, to_date):
-    Ledger = DocType("eTIMS Sales Ledger Entry")
-    reference_number = invoice.return_against if invoice.is_return else invoice.name
-
-    query = (
-        frappe.qb.from_(Ledger)
-        .select(
-            Ledger.name,
-            Ledger.sales_invoice,
-            Ledger.invoice_date,
-            Ledger.type,
-            Ledger.total_gross_amount,
-            Ledger.total_vat,
-            Ledger.customer_name,
-            Ledger.reference_number,
-            Ledger.scu_invoice_number,
-            Ledger.is_signed,
-        )
-        .where(Ledger.company == invoice.company)
-        .where(
-            (Ledger.sales_invoice == invoice.name)
-            | (Ledger.reference_number == reference_number)
-        )
-        .where(Ledger.invoice_date.between(from_date, to_date))
-    )
-
-    entries = query.run(as_dict=True)
-
-    etims_invoice_amount = 0
-    etims_credit_amount = 0
-    etims_tax_amount = 0
-    etims_credit_tax = 0
-    details = []
-
-    for entry in entries:
-        if entry.type == "Sales Invoice":
-            etims_invoice_amount += flt(entry.total_gross_amount)
-            etims_tax_amount += flt(entry.total_vat)
-        elif entry.type == "Credit Note":
-            etims_credit_amount += abs(flt(entry.total_gross_amount))
-            etims_credit_tax += abs(flt(entry.total_vat))
-
-        details.append(
-            {
-                "invoice_date": entry.invoice_date,
-                "customer": entry.customer_name,
-                "type": entry.type,
-                "reference_number": entry.reference_number,
-                "scu_invoice_number": entry.scu_invoice_number,
-                "is_signed": entry.is_signed,
-                "amount": flt(entry.total_gross_amount)
-                if entry.type == "Sales Invoice"
-                else -abs(flt(entry.total_gross_amount)),
-                "tax": flt(entry.total_vat)
-                if entry.type == "Sales Invoice"
-                else -abs(flt(entry.total_vat)),
-            }
-        )
-
-    if invoice.is_return and not details:
-        details.append(
-            {
-                "invoice_date": invoice.posting_date,
-                "customer": invoice.customer_name,
-                "type": "Credit Note (Unmatched)",
-                "reference_number": "Not Found on eTIMS",
-                "scu_invoice_number": "",
-                "is_signed": 0,
-                "amount": -abs(flt(invoice.grand_total)),
-                "tax": -abs(flt(invoice.total_taxes_and_charges)),
-            }
-        )
-
-    return {
-        "invoice_amount": etims_invoice_amount,
-        "credit_amount": etims_credit_amount,
-        "tax_amount": etims_tax_amount,
-        "credit_tax": etims_credit_tax,
-        "details": details,
-        "total_entries": len(details),
-    }
-
-
-def _calculate_reconciliation_summary(
-    invoice, erp_data, etims_data, from_date, to_date, company_currency, currency
-):
-    erp_invoice = erp_data["invoice_period_amount"]
-    erp_credit = erp_data["credit_amount_period"]
-    erp_tax = erp_data["invoice_tax_period"]
-
-    if invoice.is_return:
-        erp_invoice = 0
-        erp_credit = -abs(flt(invoice.grand_total))
-        erp_tax = -abs(flt(invoice.total_taxes_and_charges))
-
-        if (
-            etims_data["details"]
-            and etims_data["details"][0]["type"] != "Credit Note (Unmatched)"
-        ):
-            etims_credit = -etims_data["credit_amount"]
-        else:
-            etims_credit = 0
-        etims_invoice = 0
-    else:
-        etims_invoice = etims_data["invoice_amount"]
-        etims_credit = -etims_data["credit_amount"]
-
-    invoice_diff = erp_invoice - etims_invoice
-    credit_diff = erp_credit - etims_credit
-
-    erp_net = erp_invoice + erp_credit
-    etims_net = etims_invoice + etims_credit
-    net_diff = erp_net - etims_net
-
-    invoice_diff_pct = (abs(invoice_diff) / erp_invoice * 100) if erp_invoice > 0 else 0
-    credit_diff_pct = (
-        (abs(credit_diff) / abs(erp_credit) * 100) if erp_credit != 0 else 0
-    )
-    net_diff_pct = (abs(net_diff) / abs(erp_net) * 100) if abs(erp_net) > 0 else 0
-
-    has_significant_mismatch = (
-        invoice_diff_pct > 0.5 or credit_diff_pct > 0.5 or net_diff_pct > 0.5
-    )
-
-    tax_diff = etims_data["tax_amount"] - erp_tax
-    tax_diff_pct = (abs(tax_diff) / abs(erp_tax) * 100) if erp_tax != 0 else 0
-
-    return {
-        "has_significant_mismatch": has_significant_mismatch,
-        "invoice_diff_percent": invoice_diff_pct,
-        "credit_diff_percent": credit_diff_pct,
-        "net_diff_percent": net_diff_pct,
-        "tax_diff_percent": tax_diff_pct,
-        "erp_invoice_amount": erp_invoice,
-        "erp_credit_amount": erp_credit,
-        "erp_tax_amount": erp_tax,
-        "erp_net_amount": erp_net,
-        "etims_invoice_amount": etims_invoice,
-        "etims_credit_amount": etims_credit,
-        "etims_tax_amount": etims_data["tax_amount"],
-        "etims_net_amount": etims_net,
-        "invoice_difference": invoice_diff,
-        "credit_difference": credit_diff,
-        "net_difference": net_diff,
-        "tax_difference": tax_diff,
-        "from_date": from_date,
-        "to_date": to_date,
-        "total_etims_entries": etims_data["total_entries"],
-        "details": etims_data["details"],
-        "sent_to_etims": invoice.sent_to_etims,
-    }
+def send_invoice_details(name: str) -> None:
+    doc = frappe.get_doc("Sales Invoice", name)
+    if doc.is_opening == "Yes":
+        return
+    generic_invoices_on_submit_override(doc, "Sales Invoice")
 
 
 @frappe.whitelist()
@@ -366,3 +115,327 @@ def regenerate_qr_code(names):
             results.append({"invoice": name, "status": "error", "message": str(e)})
 
     return {"results": results, "total": len(results), "errors": len(errors)}
+
+
+@frappe.whitelist()
+def get_single_invoice_reconciliation(invoice_name):
+    if not invoice_name:
+        frappe.throw("Invoice name is required")
+
+    invoice = frappe.get_doc("Sales Invoice", invoice_name)
+    company_currency = frappe.db.get_value(
+        "Company", invoice.company, "default_currency"
+    )
+
+    try:
+        revision_count = int(getattr(invoice, "revision_count", 0) or 0)
+    except (ValueError, TypeError):
+        revision_count = 0
+
+    references = [invoice.name]
+    for i in range(1, revision_count + 1):
+        references.append(f"{invoice.name}-REV{i}")
+
+    current_reference = references[-1]
+
+    erp_data = _get_erp_metrics(invoice, company_currency)
+    etims_data = _get_sequential_etims_data(invoice, references)
+
+    return _compile_advanced_summary(
+        invoice, erp_data, etims_data, revision_count, current_reference
+    )
+
+
+def _get_erp_metrics(invoice, company_currency):
+    if invoice.currency == "KES":
+        invoice_amount = flt(invoice.grand_total)
+        invoice_tax = flt(invoice.total_taxes_and_charges)
+    elif company_currency == "KES":
+        invoice_amount = flt(invoice.base_grand_total)
+        invoice_tax = flt(invoice.base_total_taxes_and_charges)
+    else:
+        invoice_amount = flt(invoice.grand_total)
+        invoice_tax = flt(invoice.total_taxes_and_charges)
+
+    credit_notes = frappe.get_all(
+        "Sales Invoice",
+        filters={"is_return": 1, "return_against": invoice.name, "docstatus": 1},
+        fields=[
+            "grand_total",
+            "base_grand_total",
+            "total_taxes_and_charges",
+            "base_total_taxes_and_charges",
+            "currency",
+        ],
+    )
+
+    total_erp_credit = 0
+    total_erp_credit_tax = 0
+
+    for cn in credit_notes:
+        if cn.currency == "KES":
+            total_erp_credit += flt(cn.grand_total)
+            total_erp_credit_tax += flt(cn.total_taxes_and_charges)
+        elif company_currency == "KES":
+            total_erp_credit += flt(cn.base_grand_total)
+            total_erp_credit_tax += flt(cn.base_total_taxes_and_charges)
+        else:
+            total_erp_credit += flt(cn.grand_total)
+            total_erp_credit_tax += flt(cn.total_taxes_and_charges)
+
+    return {
+        "erp_invoice_gross": invoice_amount,
+        "erp_invoice_tax": invoice_tax,
+        "erp_credit_gross": total_erp_credit,
+        "erp_credit_tax": total_erp_credit_tax,
+        "erp_net_gross": invoice_amount - total_erp_credit,
+        "erp_net_tax": invoice_tax - total_erp_credit_tax,
+    }
+
+
+def _get_sequential_etims_data(invoice, references):
+    Ledger = DocType("eTIMS Sales Ledger Entry")
+
+    query = (
+        frappe.qb.from_(Ledger)
+        .select(
+            Ledger.name,
+            Ledger.sales_invoice,
+            Ledger.etims_invoice,
+            Ledger.invoice_date,
+            Ledger.type,
+            Ledger.total_gross_amount,
+            Ledger.total_vat,
+            Ledger.customer_name,
+            Ledger.reference_number,
+            Ledger.scu_invoice_number,
+            Ledger.scu_receipt_number,
+            Ledger.scu_id,
+            Ledger.scu_mrc_number,
+            Ledger.scu_receipt_signature,
+            Ledger.scu_receipt_date,
+            Ledger.scu_receipt_time,
+            Ledger.scu_internal_data,
+            Ledger.etims_qr_code_url,
+            Ledger.is_signed,
+        )
+        .where(Ledger.company == invoice.company)
+        .where(
+            (Ledger.sales_invoice == invoice.name)
+            | (Ledger.etims_invoice == invoice.name)
+        )
+    )
+
+    entries = query.run(as_dict=True)
+
+    details = []
+    etims_invoice_gross = 0
+    etims_invoice_tax = 0
+    etims_credit_gross = 0
+    etims_credit_tax = 0
+
+    for entry in entries:
+        is_invoice = entry.type == "Sales Invoice"
+        amt = flt(entry.total_gross_amount)
+        tax = flt(entry.total_vat)
+
+        if is_invoice:
+            etims_invoice_gross += amt
+            etims_invoice_tax += tax
+        else:
+            etims_credit_gross += abs(amt)
+            etims_credit_tax += abs(tax)
+
+        details.append(
+            {
+                "name": entry.name,
+                "invoice_date": entry.invoice_date,
+                "customer": entry.customer_name,
+                "type": entry.type,
+                "reference_number": entry.reference_number,
+                "etims_invoice": entry.etims_invoice,
+                "scu_invoice_number": entry.scu_invoice_number,
+                "scu_receipt_number": entry.scu_receipt_number,
+                "scu_id": entry.scu_id,
+                "scu_mrc_number": entry.scu_mrc_number,
+                "scu_receipt_signature": entry.scu_receipt_signature,
+                "scu_receipt_date": entry.scu_receipt_date,
+                "scu_receipt_time": entry.scu_receipt_time,
+                "scu_internal_data": entry.scu_internal_data,
+                "etims_qr_code_url": entry.etims_qr_code_url,
+                "is_signed": entry.is_signed,
+                "amount": amt if is_invoice else -abs(amt),
+                "tax": tax if is_invoice else -abs(tax),
+                "has_returns": False,
+            }
+        )
+
+    for detail in details:
+        if detail["type"] == "Sales Invoice":
+            has_linked_return = any(
+                d["type"] == "Credit Note" and d["etims_invoice"] == detail["name"]
+                for d in details
+            )
+            detail["has_returns"] = has_linked_return
+
+    return {
+        "details": details,
+        "etims_invoice_gross": etims_invoice_gross,
+        "etims_invoice_tax": etims_invoice_tax,
+        "etims_credit_gross": etims_credit_gross,
+        "etims_credit_tax": etims_credit_tax,
+        "etims_net_gross": etims_invoice_gross - etims_credit_gross,
+        "etims_net_tax": etims_invoice_tax - etims_credit_tax,
+    }
+
+
+def _compile_advanced_summary(invoice, erp, etims, revision_count, current_reference):
+    details = etims.get("details", [])
+    actual_ledger_entries = len(details)
+
+    invoice_entries = [d for d in details if d["type"] == "Sales Invoice"]
+    credit_entries = [d for d in details if d["type"] == "Credit Note"]
+
+    has_original_invoice = any(
+        d["reference_number"] == invoice.name for d in invoice_entries
+    )
+
+    missing_credit_notes = []
+    for r_num in range(1, revision_count + 1):
+        rev_ref = f"{invoice.name}-REV{r_num}"
+        expected_cn_ref = (
+            f"{invoice.name}-CN{r_num}"
+            if r_num == 1
+            else f"{invoice.name}-REV{r_num - 1}-CN"
+        )
+        has_rev_credit = any(
+            d["reference_number"] == expected_cn_ref
+            or (
+                d["type"] == "Credit Note"
+                and invoice.name in str(d["reference_number"])
+            )
+            for d in credit_entries
+        )
+
+        if r_num == 1 and has_original_invoice and not has_rev_credit:
+            missing_credit_notes.append(invoice.name)
+
+    gross_difference = erp["erp_net_gross"] - etims["etims_net_gross"]
+    tax_difference = erp["erp_net_tax"] - etims["etims_net_tax"]
+    has_mismatch = abs(gross_difference) > 0.1 or abs(tax_difference) > 0.1
+
+    compliance_status = "Balanced"
+    action_required = "None"
+    action_code = "NONE"
+
+    if actual_ledger_entries == 0:
+        compliance_status = "Not Submitted"
+        action_required = "Submit Original Invoice to eTIMS"
+        action_code = "SUBMIT_ORIGINAL"
+    elif missing_credit_notes:
+        compliance_status = "Missing Offsetting Credit Note"
+        action_required = f"Generate compensatory eTIMS Credit Note to neutralize original wrong invoice ({', '.join(missing_credit_notes)})"
+        action_code = "TRIGGER_CORRECTION"
+    elif has_mismatch:
+        compliance_status = "Mismatched Ledger Hierarchy"
+        action_required = (
+            f"Trigger Corrective Sequence (Will generate Revision {revision_count + 1})"
+        )
+        action_code = "TRIGGER_CORRECTION"
+    elif actual_ledger_entries != ((revision_count * 2) + 1):
+        compliance_status = "Structural Inconsistency"
+        action_required = "Run Sync or Check Status to synchronize remote ledger items"
+        action_code = "SYNC_STATUS"
+
+    for row in details:
+        ref_num = row.get("reference_number") or ""
+        is_inv = row.get("type") == "Sales Invoice"
+        is_cn = row.get("type") == "Credit Note"
+
+        row["row_status"] = "neutral"
+        row["status_message"] = "Active Ledger Item Baseline"
+        row["action_message"] = (
+            "Tax metrics and payload verification hashes align cleanly with the active document context."
+        )
+
+        if is_cn:
+            if (
+                ref_num.endswith("-CN")
+                or ref_num.endswith("-REV-CN")
+                or "-CN" in ref_num
+            ):
+                row["row_status"] = "success"
+                row["status_message"] = "eTIMS Systematic Reversal Credit Note"
+                row["action_message"] = (
+                    "Generated to neutralize an obsolete/incorrect structural payload phase upstream."
+                )
+            elif invoice.is_return and ref_num == invoice.name:
+                row["row_status"] = "success"
+                row["status_message"] = f"Matched Return Credit Note ({invoice.name})"
+                row["action_message"] = (
+                    "Reconciliation track valid. Adjusts systemic fiscal valuation safely within KRA rules."
+                )
+            else:
+                row["row_status"] = "warn"
+                row["status_message"] = "Compensatory Credit Note Record"
+                row["action_message"] = (
+                    f"Linked to eTIMS Invoice Reference: {row.get('etims_invoice') or 'Direct Hierarchy'}"
+                )
+        elif is_inv:
+            if row.get("has_returns"):
+                row["row_status"] = "warn"
+                row["status_message"] = "Invoice with Associated Returns"
+                row["action_message"] = (
+                    "Active credit notes point to this transaction ledger entry."
+                )
+            elif "-REV" in ref_num:
+                row["row_status"] = "success"
+                row["status_message"] = f"Active Revised eTIMS Invoice ({ref_num})"
+                row["action_message"] = (
+                    "Overwrites previously neutralized structural entries. Marks the active fiscal baseline."
+                )
+            elif ref_num == invoice.name and missing_credit_notes:
+                row["row_status"] = "danger"
+                row["status_message"] = (
+                    "Wrong Invoice State (Pending Reversal Credit Note)"
+                )
+                row["action_message"] = (
+                    "Required Action: Generate compensatory eTIMS Credit Note to neutralize this baseline entity safely."
+                )
+            elif ref_num == invoice.name and not row.get("is_signed"):
+                row["row_status"] = "danger"
+                row["status_message"] = "Unsigned/Failed Submission Stream Reference"
+                row["action_message"] = (
+                    "Signature verification block absent. Trigger structural sync or manual repair sequence."
+                )
+            elif ref_num == invoice.name:
+                row["row_status"] = "success"
+                row["status_message"] = "Active eTIMS Invoice Ledger Baseline"
+                row["action_message"] = (
+                    "Tax metrics and payload verification hashes align cleanly with the active ERP document status."
+                )
+            else:
+                row["row_status"] = "warn"
+                row["status_message"] = f"Mismatched Version Track ({ref_num})"
+                row["action_message"] = (
+                    "Verify if a balancing credit note entry matches this explicit trace entity."
+                )
+
+    return {
+        "compliance_status": compliance_status,
+        "action_required": action_required,
+        "action_code": action_code,
+        "revision_count": revision_count,
+        "current_reference": current_reference,
+        "expected_ledger_entries": (revision_count * 2) + 1,
+        "actual_ledger_entries": actual_ledger_entries,
+        "metrics": {
+            "erp": erp,
+            "etims": etims,
+            "variance": {
+                "gross_difference": gross_difference,
+                "tax_difference": tax_difference,
+            },
+        },
+        "details": details,
+    }

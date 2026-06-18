@@ -23,6 +23,7 @@ from .task_response_handlers import (
     fetch_etims_credit_notes_on_success,
     fetch_etims_sales_invoices_on_success,
     operation_types_search_on_success,
+    process_etims_ledger_credit_note,
     update_branches,
     update_clusters,
     update_countries,
@@ -718,8 +719,11 @@ def fetch_etims_sales_invoices(
 ) -> None:
     request_data = parse_request_data(request_data)
 
+    doc = frappe.get_doc("Sales Invoice", document_name) if document_name else None
+    if doc and doc.is_return:
+        document_name = doc.return_against
     if document_name:
-        request_data["reference_number"] = document_name
+        request_data["search"] = document_name
 
     process_request(
         request_data,
@@ -786,3 +790,53 @@ def purge_invalid_etims_ledger_records():
     except Exception:
         frappe.db.rollback()
         frappe.log_error("eTIMS Ledger Cleanup Failed", frappe.get_traceback())
+
+
+@frappe.whitelist()
+def fetch_etims_ledger_entry(
+    name: str,
+    queue: bool = True,
+) -> None:
+    ledger_entry = frappe.get_doc("eTIMS Sales Ledger Entry", name)
+
+    route_key = (
+        "CreditNoteSearchReq" if ledger_entry.type == "Credit Note" else "SaleSearchReq"
+    )
+
+    request_data = {
+        "id": ledger_entry.etims_id,
+    }
+
+    process_request(
+        request_data,
+        route_key,
+        request_method="GET",
+        doctype="eTIMS Sales Ledger Entry",
+        document_name=ledger_entry.name,
+        handler_function=fetch_etims_sales_invoices_on_success,
+        company=ledger_entry.company,
+        queue=queue,
+    )
+
+
+@frappe.whitelist()
+def return_etims_credit_note(
+    name: str,
+    queue: bool = True,
+) -> None:
+    ledger_entry = frappe.get_doc("eTIMS Sales Ledger Entry", name)
+
+    request_data = {
+        "id": ledger_entry.etims_id,
+    }
+
+    process_request(
+        request_data,
+        "SaleSearchReq",
+        request_method="GET",
+        doctype="eTIMS Sales Ledger Entry",
+        document_name=ledger_entry.name,
+        handler_function=process_etims_ledger_credit_note,
+        company=ledger_entry.company,
+        queue=queue,
+    )

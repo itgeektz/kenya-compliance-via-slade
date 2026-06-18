@@ -5,6 +5,12 @@ import frappe.defaults
 from frappe.model.document import Document
 from frappe.utils import get_datetime, get_datetime_str
 
+from ..apis.process_request import (
+    process_request,
+)
+from ..apis.remote_response_status_handlers import (
+    get_response_data,
+)
 from ..doctype.doctype_names_mapping import (
     COUNTRIES_DOCTYPE_NAME,
     ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
@@ -741,7 +747,14 @@ def update_clusters(response: dict, settings_name: str, **kwargs) -> None:
 def fetch_etims_sales_invoices_on_success(
     response: dict, company: str, **kwargs
 ) -> None:
-    data = response.get("results")
+    if not response:
+        return
+
+    if isinstance(response, dict) and "id" in response:
+        data = [response]
+    else:
+        data = response.get("results") or []
+
     if not data or not isinstance(data, list):
         return
 
@@ -1099,3 +1112,54 @@ def process_single_etims_entry(
         )
         if sales_invoice:
             update_sales_invoice_etims_details(sales_invoice)
+
+
+def process_etims_ledger_credit_note(
+    response: dict,
+    document_name: str,
+    doctype: str,
+    settings_name: str | None = None,
+    **kwargs,
+) -> None:
+    data = get_response_data(response)
+    doc = frappe.get_doc(doctype, document_name)
+
+    items = []
+
+    for line in data.get("sales_invoice_lines", []):
+        items.append(
+            {
+                "item_name": line.get("product_name"),
+                "quantity": round(abs(line.get("quantity", 0)), 2),
+                "amount": round(abs(line.get("price_inclusive_tax", 0)), 4),
+            }
+        )
+
+    return_payload = {
+        "document_name": document_name,
+        "invoice_reference": doc.reference_number,
+        "refund_reason": "13",
+        "items": items,
+    }
+
+    process_request(
+        return_payload,
+        "CreditNoteSaveReq",
+        etims_ledger_credit_note_on_success,
+        doctype=doctype,
+        request_method="POST",
+        document_name=document_name,
+        settings_name=settings_name,
+        queue=False,
+    )
+
+
+def etims_ledger_credit_note_on_success(
+    response: dict, document_name: str, **kwargs
+) -> None:
+    frappe.enqueue(
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_ledger_entry",
+        name=document_name,
+        is_async=True,
+        queue="default",
+    )

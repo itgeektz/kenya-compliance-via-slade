@@ -1473,44 +1473,13 @@ def check_invoice_submission_status(id: str, key: str) -> dict:
     if doc.is_return:
         invoice = frappe.get_doc("Sales Invoice", invoice.return_against)
 
-    reference_number = get_invoice_reference_number(invoice)
-
-    parent_ledger = frappe.db.get_value(
-        "eTIMS Sales Ledger Entry",
-        {
-            "sales_invoice": invoice.name,
-            "reference_number": reference_number,
-        },
-        [
-            "scu_invoice_number",
-            "scu_receipt_number",
-            "scu_id",
-            "scu_mrc_number",
-            "scu_receipt_signature",
-            "scu_receipt_date",
-            "scu_receipt_time",
-            "scu_internal_data",
-            "total_gross_amount",
-            "etims_qr_code_url",
-            "customer_name",
-            "invoice_date",
-            "total_vat",
-            "name",
-            "type",
-        ],
-        as_dict=True,
-    )
-
-    ledger_entry = parent_ledger
-
-    if doc.is_return and parent_ledger:
-        return_ledgers = frappe.get_all(
+    if hasattr(doc, "etims_id") and doc.etims_id:
+        ledger_entry = frappe.db.get_value(
             "eTIMS Sales Ledger Entry",
-            filters={
-                "sales_invoice": invoice.name,
-                "etims_invoice": parent_ledger.name,
+            {
+                "etims_id": doc.etims_id,
             },
-            fields=[
+            [
                 "scu_invoice_number",
                 "scu_receipt_number",
                 "scu_id",
@@ -1527,51 +1496,135 @@ def check_invoice_submission_status(id: str, key: str) -> dict:
                 "name",
                 "type",
             ],
+            as_dict=True,
         )
 
-        if return_ledgers:
-            currency = invoice.currency
-            company_currency = frappe.get_value(
-                "Company", invoice.company, "default_currency"
+    if not ledger_entry and hasattr(doc, "etims_qr_code_url") and doc.etims_qr_code_url:
+        ledger_entry = frappe.db.get_value(
+            "eTIMS Sales Ledger Entry",
+            {
+                "etims_qr_code_url": doc.etims_qr_code_url,
+            },
+            [
+                "scu_invoice_number",
+                "scu_receipt_number",
+                "scu_id",
+                "scu_mrc_number",
+                "scu_receipt_signature",
+                "scu_receipt_date",
+                "scu_receipt_time",
+                "scu_internal_data",
+                "total_gross_amount",
+                "etims_qr_code_url",
+                "customer_name",
+                "invoice_date",
+                "total_vat",
+                "name",
+                "type",
+            ],
+            as_dict=True,
+        )
+
+    if not ledger_entry:
+        reference_number = get_invoice_reference_number(invoice)
+
+        parent_ledger = frappe.db.get_value(
+            "eTIMS Sales Ledger Entry",
+            {
+                "sales_invoice": invoice.name,
+                "reference_number": reference_number,
+            },
+            [
+                "scu_invoice_number",
+                "scu_receipt_number",
+                "scu_id",
+                "scu_mrc_number",
+                "scu_receipt_signature",
+                "scu_receipt_date",
+                "scu_receipt_time",
+                "scu_internal_data",
+                "total_gross_amount",
+                "etims_qr_code_url",
+                "customer_name",
+                "invoice_date",
+                "total_vat",
+                "name",
+                "type",
+            ],
+            as_dict=True,
+        )
+
+        ledger_entry = parent_ledger
+
+        if doc.is_return and parent_ledger:
+            return_ledgers = frappe.get_all(
+                "eTIMS Sales Ledger Entry",
+                filters={
+                    "sales_invoice": invoice.name,
+                    "etims_invoice": parent_ledger.name,
+                },
+                fields=[
+                    "scu_invoice_number",
+                    "scu_receipt_number",
+                    "scu_id",
+                    "scu_mrc_number",
+                    "scu_receipt_signature",
+                    "scu_receipt_date",
+                    "scu_receipt_time",
+                    "scu_internal_data",
+                    "total_gross_amount",
+                    "etims_qr_code_url",
+                    "customer_name",
+                    "invoice_date",
+                    "total_vat",
+                    "name",
+                    "type",
+                ],
             )
-            convertion_rate = 1
 
-            if currency == "KES":
-                convertion_rate = 1
-            elif company_currency == "KES":
-                convertion_rate = doc.conversion_rate
-            else:
-                convertion_rate, used_rate = get_kes_conversion_rate(
-                    currency=currency,
-                    company_currency=company_currency,
-                    posting_date=invoice.posting_date,
+            if return_ledgers:
+                currency = invoice.currency
+                company_currency = frappe.get_value(
+                    "Company", invoice.company, "default_currency"
                 )
-            matched_by_amount = None
-            closest_by_date = None
-            min_date_diff = None
-            target_amount = abs(flt(doc.grand_total) * flt(convertion_rate))
+                convertion_rate = 1
 
-            for entry in return_ledgers:
-                entry_amount = abs(flt(entry.total_gross_amount))
-                variance = abs(entry_amount - target_amount)
-                allowance = entry_amount * 0.01
-
-                if variance <= allowance:
-                    matched_by_amount = entry
-                    break
-
-                if entry.invoice_date and doc.posting_date:
-                    date_diff = abs(
-                        (
-                            get_datetime(entry.invoice_date)
-                            - get_datetime(doc.posting_date)
-                        ).days
+                if currency == "KES":
+                    convertion_rate = 1
+                elif company_currency == "KES":
+                    convertion_rate = doc.conversion_rate
+                else:
+                    convertion_rate, used_rate = get_kes_conversion_rate(
+                        currency=currency,
+                        company_currency=company_currency,
+                        posting_date=invoice.posting_date,
                     )
-                    if min_date_diff is None or date_diff < min_date_diff:
-                        min_date_diff = date_diff
-                        closest_by_date = entry
+                matched_by_amount = None
+                closest_by_date = None
+                min_date_diff = None
+                target_amount = abs(flt(doc.grand_total) * flt(convertion_rate))
 
-            ledger_entry = matched_by_amount or closest_by_date or return_ledgers[0]
+                for entry in return_ledgers:
+                    entry_amount = abs(flt(entry.total_gross_amount))
+                    variance = abs(entry_amount - target_amount)
+                    allowance = entry_amount * 0.01
+
+                    if variance <= allowance:
+                        matched_by_amount = entry
+                        break
+
+                    if entry.invoice_date and doc.posting_date:
+                        date_diff = abs(
+                            (
+                                get_datetime(entry.invoice_date)
+                                - get_datetime(doc.posting_date)
+                            ).days
+                        )
+                        if min_date_diff is None or date_diff < min_date_diff:
+                            min_date_diff = date_diff
+                            closest_by_date = entry
+
+                ledger_entry = matched_by_amount or closest_by_date or return_ledgers[0]
 
     if ledger_entry:
         return {
