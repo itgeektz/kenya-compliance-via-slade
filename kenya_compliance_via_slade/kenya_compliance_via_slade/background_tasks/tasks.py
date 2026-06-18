@@ -8,6 +8,9 @@ from frappe.model.document import Document
 from frappe.utils import now_datetime
 
 from ..apis.api_builder import EndpointsBuilder
+from ..apis.apis import (
+    bulk_submit_sales_invoices,
+)
 from ..apis.process_request import process_request
 from ..apis.remote_response_status_handlers import notices_search_on_success
 from ..doctype.doctype_names_mapping import (
@@ -95,18 +98,18 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
         }
     )
     if all_submitted_unsent:
-        submit_new_invoices(all_submitted_unsent)
+        submit_new_invoices(all_submitted_unsent, settings_name=settings_name)
 
-    successful_without_scu_data = fetch_sales_invoices(
-        {
-            "docstatus": 1,
-            "sent_to_etims": 1,
-            "etims_qr_code_url": ["is", "not set"],
-            "creation": [">=", timeframe_ago],
-        }
-    )
-    if successful_without_scu_data:
-        fetch_scu_data(successful_without_scu_data)
+    # successful_without_scu_data = fetch_sales_invoices(
+    #     {
+    #         "docstatus": 1,
+    #         "sent_to_etims": 1,
+    #         "etims_qr_code_url": ["is", "not set"],
+    #         "creation": [">=", timeframe_ago],
+    #     }
+    # )
+    # if successful_without_scu_data:
+    #     fetch_scu_data(successful_without_scu_data)
 
     # sent_unprocessed = fetch_sales_invoices(
     #     {
@@ -162,13 +165,11 @@ def handle_invoice_submission(invoices: list, action_func: callable) -> None:
             continue
 
 
-def submit_new_invoices(invoices: list) -> None:
-    from ..overrides.server.sales_invoice import on_submit
+def submit_new_invoices(invoices: list, settings_name: str = None) -> None:
+    invoice_names = [inv.name for inv in invoices]
+    docs_list_json = json.dumps(invoice_names)
 
-    def action_func(doc: Document) -> None:
-        on_submit(doc)
-
-    handle_invoice_submission(invoices, action_func)
+    bulk_submit_sales_invoices(docs_list=docs_list_json, settings_name=settings_name)
 
 
 def sign_processed_invoices(invoices: list) -> None:

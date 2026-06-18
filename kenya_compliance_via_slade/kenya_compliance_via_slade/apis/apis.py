@@ -92,7 +92,7 @@ def bulk_submit_sales_invoices(
     docs_list: str = None,
     settings_name: str = None,
 ) -> str:
-    """Bulk submit sales invoices in chunks"""
+    """Bulk submit sales invoices grouped by company in chunks"""
 
     filters = {
         "docstatus": 1,
@@ -106,33 +106,41 @@ def bulk_submit_sales_invoices(
         valid_invoices = frappe.get_all(
             "Sales Invoice",
             filters=filters,
-            pluck="name",
+            fields=["name", "company"],
         )
 
         invoices_to_process = [
-            name for name in provided_names if name in valid_invoices
+            inv for inv in valid_invoices if inv["name"] in provided_names
         ]
-
     else:
         invoices_to_process = frappe.get_all(
             "Sales Invoice",
             filters=filters,
-            pluck="name",
+            fields=["name", "company"],
         )
 
     if not invoices_to_process:
         return "No invoices to process."
 
-    for batch in chunked(invoices_to_process, 100):
-        frappe.enqueue(
-            process_bulk_invoice_submission,
-            invoice_list=batch,
-            settings_name=settings_name,
-            queue="long",
-            timeout=3600,
-            enqueue_after_commit=True,
-            job_name=f"Bulk Submit Invoices Batch ({len(batch)})",
-        )
+    company_groups = {}
+    for inv in invoices_to_process:
+        comp = inv["company"]
+        if comp not in company_groups:
+            company_groups[comp] = []
+        company_groups[comp].append(inv["name"])
+
+    for company, invoice_list in company_groups.items():
+        for batch in chunked(invoice_list, 100):
+            frappe.enqueue(
+                process_bulk_invoice_submission,
+                invoice_list=batch,
+                settings_name=settings_name,
+                queue="long",
+                timeout=3600,
+                enqueue_after_commit=True,
+                job_name=f"Bulk Submit Invoices Batch - {company} ({len(batch)})",
+                company=company,
+            )
 
     return "Processing started."
 
@@ -140,6 +148,7 @@ def bulk_submit_sales_invoices(
 def process_bulk_invoice_submission(
     invoice_list: list[str],
     settings_name: str,
+    company: str | None = None,
 ) -> None:
     payload = build_bulk_invoice_payload(
         invoice_names=invoice_list,
@@ -155,6 +164,7 @@ def process_bulk_invoice_submission(
         handler_function=invoice_bulk_submission_on_success,
         request_method="POST",
         settings_name=settings_name,
+        company=company,
     )
 
 
