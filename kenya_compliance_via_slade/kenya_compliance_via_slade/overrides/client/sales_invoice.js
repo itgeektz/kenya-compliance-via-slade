@@ -20,7 +20,7 @@ frappe.ui.form.on(parentDoctype, {
       clearEtimsHtmlAndWarnings(frm);
       return;
     }
-    if (frm.doc.is_opening) {
+    if (frm.doc.is_opening === "Yes") {
       clearEtimsHtmlAndWarnings(frm);
       frm.set_value("prevent_etims_submission", 1);
       return;
@@ -84,7 +84,7 @@ async function fetchEligibilityData(frm) {
     });
     return message || {};
   } catch (error) {
-    console.error("Failed to fetch eligibility data:", error);
+    console.error(error);
     return {};
   }
 }
@@ -149,14 +149,16 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
       return null;
     }
 
+    const tableHtml = buildTransactionTableHtml(data.details, fmt);
+
     if (frm.doc.is_return) {
       htmlField.$wrapper.html(`
         ${SHARED_ETIMS_STYLES}
         <div class="etims-root">
           <div class="etims-hero">
             <div>
-              <div class="etims-hero-title">Return / Credit Note - Original Invoice Reconciliation</div>
-              <div class="etims-hero-sub">${data.from_date} — ${data.to_date}</div>
+              <div class="etims-hero-title">Return / Credit Note - Original eTIMS ID Reconciliation</div>
+              <div class="etims-hero-sub">${data.from_date || "—"} — ${data.to_date || "—"}</div>
               <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">
                 Original Invoice: <strong>${frappe.utils.escape_html(invoiceName)}</strong>
               </div>
@@ -170,11 +172,11 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
             <div class="etims-stat-card">
               <div class="etims-stat-header">Invoices</div>
               <div class="etims-stat-body">
-                <div class="etims-compare-row"><span class="etims-compare-label">ERP</span><span class="etims-compare-value erp">${fmt(data.erp_invoice_amount)}</span></div>
-                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${fmt(data.etims_invoice_amount)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">System Baseline</span><span class="etims-compare-value erp">${fmt(data.metrics?.erp?.erp_invoice_gross)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${fmt(data.metrics?.etims?.etims_invoice_gross)}</span></div>
                 <div class="etims-diff-section">
-                  <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.invoice_difference >= 0 ? "positive" : "negative"}">${fmt(data.invoice_difference)}</span></div>
-                  <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.invoice_diff_percent.toFixed(2)}%</span></div></div>
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.metrics?.variance?.gross_difference >= 0 ? "positive" : "negative"}">${fmt(data.metrics?.variance?.gross_difference)}</span></div>
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${(data.metrics?.erp?.erp_invoice_gross ? (data.metrics.variance.gross_difference / data.metrics.erp.erp_invoice_gross) * 100 : 0).toFixed(2)}%</span></div></div>
                 </div>
               </div>
             </div>
@@ -182,23 +184,11 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
             <div class="etims-stat-card">
               <div class="etims-stat-header">Credit Notes</div>
               <div class="etims-stat-body">
-                <div class="etims-compare-row"><span class="etims-compare-label">ERP</span><span class="etims-compare-value erp">${fmt(data.erp_credit_amount)}</span></div>
-                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${fmt(data.etims_credit_amount)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">System Baseline</span><span class="etims-compare-value erp">${fmt(data.metrics?.erp?.erp_credit_gross)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${fmt(data.metrics?.etims?.etims_credit_gross)}</span></div>
                 <div class="etims-diff-section">
-                  <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.credit_difference >= 0 ? "positive" : "negative"}">${fmt(data.credit_difference)}</span></div>
-                  <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.credit_diff_percent.toFixed(2)}%</span></div></div>
-                </div>
-              </div>
-            </div>
-
-            <div class="etims-stat-card">
-              <div class="etims-stat-header">Net Values</div>
-              <div class="etims-stat-body">
-                <div class="etims-compare-row"><span class="etims-compare-label">ERP Net</span><span class="etims-compare-value erp">${fmt(data.erp_net_amount)}</span></div>
-                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Net</span><span class="etims-compare-value etims">${fmt(data.etims_net_amount)}</span></div>
-                <div class="etims-diff-section">
-                  <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.net_difference >= 0 ? "positive" : "negative"}">${fmt(data.net_difference)}</span></div>
-                  <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.net_diff_percent.toFixed(2)}%</span></div></div>
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.metrics?.variance?.gross_difference >= 0 ? "positive" : "negative"}">${fmt(data.metrics?.variance?.gross_difference)}</span></div>
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">0.00%</span></div></div>
                 </div>
               </div>
             </div>
@@ -206,47 +196,29 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
             <div class="etims-stat-card">
               <div class="etims-stat-header">Tax</div>
               <div class="etims-stat-body">
-                <div class="etims-compare-row"><span class="etims-compare-label">ERP Tax</span><span class="etims-compare-value erp">${fmt(data.erp_tax_amount)}</span></div>
-                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Tax</span><span class="etims-compare-value etims">${fmt(data.etims_tax_amount)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">System Tax</span><span class="etims-compare-value erp">${fmt(data.metrics?.erp?.erp_invoice_tax)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Tax</span><span class="etims-compare-value etims">${fmt(data.metrics?.etims?.etims_invoice_tax)}</span></div>
                 <div class="etims-diff-section">
-                  <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.tax_difference >= 0 ? "positive" : "negative"}">${fmt(data.tax_difference)}</span></div>
-                  <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.tax_diff_percent ? data.tax_diff_percent.toFixed(2) : "0.00"}%</span></div></div>
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.metrics?.variance?.tax_difference >= 0 ? "positive" : "negative"}">${fmt(data.metrics?.variance?.tax_difference)}</span></div>
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${(data.metrics?.erp?.erp_invoice_tax ? (data.metrics.variance.tax_difference / data.metrics.erp.erp_invoice_tax) * 100 : 0).toFixed(2)}%</span></div></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="etims-stat-card">
+              <div class="etims-stat-header">Net Values</div>
+              <div class="etims-stat-body">
+                <div class="etims-compare-row"><span class="etims-compare-label">System Net</span><span class="etims-compare-value erp">${fmt(data.metrics?.erp?.erp_net_gross)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Net</span><span class="etims-compare-value etims">${fmt(data.metrics?.etims?.etims_net_gross)}</span></div>
+                <div class="etims-diff-section">
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.metrics?.variance?.gross_difference >= 0 ? "positive" : "negative"}">${fmt(data.metrics?.variance?.gross_difference)}</span></div>
+                  <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">0.00%</span></div></div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="etims-card">
-            <div class="etims-card-header">
-              <span class="etims-card-header-title">Transaction Records (Original Invoice)</span>
-              <span class="etims-pill etims-pill-neutral">${data.details.length} entr${data.details.length !== 1 ? "ies" : "y"}</span>
-            </div>
-            <div class="etims-table-wrap">
-              <table class="etims-table">
-                <thead>
-                  <tr><th>Date</th><th>Customer</th><th>Type</th><th class="r">Invoice Amt</th><th class="r">Credit Amt</th><th class="r">Tax</th><th>Reference</th><th class="c">Status</th></tr>
-                </thead>
-                <tbody>
-                  ${data.details
-                    .map(
-                      (row, i) => `
-                    <tr class="${i % 2 === 0 ? "row-even" : "row-odd"}">
-                      <td class="muted">${frappe.datetime.str_to_user(row.invoice_date)}</td>
-                      <td class="bold">${frappe.utils.escape_html(row.customer || "—")}</td>
-                      <td><span class="etims-type-chip">${row.type || "—"}</span></td>
-                      <td class="r mono">${row.type === "Sales Invoice" ? fmt(row.amount) : "—"}</td>
-                      <td class="r mono" style="color:var(--text-muted);">${row.type === "Credit Note" ? fmt(row.amount) : "—"}</td>
-                      <td class="r mono" style="color:var(--text-muted);">${row.type === "Sales Invoice" ? fmt(row.tax) : "—"}</td>
-                      <td class="muted" style="font-family:monospace;font-size:11px;">${frappe.utils.escape_html(row.reference_number || "—")}</td>
-                      <td class="c">${row.is_signed ? `<span class="etims-pill etims-pill-success">${ETIMS_ICONS.check} Signed</span>` : `<span class="etims-pill etims-pill-danger">${ETIMS_ICONS.x} Unsigned</span>`}</td>
-                    </tr>
-                  `,
-                    )
-                    .join("")}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          ${tableHtml}
 
           <div class="etims-card" style="border:2px solid #fcd34d;background:#fffbeb;">
             <div class="etims-card-header" style="background:#fef3c7;border-bottom-color:#fcd34d;">
@@ -269,130 +241,259 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
       `);
 
       return {
-        hasSignificantMismatch: data.has_significant_mismatch,
-        invoiceDiffPercent: data.invoice_diff_percent,
-        creditDiffPercent: data.credit_diff_percent,
-        netDiffPercent: data.net_diff_percent,
-        erp_invoice_period_amount: data.erp_invoice_amount,
-        erp_credit_period_amount: data.erp_credit_amount,
-        etims_invoice_amount: data.etims_invoice_amount,
-        etims_credit_amount: data.etims_credit_amount,
-        difference: data.net_difference,
-        tax_difference: data.tax_difference,
-        erp_tax_amount: data.erp_tax_amount,
-        etims_total_tax: data.etims_tax_amount,
-        tax_diff_percent: data.tax_diff_percent || 0,
+        _raw_payload: data,
+        hasSignificantMismatch:
+          Math.abs(data.metrics?.variance?.gross_difference || 0) > 0.1,
+        invoiceDiffPercent: 0,
+        creditDiffPercent: 0,
+        netDiffPercent: 0,
+        erp_invoice_period_amount: data.metrics?.erp?.erp_invoice_gross,
+        erp_credit_period_amount: data.metrics?.erp?.erp_credit_gross,
+        etims_invoice_amount: data.metrics?.etims?.etims_invoice_gross,
+        etims_credit_amount: data.metrics?.etims?.etims_credit_gross,
+        difference: data.metrics?.variance?.gross_difference,
+        tax_difference: data.metrics?.variance?.tax_difference,
+        erp_tax_amount: data.metrics?.erp?.erp_invoice_tax,
+        etims_total_tax: data.metrics?.etims?.etims_invoice_tax,
+        tax_diff_percent: 0,
       };
     }
 
-    const detailRows = data.details.map((d) => ({
-      invoice_date: d.invoice_date,
-      customer: d.customer,
-      type: d.type,
-      etims_invoice_amount: d.type === "Sales Invoice" ? d.amount : 0,
-      etims_credit_amount: d.type === "Credit Note" ? d.amount : 0,
-      etims_total_tax: d.type === "Sales Invoice" ? d.tax : 0,
-      reference_number: d.reference_number,
-      is_signed: d.is_signed,
-    }));
-
-    const badge = (ok) =>
-      ok
-        ? `<span class="etims-pill etims-pill-success">${ETIMS_ICONS.check} Signed</span>`
-        : `<span class="etims-pill etims-pill-danger">${ETIMS_ICONS.x} Unsigned</span>`;
-
-    const tableHtml = `
-      <div class="etims-card">
-        <div class="etims-card-header">
-          <span class="etims-card-header-title">Transaction Records</span>
-          <span class="etims-pill etims-pill-neutral">${detailRows.length} entr${detailRows.length !== 1 ? "ies" : "y"}</span>
-        </div>
-        <div class="etims-table-wrap">
-          <table class="etims-table">
-            <thead>
-              <tr><th>Date</th><th>Customer</th><th>Type</th><th class="r">Invoice Amt</th><th class="r">Credit Amt</th><th class="r">Tax</th><th>Reference</th><th class="c">Status</th></tr>
-            </thead>
-            <tbody>
-              ${
-                detailRows.length
-                  ? detailRows
-                      .map(
-                        (row, i) => `
-                <tr class="${i % 2 === 0 ? "row-even" : "row-odd"}">
-                  <td class="muted">${frappe.datetime.str_to_user(row.invoice_date)}</td>
-                  <td class="bold">${frappe.utils.escape_html(row.customer || "—")}</td>
-                  <td><span class="etims-type-chip">${row.type || "—"}</span></td>
-                  <td class="r mono">${fmt(row.etims_invoice_amount)}</td>
-                  <td class="r mono" style="color:var(--text-muted);">${fmt(row.etims_credit_amount)}</td>
-                  <td class="r mono" style="color:var(--text-muted);">${fmt(row.etims_total_tax)}</td>
-                  <td class="muted" style="font-family:monospace;font-size:11px;">${frappe.utils.escape_html(row.reference_number || "—")}</td>
-                  <td class="c">${badge(row.is_signed)}</td>
-                </tr>
-              `,
-                      )
-                      .join("")
-                  : `<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-muted);">No eTIMS records found for this invoice.</td></tr>`
-              }
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-
-    if (!frm.doc.sent_to_etims && detailRows.length === 0) {
+    if (!frm.doc.sent_to_etims && !data.details.length) {
       renderNotSubmittedBlock(htmlField, activeSetting, frm);
       return null;
     }
 
-    if (!frm.doc.sent_to_etims && detailRows.length > 0) {
+    if (!frm.doc.sent_to_etims && data.details.length > 0) {
       renderInconsistentBlock(htmlField, tableHtml);
       return null;
     }
 
+    const hasMismatch =
+      Math.abs(data.metrics?.variance?.gross_difference || 0) > 0.1 ||
+      Math.abs(data.metrics?.variance?.tax_difference || 0) > 0.1;
+
+    const calcPercent = (diff, base) => {
+      if (!base) return 0;
+      return (diff / base) * 100;
+    };
+
     renderSummaryDashboard(htmlField, {
-      startDate: data.from_date,
-      endDate: data.to_date,
-      hasSignificantMismatch: data.has_significant_mismatch,
-      erpInvoiceAmount: data.erp_invoice_amount,
-      etimsInvoiceAmount: data.etims_invoice_amount,
-      invoiceDifference: data.invoice_difference,
-      invoiceDiffPercent: data.invoice_diff_percent,
-      erpCreditAmount: data.erp_credit_amount,
-      etimsCreditAmount: data.etims_credit_amount,
-      creditDifference: data.credit_difference,
-      creditDiffPercent: data.credit_diff_percent,
-      erpNetAmount: data.erp_net_amount,
-      etimsNetAmount: data.etims_net_amount,
-      netDifference: data.net_difference,
-      netDiffPercent: data.net_diff_percent,
-      erpTaxAmount: data.erp_tax_amount,
-      etimsTaxAmount: data.etims_tax_amount,
-      taxDifference: data.tax_difference,
-      taxDiffPercent: data.tax_diff_percent || 0,
+      startDate: frm.doc.posting_date,
+      endDate: moment(frm.doc.modified).format("YYYY-MM-DD"),
+      hasSignificantMismatch: hasMismatch,
+      actionRequired: data.action_required,
+      erpInvoiceAmount: data.metrics?.erp?.erp_invoice_gross,
+      etimsInvoiceAmount: data.metrics?.etims?.etims_invoice_gross,
+      invoiceDifference: data.metrics?.variance?.gross_difference,
+      invoiceDiffPercent: calcPercent(
+        data.metrics?.variance?.gross_difference,
+        data.metrics?.erp?.erp_invoice_gross,
+      ),
+      erpCreditAmount: data.metrics?.erp?.erp_credit_gross,
+      etimsCreditAmount: data.metrics?.etims?.etims_credit_gross,
+      creditDifference:
+        (data.metrics?.erp?.erp_credit_gross || 0) -
+        (data.metrics?.etims?.etims_credit_gross || 0),
+      creditDiffPercent: calcPercent(
+        (data.metrics?.erp?.erp_credit_gross || 0) -
+          (data.metrics?.etims?.etims_credit_gross || 0),
+        data.metrics?.erp?.erp_credit_gross,
+      ),
+      erpNetAmount: data.metrics?.erp?.erp_net_gross,
+      etimsNetAmount: data.metrics?.etims?.etims_net_gross,
+      netDifference: data.metrics?.variance?.gross_difference,
+      netDiffPercent: calcPercent(
+        data.metrics?.variance?.gross_difference,
+        data.metrics?.erp?.erp_net_gross,
+      ),
+      erpTaxAmount: data.metrics?.erp?.erp_invoice_tax,
+      etimsTaxAmount:
+        data.metrics?.etims?.etims_tax_amount ||
+        data.metrics?.etims?.etims_invoice_tax,
+      taxDifference: data.metrics?.variance?.tax_difference,
+      taxDiffPercent: calcPercent(
+        data.metrics?.variance?.tax_difference,
+        data.metrics?.erp?.erp_invoice_tax,
+      ),
       tableHtml,
       fmt,
     });
 
     return {
-      hasSignificantMismatch: data.has_significant_mismatch,
-      invoiceDiffPercent: data.invoice_diff_percent,
-      creditDiffPercent: data.credit_diff_percent,
-      netDiffPercent: data.net_diff_percent,
-      erp_invoice_period_amount: data.erp_invoice_amount,
-      erp_credit_period_amount: data.erp_credit_amount,
-      etims_invoice_amount: data.etims_invoice_amount,
-      etims_credit_amount: data.etims_credit_amount,
-      difference: data.net_difference,
-      tax_difference: data.tax_difference,
-      erp_tax_amount: data.erp_tax_amount,
-      etims_total_tax: data.etims_tax_amount,
-      tax_diff_percent: data.tax_diff_percent || 0,
+      _raw_payload: data,
+      hasSignificantMismatch: hasMismatch,
+      invoiceDiffPercent: calcPercent(
+        data.metrics?.variance?.gross_difference,
+        data.metrics?.erp?.erp_invoice_gross,
+      ),
+      creditDiffPercent: 0,
+      netDiffPercent: calcPercent(
+        data.metrics?.variance?.gross_difference,
+        data.metrics?.erp?.erp_net_gross,
+      ),
+      erp_invoice_period_amount: data.metrics?.erp?.erp_invoice_gross,
+      erp_credit_period_amount: data.metrics?.erp?.erp_credit_gross,
+      etims_invoice_amount: data.metrics?.etims?.etims_invoice_gross,
+      etims_credit_amount: data.metrics?.etims?.etims_credit_gross,
+      difference: data.metrics?.variance?.gross_difference,
+      tax_difference: data.metrics?.variance?.tax_difference,
+      erp_tax_amount: data.metrics?.erp?.erp_invoice_tax,
+      etims_total_tax: data.metrics?.etims?.etims_invoice_tax,
+      tax_diff_percent: calcPercent(
+        data.metrics?.variance?.tax_difference,
+        data.metrics?.erp?.erp_invoice_tax,
+      ),
     };
   } catch (error) {
-    console.error("eTIMS summary error:", error);
+    console.error(error);
     renderErrorBlock(htmlField);
     return null;
   }
+}
+
+function buildTransactionTableHtml(details, fmt) {
+  const badge = (ok) =>
+    ok
+      ? `<span class="etims-pill etims-pill-success">${ETIMS_ICONS.check} Signed</span>`
+      : `<span class="etims-pill etims-pill-danger">${ETIMS_ICONS.x} Unsigned</span>`;
+
+  const rowsHtml = details.length
+    ? details
+        .map((row, i) => {
+          const isInvoice = row.type === "Sales Invoice";
+          const isCredit = row.type === "Credit Note";
+          const bannerType = row.row_status || "neutral";
+          const statusText = row.status_message || "Active Trace Baseline";
+          const actionText = row.action_message || "Metrics aligned cleanly.";
+
+          let bgStyle =
+            "background: rgba(107,114,128,0.06); border: 1px solid rgba(107,114,128,0.2);";
+          let labelColor = "#475569";
+          if (bannerType === "success") {
+            bgStyle =
+              "background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.18);";
+            labelColor = "#10b981";
+          } else if (bannerType === "warn") {
+            bgStyle =
+              "background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.2);";
+            labelColor = "#d97706";
+          } else if (bannerType === "danger") {
+            bgStyle =
+              "background: rgba(220,38,38,0.06); border: 1px solid rgba(220,38,38,0.22);";
+            labelColor = "#dc2626";
+          }
+
+          const noteContextHtml = `
+            <div class="scu-note-banner scu-note-${bannerType}" style="margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-size: 11.5px; display: flex; flex-direction: column; gap: 2px; ${bgStyle} color: var(--text-color);">
+              <div><span style="color: ${labelColor}; font-weight: 800; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; margin-right: 4px;">Status:</span> <span style="font-weight: 600;">${statusText}</span></div>
+              <div style="margin-top: 1px;"><span style="color: var(--text-muted); font-weight: 500;">${actionText}</span></div>
+            </div>
+          `;
+
+          const receiptTimeStr = row.scu_receipt_time
+            ? row.scu_receipt_time
+            : "—";
+          const receiptDateStr = row.scu_receipt_date
+            ? frappe.datetime.str_to_user(row.scu_receipt_date)
+            : "—";
+
+          return `
+            <tr class="${i % 2 === 0 ? "row-even" : "row-odd"}">
+              <td class="muted">${frappe.datetime.str_to_user(row.invoice_date)}</td>
+              <td class="bold">${frappe.utils.escape_html(row.customer || "—")}</td>
+              <td><span class="etims-type-chip">${row.type || "—"}</span></td>
+              <td class="r mono">${isInvoice ? fmt(row.amount) : "—"}</td>
+              <td class="r mono" style="color:var(--text-muted);">${isCredit ? fmt(row.amount) : "—"}</td>
+              <td class="r mono" style="color:var(--text-muted);">${fmt(row.tax)}</td>
+              <td class="muted" style="font-family:monospace;font-size:11px;">${frappe.utils.escape_html(row.reference_number || "—")}</td>
+              <td class="c">${badge(row.is_signed)}</td>
+            </tr>
+            <tr class="${i % 2 === 0 ? "row-even" : "row-odd"} data-scu-row">
+              <td colspan="8" style="padding: 0px 16px 14px 16px;">
+                <div class="scu-details-enhanced">
+                  <div class="scu-grid-layout">
+                    <div class="scu-meta-item">
+                      <span class="scu-item-label">SCU ID</span>
+                      <span class="scu-item-value">${frappe.utils.escape_html(row.scu_id || "—")}</span>
+                    </div>
+                    <div class="scu-meta-item">
+                      <span class="scu-item-label">SCU Invoice No</span>
+                      <span class="scu-item-value">${frappe.utils.escape_html(row.scu_invoice_number || "—")}</span>
+                    </div>
+                    <div class="scu-meta-item">
+                      <span class="scu-item-label">Receipt No</span>
+                      <span class="scu-item-value">${frappe.utils.escape_html(row.scu_receipt_number || "—")}</span>
+                    </div>
+                    <div class="scu-meta-item">
+                      <span class="scu-item-label">MRC Number</span>
+                      <span class="scu-item-value">${frappe.utils.escape_html(row.scu_mrc_number || "—")}</span>
+                    </div>
+                    <div class="scu-meta-item">
+                      <span class="scu-item-label">Receipt Date</span>
+                      <span class="scu-item-value">${receiptDateStr}</span>
+                    </div>
+                    <div class="scu-meta-item">
+                      <span class="scu-item-label">Receipt Time</span>
+                      <span class="scu-item-value">${receiptTimeStr}</span>
+                    </div>
+                    <div class="scu-meta-item scu-col-span-full">
+                      <span class="scu-item-label">Receipt Signature</span>
+                      <span class="scu-item-value scu-monospace">${frappe.utils.escape_html(row.scu_receipt_signature || "—")}</span>
+                    </div>
+                    <div class="scu-meta-item scu-col-span-full">
+                      <span class="scu-item-label">SCU Internal Data</span>
+                      <span class="scu-item-value scu-monospace">${frappe.utils.escape_html(row.scu_internal_data || "—")}</span>
+                    </div>
+                  </div>
+                  
+                  ${
+                    row.etims_qr_code_url
+                      ? `
+                    <div class="scu-qr-action" style="margin-top: 12px; display: flex; justify-content: flex-start;">
+                      <a href="${row.etims_qr_code_url}" target="_blank" class="btn btn-xs btn-default" style="font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg> Verify via KRA Portal
+                      </a>
+                    </div>
+                  `
+                      : ""
+                  }
+                  ${noteContextHtml}
+                </div>
+              </td>
+            </tr>
+          `;
+        })
+        .join("")
+    : `<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text-muted);">No eTIMS records found for this invoice.</td></tr>`;
+
+  return `
+    <div class="etims-card">
+      <div class="etims-card-header">
+        <span class="etims-card-header-title">eTims Ledger Entries</span>
+        <span class="etims-pill etims-pill-neutral">${details.length} entr${details.length !== 1 ? "ies" : "y"}</span>
+      </div>
+      <div class="etims-table-wrap">
+        <table class="etims-table app-etims-structured-table">
+          <thead>
+            <tr>
+              <th>Date / Time</th>
+              <th>Customer</th>
+              <th>Type</th>
+              <th class="r">Invoice Amt</th>
+              <th class="r">Credit Amt</th>
+              <th class="r">Tax Amt</th>
+              <th>Reference</th>
+              <th class="c">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
 }
 
 function renderErrorsBlock(htmlField, errors) {
@@ -484,7 +585,7 @@ function renderSummaryDashboard(htmlField, data) {
       <div class="etims-hero">
         <div>
           <div class="etims-hero-title">eTIMS Reconciliation Dashboard</div>
-          <div class="etims-hero-sub">${data.startDate} — ${data.endDate}</div>
+          ${data.hasSignificantMismatch ? `<div style="margin-top:6px;font-size:12.5px;color:#ef4444;font-weight:600;">⚠️ Required Action: ${frappe.utils.escape_html(data.actionRequired)}</div>` : ""}
         </div>
         <span class="etims-pill ${data.hasSignificantMismatch ? "etims-pill-danger" : "etims-pill-success"}">
           ${data.hasSignificantMismatch ? `${ETIMS_ICONS.warn} Mismatch Detected` : `${ETIMS_ICONS.check} All Balanced`}
@@ -495,7 +596,7 @@ function renderSummaryDashboard(htmlField, data) {
         <div class="etims-stat-card">
           <div class="etims-stat-header">Invoices</div>
           <div class="etims-stat-body">
-            <div class="etims-compare-row"><span class="etims-compare-label">ERP</span><span class="etims-compare-value erp">${data.fmt(data.erpInvoiceAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">System Baseline</span><span class="etims-compare-value erp">${data.fmt(data.erpInvoiceAmount)}</span></div>
             <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${data.fmt(data.etimsInvoiceAmount)}</span></div>
             <div class="etims-diff-section">
               <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.invoiceDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.invoiceDifference)}</span></div>
@@ -507,7 +608,7 @@ function renderSummaryDashboard(htmlField, data) {
         <div class="etims-stat-card">
           <div class="etims-stat-header">Credit Notes</div>
           <div class="etims-stat-body">
-            <div class="etims-compare-row"><span class="etims-compare-label">ERP</span><span class="etims-compare-value erp">${data.fmt(data.erpCreditAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">System Baseline</span><span class="etims-compare-value erp">${data.fmt(data.erpCreditAmount)}</span></div>
             <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${data.fmt(data.etimsCreditAmount)}</span></div>
             <div class="etims-diff-section">
               <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.creditDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.creditDifference)}</span></div>
@@ -517,25 +618,25 @@ function renderSummaryDashboard(htmlField, data) {
         </div>
 
         <div class="etims-stat-card">
-          <div class="etims-stat-header">Net Values</div>
+          <div class="etims-stat-header">Tax</div>
           <div class="etims-stat-body">
-            <div class="etims-compare-row"><span class="etims-compare-label">ERP Net</span><span class="etims-compare-value erp">${data.fmt(data.erpNetAmount)}</span></div>
-            <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Net</span><span class="etims-compare-value etims">${data.fmt(data.etimsNetAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">System Tax</span><span class="etims-compare-value erp">${data.fmt(data.erpTaxAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Tax</span><span class="etims-compare-value etims">${data.fmt(data.etimsTaxAmount)}</span></div>
             <div class="etims-diff-section">
-              <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.netDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.netDifference)}</span></div>
-              <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.netDiffPercent.toFixed(2)}%</span></div></div>
+              <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.taxDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.taxDifference)}</span></div>
+              <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.taxDiffPercent ? data.taxDiffPercent.toFixed(2) : "0.00"}%</span></div></div>
             </div>
           </div>
         </div>
 
         <div class="etims-stat-card">
-          <div class="etims-stat-header">Tax</div>
+          <div class="etims-stat-header">Net Values</div>
           <div class="etims-stat-body">
-            <div class="etims-compare-row"><span class="etims-compare-label">ERP Tax</span><span class="etims-compare-value erp">${data.fmt(data.erpTaxAmount)}</span></div>
-            <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Tax</span><span class="etims-compare-value etims">${data.fmt(data.etimsTaxAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">System Net</span><span class="etims-compare-value erp">${data.fmt(data.erpNetAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Net</span><span class="etims-compare-value etims">${data.fmt(data.etimsNetAmount)}</span></div>
             <div class="etims-diff-section">
-              <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.taxDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.taxDifference)}</span></div>
-              <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.taxDiffPercent ? data.taxDiffPercent.toFixed(2) : "0.00"}%</span></div></div>
+              <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.netDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.netDifference)}</span></div>
+              <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.netDiffPercent.toFixed(2)}%</span></div></div>
             </div>
           </div>
         </div>
@@ -562,7 +663,7 @@ function renderErrorBlock(htmlField) {
 }
 
 function addCustomButtons(frm, activeSetting, summaryData) {
-  if (frm.doc.docstatus == 0 || frm.doc.prevent_etims_submission) return;
+  if (frm.doc.docstatus === 0 || frm.doc.prevent_etims_submission) return;
 
   if (!frm.doc.sent_to_etims) {
     frm.add_custom_button(
@@ -624,9 +725,7 @@ function addCustomButtons(frm, activeSetting, summaryData) {
             document_name: frm.doc.name,
             company: frm.doc.company,
             request_data: {
-              reference_number: frm.doc.is_return
-                ? frm.doc.return_against
-                : frm.doc.name,
+              search: frm.doc.is_return ? frm.doc.return_against : frm.doc.name,
             },
           },
           success_msg: "Invoice status fetch queued",
@@ -650,7 +749,7 @@ function addCustomButtons(frm, activeSetting, summaryData) {
 
   if (frm.doc.sent_to_etims && summaryData?.hasSignificantMismatch) {
     frm.add_custom_button(
-      __("Correction Credit Note on eTIMS"),
+      __("Correct Invoice on eTIMS"),
       function () {
         showCorrectionDialog(frm, activeSetting, summaryData);
       },
@@ -681,56 +780,56 @@ async function regenerateQRCode(frm, activeSetting) {
                 title: __("✅ QR Code Regenerated Successfully"),
                 indicator: "green",
                 message: `
-                  <div style="margin: 10px 0; padding: 15px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">
-                    <div style="font-size: 15px; font-weight: 600; color: #166534; margin-bottom: 8px;">
-                      ${frappe.utils.escape_html(frm.doc.name)}
-                    </div>
-                    <div style="color: #14532d;">
-                      <strong>Status:</strong> ${invoiceResult.message}
-                    </div>
-                    <div style="margin-top: 5px; color: #166534;">
-                      <span style="display: inline-block; padding: 3px 10px; background: #d1fae5; border-radius: 4px; font-size: 12px;">
-                        ${__("QR Code Updated")}
-                      </span>
-                    </div>
+                <div style="margin: 10px 0; padding: 15px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">
+                  <div style="font-size: 15px; font-weight: 600; color: #166534; margin-bottom: 8px;">
+                    ${frappe.utils.escape_html(frm.doc.name)}
                   </div>
-                `,
+                  <div style="color: #14532d;">
+                    <strong>Status:</strong> ${invoiceResult.message}
+                  </div>
+                  <div style="margin-top: 5px; color: #166534;">
+                    <span style="display: inline-block; padding: 3px 10px; background: #d1fae5; border-radius: 4px; font-size: 12px;">
+                      ${__("QR Code Updated")}
+                    </span>
+                  </div>
+                </div>
+              `,
               });
             } else if (invoiceResult.status === "skipped") {
               frappe.msgprint({
                 title: __("⏭️ QR Code Regeneration Skipped"),
                 indicator: "orange",
                 message: `
-                  <div style="margin: 10px 0; padding: 15px; background: #fffbeb; border-radius: 6px; border: 1px solid #fde68a;">
-                    <div style="font-size: 15px; font-weight: 600; color: #92400e; margin-bottom: 8px;">
-                      ${frappe.utils.escape_html(frm.doc.name)}
-                    </div>
-                    <div style="color: #78350f;">
-                      <strong>Reason:</strong> ${invoiceResult.message}
-                    </div>
-                    <div style="margin-top: 8px; padding: 8px 12px; background: #fef3c7; border-radius: 4px; font-size: 13px;">
-                      ${__("No verification URL found. Please ensure the invoice has been submitted to eTIMS first.")}
-                    </div>
+                <div style="margin: 10px 0; padding: 15px; background: #fffbeb; border-radius: 6px; border: 1px solid #fde68a;">
+                  <div style="font-size: 15px; font-weight: 600; color: #92400e; margin-bottom: 8px;">
+                    ${frappe.utils.escape_html(frm.doc.name)}
                   </div>
-                `,
+                  <div style="color: #78350f;">
+                    <strong>Reason:</strong> ${invoiceResult.message}
+                  </div>
+                  <div style="margin-top: 8px; padding: 8px 12px; background: #fef3c7; border-radius: 4px; font-size: 13px;">
+                    ${__("No verification URL found. Please ensure the invoice has been submitted to eTIMS first.")}
+                  </div>
+                </div>
+              `,
               });
             } else if (invoiceResult.status === "error") {
               frappe.msgprint({
                 title: __("❌ QR Code Regeneration Failed"),
                 indicator: "red",
                 message: `
-                  <div style="margin: 10px 0; padding: 15px; background: #fef2f2; border-radius: 6px; border: 1px solid #fecaca;">
-                    <div style="font-size: 15px; font-weight: 600; color: #991b1b; margin-bottom: 8px;">
-                      ${frappe.utils.escape_html(frm.doc.name)}
-                    </div>
-                    <div style="color: #7f1d1d;">
-                      <strong>Error:</strong> ${invoiceResult.message}
-                    </div>
-                    <div style="margin-top: 8px; padding: 8px 12px; background: #fee2e2; border-radius: 4px; font-size: 13px;">
-                      ${__("Please check the logs or contact support if the issue persists.")}
-                    </div>
+                <div style="margin: 10px 0; padding: 15px; background: #fef2f2; border-radius: 6px; border: 1px solid #fecaca;">
+                  <div style="font-size: 15px; font-weight: 600; color: #991b1b; margin-bottom: 8px;">
+                    ${frappe.utils.escape_html(frm.doc.name)}
                   </div>
-                `,
+                  <div style="color: #7f1d1d;">
+                    <strong>Error:</strong> ${invoiceResult.message}
+                  </div>
+                  <div style="margin-top: 8px; padding: 8px 12px; background: #fee2e2; border-radius: 4px; font-size: 13px;">
+                    ${__("Please check the logs or contact support if the issue persists.")}
+                  </div>
+                </div>
+              `,
               });
             }
           }
@@ -741,20 +840,20 @@ async function regenerateQRCode(frm, activeSetting) {
             title: __("❌ QR Code Regeneration Failed"),
             indicator: "red",
             message: `
-              <div style="margin: 10px 0; padding: 15px; background: #fef2f2; border-radius: 6px; border: 1px solid #fecaca;">
-                <div style="font-size: 15px; font-weight: 600; color: #991b1b; margin-bottom: 8px;">
-                  ${frappe.utils.escape_html(frm.doc.name)}
-                </div>
-                <div style="color: #7f1d1d;">
-                  <strong>Error:</strong> ${err.message || err}
-                </div>
-                <div style="margin-top: 8px; padding: 8px 12px; background: #fee2e2; border-radius: 4px; font-size: 13px;">
-                  ${__("An unexpected error occurred. Please try again or contact support.")}
-                </div>
+            <div style="margin: 10px 0; padding: 15px; background: #fef2f2; border-radius: 6px; border: 1px solid #fecaca;">
+              <div style="font-size: 15px; font-weight: 600; color: #991b1b; margin-bottom: 8px;">
+                ${frappe.utils.escape_html(frm.doc.name)}
               </div>
-            `,
+              <div style="color: #7f1d1d;">
+                <strong>Error:</strong> ${err.message || err}
+              </div>
+              <div style="margin-top: 8px; padding: 8px 12px; background: #fee2e2; border-radius: 4px; font-size: 13px;">
+                ${__("An unexpected error occurred. Please try again or contact support.")}
+              </div>
+            </div>
+          `,
           });
-          console.error("QR Code regeneration error:", err);
+          console.error(err);
         },
       });
     },
@@ -762,10 +861,22 @@ async function regenerateQRCode(frm, activeSetting) {
 }
 
 function showCorrectionDialog(frm, activeSetting, summaryData) {
-  let erpInvoiceAmount = flt(summaryData?.erp_invoice_period_amount || 0);
-  let erpCreditAmount = flt(summaryData?.erp_credit_period_amount || 0);
-  let etimsInvoiceAmount = flt(summaryData?.etims_invoice_amount || 0);
-  let etimsCreditAmount = flt(summaryData?.etims_credit_amount || 0);
+  const payload = summaryData?._raw_payload || {};
+
+  const complianceStatus =
+    payload.compliance_status || "Mismatched Ledger Hierarchy";
+  const actionRequired =
+    payload.action_required || "Trigger Corrective Sequence";
+  const currentReference = payload.current_reference || frm.doc.name;
+  const expectedEntries = payload.expected_ledger_entries || 0;
+  const actualEntries = payload.actual_ledger_entries || 0;
+
+  let erpInvoiceAmount = flt(payload.metrics?.erp?.erp_invoice_gross || 0);
+  let erpCreditAmount = flt(payload.metrics?.erp?.erp_credit_gross || 0);
+  let etimsInvoiceAmount = flt(
+    payload.metrics?.etims?.etims_invoice_gross || 0,
+  );
+  let etimsCreditAmount = flt(payload.metrics?.etims?.etims_credit_gross || 0);
 
   if (frm.doc.is_return) {
     erpInvoiceAmount = 0;
@@ -774,61 +885,41 @@ function showCorrectionDialog(frm, activeSetting, summaryData) {
     etimsCreditAmount = Math.abs(etimsCreditAmount);
   }
 
-  const erpTax = flt(summaryData?.erp_tax_amount || 0);
-  const etimsTax = flt(summaryData?.etims_total_tax || 0);
-  const difference =
-    erpInvoiceAmount -
-    erpCreditAmount -
-    (etimsInvoiceAmount - etimsCreditAmount);
-  const taxDifference = flt(summaryData?.tax_difference || 0);
-  const erpNet = erpInvoiceAmount - erpCreditAmount;
-  const etimsNet = etimsInvoiceAmount - etimsCreditAmount;
-  const differencePercent =
-    Math.abs(erpNet) > 0 ? (Math.abs(difference) / Math.abs(erpNet)) * 100 : 0;
-  const currency = "KES";
+  const erpTax = flt(payload.metrics?.erp?.erp_net_tax || 0);
+  const etimsTax = flt(payload.metrics?.etims?.etims_net_tax || 0);
+  const difference = flt(payload.metrics?.variance?.gross_difference || 0);
+  const taxDifference = flt(payload.metrics?.variance?.tax_difference || 0);
+  const erpNet = flt(payload.metrics?.erp?.erp_net_gross || 0);
+  const etimsNet = flt(payload.metrics?.etims?.etims_net_gross || 0);
 
+  const currency = "KES";
   const formatValue = (value) => format_currency(value || 0, currency);
 
   const issueNotes = [];
 
-  if (Math.abs(difference) > 1) {
+  if (
+    payload.action_code === "TRIGGER_CORRECTION" &&
+    complianceStatus.includes("Credit Note")
+  ) {
     issueNotes.push(
-      `<li style="margin-bottom:10px;">ERPNext invoice totals do not match eTIMS invoice totals.</li>`,
+      `<li style="margin-bottom:10px;"><strong>Missing Offsetting Credit Note:</strong> The original incorrect submission matching base trace <strong>${frappe.utils.escape_html(frm.doc.name)}</strong> is active on eTIMS alongside the revision payload without an explicit credit inversion.</li>`,
+      `<li style="margin-bottom:10px;"><strong>Cumulative Total Inflated:</strong> eTIMS reflects an aggregate of <strong>${formatValue(etimsInvoiceAmount)}</strong> across separate sales records instead of tracking the isolated corrected matrix net value of <strong>${formatValue(erpNet)}</strong>.</li>`,
     );
-  }
-
-  if (Math.abs(taxDifference) > 1) {
-    issueNotes.push(
-      `<li style="margin-bottom:10px;">ERPNext Tax totals do not match eTIMS Tax totals.</li>`,
-    );
-  }
-
-  if (Math.abs(erpNet) > 1 && Math.abs(etimsNet) > 1) {
-    issueNotes.push(
-      `<li style="margin-bottom:10px;">Net invoice balance is not fully offset by credit notes. Some invoices may be missing corresponding correction credit notes on eTIMS.</li>`,
-    );
-  }
-
-  if (Math.abs(erpInvoiceAmount) > 1 && Math.abs(etimsInvoiceAmount) < 1) {
-    issueNotes.push(
-      `<li style="margin-bottom:10px;">ERPNext invoices exist but no matching eTIMS invoice totals were found.</li>`,
-    );
-  }
-
-  if (Math.abs(erpCreditAmount) > 1 && Math.abs(etimsCreditAmount) < 1) {
-    issueNotes.push(
-      `<li style="margin-bottom:10px;">ERPNext credit notes exist but no matching eTIMS credit notes were found.</li>`,
-    );
-  }
-
-  if (!issueNotes.length) {
-    issueNotes.push(
-      `<li style="margin-bottom:10px;">Significant reconciliation mismatch detected requiring verification.</li>`,
-    );
+  } else {
+    if (Math.abs(difference) > 0.1) {
+      issueNotes.push(
+        `<li style="margin-bottom:10px;"><strong>Gross Value Discrepancy:</strong> Realized System balance (${formatValue(erpNet)}) matches inaccurately against the integrated KRA endpoint state (${formatValue(etimsNet)}).</li>`,
+      );
+    }
+    if (Math.abs(taxDifference) > 0.1) {
+      issueNotes.push(
+        `<li style="margin-bottom:10px;"><strong>Tax Metric Mismatch:</strong> Declared local tax parameters variance detected: <strong>${formatValue(taxDifference)} KES</strong> difference between systems.</li>`,
+      );
+    }
   }
 
   const dialog = new frappe.ui.Dialog({
-    title: __("Correction Credit Note on eTIMS"),
+    title: __("eTIMS Correction & Ledger Reconciliation"),
     size: "large",
     fields: [
       {
@@ -836,67 +927,83 @@ function showCorrectionDialog(frm, activeSetting, summaryData) {
         fieldname: "warning_html",
         options: `
         <div style="display:flex;flex-direction:column;gap:14px;">
-          <div style="padding:22px;border-radius:14px;background:#fef2f2;border:1px solid #fecaca;">
-            <div style="font-size:16px;font-weight:700;color:#991b1b;margin-bottom:14px;">Warning</div>
-            <div style="font-size:14px;color:#7f1d1d;line-height:1.8;">
-              This process verifies ERPNext invoice values against eTIMS records and may automatically generate correction credit notes on eTIMS to align submitted tax data with ERPNext records.
-              <br><br>
-              This affects official tax submissions to KRA and should only be executed after reviewing the reconciliation summary below.
+          
+          <div style="border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;background:#ffffff;box-shadow:0 2px 5px rgba(0,0,0,0.02);">
+            <div style="padding:16px;background:#f8fafc;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div style="font-size:16px;font-weight:700;color:#0f172a;">Ledger Breakdown & Status Tracker</div>
+                <div style="font-size:12px;color:#64748b;margin-top:2px;">Target Track Reference: <span style="font-family:monospace;font-weight:600;color:#334155;">${frappe.utils.escape_html(currentReference)}</span></div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <span class="etims-pill etims-pill-danger" style="font-size:11px;padding:4px 10px;">${frappe.utils.escape_html(complianceStatus)}</span>
+                <span class="etims-pill etims-pill-neutral" style="font-size:11px;padding:4px 10px;">Ledger Hits: ${actualEntries}/${expectedEntries}</span>
+              </div>
             </div>
-          </div>
+            
+            <div style="padding:16px;background:#fff5f5;border-bottom:1px solid #fecaca;display:flex;gap:12px;align-items:flex-start;">
+              <div style="color:#dc2626;margin-top:2px;">${ETIMS_ICONS.warn}</div>
+              <div>
+                <div style="font-weight:700;color:#991b1b;font-size:13.5px;">Required System Action:</div>
+                <div style="color:#7f1d1d;font-size:13px;font-weight:600;margin-top:2px;font-family:var(--font-monospace, monospace);">${frappe.utils.escape_html(actionRequired)}</div>
+              </div>
+            </div>
 
-          <div style="border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;background:#ffffff;">
-            <div style="padding:16px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:17px;font-weight:700;color:#0f172a;">Advanced Reconciliation Summary</div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(216px,1fr));gap:14px;padding:14px;">
-              <div style="padding:16px;border-radius:10px;border:1px solid #e2e8f0;background:#ffffff;">
-                <div style="font-size:12px;color:#64748b;">ERPNext Invoice Amount</div>
-                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#0f172a;">${formatValue(erpInvoiceAmount)}</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(216px,1fr));gap:14px;padding:14px;background:#fafafa;">
+              <div style="padding:14px;border-radius:10px;border:1px solid #e2e8f0;background:#ffffff;">
+                <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;">System Gross Invoice</div>
+                <div style="margin-top:6px;font-size:20px;font-weight:700;color:#0f172a;font-family:monospace;">${formatValue(erpInvoiceAmount)}</div>
               </div>
-              <div style="padding:16px;border-radius:10px;border:1px solid #e2e8f0;background:#ffffff;">
-                <div style="font-size:12px;color:#64748b;">ERPNext Credit Notes</div>
-                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#0f172a;">${formatValue(erpCreditAmount)}</div>
+              <div style="padding:14px;border-radius:10px;border:1px solid #e2e8f0;background:#ffffff;">
+                <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;">System Returns Applied</div>
+                <div style="margin-top:6px;font-size:20px;font-weight:700;color:#0f172a;font-family:monospace;">${formatValue(erpCreditAmount)}</div>
               </div>
-              <div style="padding:16px;border-radius:10px;border:1px solid #bfdbfe;background:#eff6ff;">
-                <div style="font-size:12px;color:#1d4ed8;">eTIMS Invoice Amount</div>
-                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#1e3a8a;">${formatValue(etimsInvoiceAmount)}</div>
+              <div style="padding:14px;border-radius:10px;border:1px solid #bfdbfe;background:#eff6ff;">
+                <div style="font-size:11px;color:#1d4ed8;font-weight:600;text-transform:uppercase;">eTIMS Registered Gross</div>
+                <div style="margin-top:6px;font-size:20px;font-weight:700;color:#1e3a8a;font-family:monospace;">${formatValue(etimsInvoiceAmount)}</div>
               </div>
-              <div style="padding:16px;border-radius:10px;border:1px solid #bfdbfe;background:#eff6ff;">
-                <div style="font-size:12px;color:#1d4ed8;">eTIMS Credit Notes</div>
-                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#1e3a8a;">${formatValue(etimsCreditAmount)}</div>
+              <div style="padding:14px;border-radius:10px;border:1px solid #bfdbfe;background:#eff6ff;">
+                <div style="font-size:11px;color:#1d4ed8;font-weight:600;text-transform:uppercase;">eTIMS Credit Trace</div>
+                <div style="margin-top:6px;font-size:20px;font-weight:700;color:#1e3a8a;font-family:monospace;">${formatValue(etimsCreditAmount)}</div>
               </div>
-              <div style="padding:16px;border-radius:10px;border:1px solid #fecaca;background:#fef2f2;">
-                <div style="font-size:12px;color:#991b1b;">Difference</div>
-                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#991b1b;">${formatValue(difference)}</div>
+              <div style="padding:14px;border-radius:10px;border:1px solid #e5e7eb;background:#ffffff;">
+                <div style="font-size:11px;color:#475569;font-weight:600;text-transform:uppercase;">System Core Balance</div>
+                <div style="margin-top:6px;font-size:20px;font-weight:700;color:#0f172a;font-family:monospace;">${formatValue(erpNet)}</div>
               </div>
-              <div style="padding:16px;border-radius:10px;border:1px solid #fecaca;background:#fef2f2;">
-                <div style="font-size:12px;color:#991b1b;">Tax Difference</div>
-                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#991b1b;">${formatValue(taxDifference)}</div>
+              <div style="padding:14px;border-radius:10px;border:1px solid #e5e7eb;background:#ffffff;">
+                <div style="font-size:11px;color:#475569;font-weight:600;text-transform:uppercase;">eTIMS Realized Net</div>
+                <div style="margin-top:6px;font-size:20px;font-weight:700;color:#0f172a;font-family:monospace;">${formatValue(etimsNet)}</div>
               </div>
-              <div style="padding:16px;border-radius:10px;border:1px solid #e5e7eb;background:#ffffff;">
-                <div style="font-size:12px;color:#64748b;">ERPNext Net Value</div>
-                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#0f172a;">${formatValue(erpNet)}</div>
+              <div style="padding:14px;border-radius:10px;border:1px solid #fecaca;background:#fef2f2;">
+                <div style="font-size:11px;color:#b91c1c;font-weight:600;text-transform:uppercase;">Gross Variance</div>
+                <div style="margin-top:6px;font-size:20px;font-weight:700;color:#991b1b;font-family:monospace;">${formatValue(difference)}</div>
               </div>
-              <div style="padding:16px;border-radius:10px;border:1px solid #e5e7eb;background:#ffffff;">
-                <div style="font-size:12px;color:#64748b;">eTIMS Net Value</div>
-                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#0f172a;">${formatValue(etimsNet)}</div>
-              </div>
-              <div style="padding:16px;border-radius:10px;border:1px solid #fcd34d;background:#fffbeb;">
-                <div style="font-size:12px;color:#92400e;">Difference Percentage</div>
-                <div style="margin-top:8px;font-size:24px;font-weight:700;color:#92400e;">${differencePercent.toFixed(2)}%</div>
+              <div style="padding:14px;border-radius:10px;border:1px solid #fecaca;background:#fef2f2;">
+                <div style="font-size:11px;color:#b91c1c;font-weight:600;text-transform:uppercase;">Tax Matrix Variance</div>
+                <div style="margin-top:6px;font-size:20px;font-weight:700;color:#991b1b;font-family:monospace;">${formatValue(taxDifference)}</div>
               </div>
             </div>
           </div>
 
           <div style="border:1px solid #fde68a;background:#fffbeb;border-radius:14px;padding:16px;">
-            <div style="font-size:17px;font-weight:700;color:#92400e;margin-bottom:14px;">Potential Causes Detected</div>
-            <ul style="margin:0;padding-left:16px;color:#78350f;font-size:14px;line-height:1.8;">${issueNotes.join("")}</ul>
+            <div style="font-size:14px;font-weight:700;color:#92400e;margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+              ${ETIMS_ICONS.info} Diagnosis Details & Structural Discrepancies
+            </div>
+            <ul style="margin:0;padding-left:18px;color:#78350f;font-size:13px;line-height:1.75;">${issueNotes.join("")}</ul>
+          </div>
+          
+          <div style="font-size:12px;color:#64748b;line-height:1.5;padding:0 4px;">
+            Executing this modification safely alters legal records bound to the Kenya Revenue Authority (KRA) framework. Retries or asynchronous background loops could trigger adjustments on upstream accounts.
           </div>
         </div>
       `,
       },
     ],
-    primary_action_label: __("Queue Correction"),
-    secondary_action_label: __("Cancel"),
+    primary_action_label: __(
+      payload.compliance_status.includes("Credit Note")
+        ? "Generate Compensatory Credit Note"
+        : "Queue Correction Sequence",
+    ),
+    secondary_action_label: __("Dismiss"),
     secondary_action: () => dialog.hide(),
     primary_action: () => {
       dialog.hide();
@@ -912,7 +1019,8 @@ function showCorrectionDialog(frm, activeSetting, summaryData) {
             settings_name: settings_name,
             company: frm.doc.company,
           },
-          success_msg: "Verification and correction queued",
+          success_msg:
+            "Verification pipeline modification dispatched to the worker queue.",
         }),
       );
     },
@@ -1056,7 +1164,7 @@ async function updateTaxAmountLabel(frm) {
       );
     }
   } catch (error) {
-    console.error("Error updating Tax Amount label:", error);
+    console.error(error);
   }
 }
 
@@ -1281,28 +1389,16 @@ const SHARED_ETIMS_STYLES = `
       margin-left: 10px;
       color: var(--text-muted);
     }
-    .etims-badge {
-      display: inline-block;
-      padding: 2px 10px;
-      border-radius: 16px;
-      font-size: 10px;
-      font-weight: 700;
-      margin-left: 10px;
-    }
-    .etims-badge.warning { background: #fee2e2; color: #991b1b; }
-    .etims-badge.success { background: #d1fae5; color: #065f46; }
-    html[data-theme="dark"] .etims-badge.warning { background: rgba(239,68,68,0.2); color: #f87171; }
-    html[data-theme="dark"] .etims-badge.success { background: rgba(16,185,129,0.2); color: #34d399; }
 
     .etims-table-wrap {
       overflow-x: auto;
       overflow-y: auto;
-      max-height: 460px;
+      max-height: 520px;
     }
     .etims-table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 816px;
+      min-width: 850px;
       font-size: 13px;
     }
     .etims-table thead {
@@ -1329,6 +1425,9 @@ const SHARED_ETIMS_STYLES = `
     .etims-table tbody tr {
       border-bottom: 1px solid var(--border-color);
       transition: background 0.15s;
+    }
+    .etims-table tbody tr.data-scu-row {
+      border-bottom: 2px solid var(--border-color);
     }
     .etims-table tbody tr:last-child { border-bottom: none; }
     .etims-table tbody tr:hover { background: var(--subtle-accent, var(--gray-100)) !important; }
@@ -1365,6 +1464,62 @@ const SHARED_ETIMS_STYLES = `
       border-color: rgba(107,114,128,0.3);
     }
 
+    /* Enhanced Structuring for SCU Details Metadata Pane */
+    .scu-details-enhanced {
+      background: var(--navbar-bg, var(--panel-bg, var(--control-bg)));
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 6px;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .scu-grid-layout {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px 16px;
+    }
+    .scu-meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .scu-meta-item.scu-col-span-full {
+      grid-column: span 3;
+    }
+    .scu-item-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+    }
+    .scu-item-value {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-color);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .scu-item-value.scu-monospace {
+      font-family: var(--font-monospace, monospace);
+      font-size: 11.5px;
+      background: var(--gray-50, rgba(0,0,0,0.02));
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      white-space: normal;
+      word-break: break-all;
+      overflow: visible;
+      text-overflow: clip;
+      display: block;
+      line-height: 1.4;
+    }
+    html[data-theme="dark"] .scu-item-value.scu-monospace {
+      background: rgba(255,255,255,0.03);
+    }
+
     .etims-error-item {
       display: flex;
       align-items: flex-start;
@@ -1377,17 +1532,9 @@ const SHARED_ETIMS_STYLES = `
       border: 1px solid #fecaca;
       background: #fef2f2;
     }
-    .etims-error-item-warning {
-      border: 1px solid #fde68a;
-      background: #fffbeb;
-    }
     html[data-theme="dark"] .etims-error-item-danger {
       background: rgba(239,68,68,0.1);
       border-color: rgba(239,68,68,0.3);
-    }
-    html[data-theme="dark"] .etims-error-item-warning {
-      background: rgba(245,158,11,0.1);
-      border-color: rgba(245,158,11,0.3);
     }
     .etims-error-num {
       font-size: 11px;
@@ -1395,9 +1542,7 @@ const SHARED_ETIMS_STYLES = `
       min-width: 24px;
     }
     .etims-error-num-danger { color: #dc2626; }
-    .etims-error-num-warning { color: #d97706; }
     html[data-theme="dark"] .etims-error-num-danger { color: #f87171; }
-    html[data-theme="dark"] .etims-error-num-warning { color: #fbbf24; }
     .etims-error-msg { font-size: 13px; line-height: 1.5; color: var(--text-color); }
     .etims-note {
       display: flex;
@@ -1543,9 +1688,23 @@ const SHARED_ETIMS_STYLES = `
       background: #1d4ed8;
     }
 
-    @media (max-width: 768px) {
+    @media (max-width: 992px) {
+      .scu-grid-layout {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .scu-meta-item.scu-col-span-full {
+        grid-column: span 2;
+      }
+    }
+    @media (max-width: 576px) {
       .etims-stats-grid-2x2 {
         grid-template-columns: 1fr;
+      }
+      .scu-grid-layout {
+        grid-template-columns: 1fr;
+      }
+      .scu-meta-item.scu-col-span-full {
+        grid-column: span 1;
       }
     }
   </style>
