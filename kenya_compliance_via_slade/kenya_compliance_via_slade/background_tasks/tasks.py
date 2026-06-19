@@ -8,6 +8,9 @@ from frappe.model.document import Document
 from frappe.utils import now_datetime
 
 from ..apis.api_builder import EndpointsBuilder
+from ..apis.apis import (
+    bulk_submit_sales_invoices,
+)
 from ..apis.process_request import process_request
 from ..apis.remote_response_status_handlers import notices_search_on_success
 from ..doctype.doctype_names_mapping import (
@@ -20,6 +23,7 @@ from .task_response_handlers import (
     fetch_etims_credit_notes_on_success,
     fetch_etims_sales_invoices_on_success,
     operation_types_search_on_success,
+    process_etims_ledger_credit_note,
     update_branches,
     update_clusters,
     update_countries,
@@ -95,18 +99,18 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
         }
     )
     if all_submitted_unsent:
-        submit_new_invoices(all_submitted_unsent)
+        submit_new_invoices(all_submitted_unsent, settings_name=settings_name)
 
-    successful_without_scu_data = fetch_sales_invoices(
-        {
-            "docstatus": 1,
-            "sent_to_etims": 1,
-            "etims_qr_code_url": ["is", "not set"],
-            "creation": [">=", timeframe_ago],
-        }
-    )
-    if successful_without_scu_data:
-        fetch_scu_data(successful_without_scu_data)
+    # successful_without_scu_data = fetch_sales_invoices(
+    #     {
+    #         "docstatus": 1,
+    #         "sent_to_etims": 1,
+    #         "etims_qr_code_url": ["is", "not set"],
+    #         "creation": [">=", timeframe_ago],
+    #     }
+    # )
+    # if successful_without_scu_data:
+    #     fetch_scu_data(successful_without_scu_data)
 
     # sent_unprocessed = fetch_sales_invoices(
     #     {
@@ -162,13 +166,11 @@ def handle_invoice_submission(invoices: list, action_func: callable) -> None:
             continue
 
 
-def submit_new_invoices(invoices: list) -> None:
-    from ..overrides.server.sales_invoice import on_submit
+def submit_new_invoices(invoices: list, settings_name: str = None) -> None:
+    invoice_names = [inv.name for inv in invoices]
+    docs_list_json = json.dumps(invoice_names)
 
-    def action_func(doc: Document) -> None:
-        on_submit(doc)
-
-    handle_invoice_submission(invoices, action_func)
+    bulk_submit_sales_invoices(docs_list=docs_list_json, settings_name=settings_name)
 
 
 def sign_processed_invoices(invoices: list) -> None:
@@ -717,8 +719,11 @@ def fetch_etims_sales_invoices(
 ) -> None:
     request_data = parse_request_data(request_data)
 
+    doc = frappe.get_doc("Sales Invoice", document_name) if document_name else None
+    if doc and doc.is_return:
+        document_name = doc.return_against
     if document_name:
-        request_data["reference_number"] = document_name
+        request_data["search"] = document_name
 
     process_request(
         request_data,
@@ -785,3 +790,53 @@ def purge_invalid_etims_ledger_records():
     except Exception:
         frappe.db.rollback()
         frappe.log_error("eTIMS Ledger Cleanup Failed", frappe.get_traceback())
+
+
+@frappe.whitelist()
+def fetch_etims_ledger_entry(
+    name: str,
+    queue: bool = True,
+) -> None:
+    ledger_entry = frappe.get_doc("eTIMS Sales Ledger Entry", name)
+
+    route_key = (
+        "CreditNoteSearchReq" if ledger_entry.type == "Credit Note" else "SaleSearchReq"
+    )
+
+    request_data = {
+        "id": ledger_entry.etims_id,
+    }
+
+    process_request(
+        request_data,
+        route_key,
+        request_method="GET",
+        doctype="eTIMS Sales Ledger Entry",
+        document_name=ledger_entry.name,
+        handler_function=fetch_etims_sales_invoices_on_success,
+        company=ledger_entry.company,
+        queue=queue,
+    )
+
+
+@frappe.whitelist()
+def return_etims_credit_note(
+    name: str,
+    queue: bool = True,
+) -> None:
+    ledger_entry = frappe.get_doc("eTIMS Sales Ledger Entry", name)
+
+    request_data = {
+        "id": ledger_entry.etims_id,
+    }
+
+    process_request(
+        request_data,
+        "SaleSearchReq",
+        request_method="GET",
+        doctype="eTIMS Sales Ledger Entry",
+        document_name=ledger_entry.name,
+        handler_function=process_etims_ledger_credit_note,
+        company=ledger_entry.company,
+        queue=queue,
+    )
