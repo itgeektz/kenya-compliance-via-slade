@@ -4,6 +4,12 @@ Verification") }} {% endblock %} {% block header %}
   rel="stylesheet"
   href="/assets/kenya_compliance_via_slade/css/invoice_verification.css?v={{ cache_buster }}"
 />
+<meta
+  http-equiv="Cache-Control"
+  content="no-cache, no-store, must-revalidate"
+/>
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 {% endblock %} {% block page_content %}
 <div class="invoice-page">
   <input type="hidden" id="invoice_id" value="{{ invoice_id or '' }}" />
@@ -213,7 +219,7 @@ Verification") }} {% endblock %} {% block header %}
       </div>
     </div>
 
-    <button class="primary-button" onclick="window.location.reload()">
+    <button class="primary-button" onclick="window.location.reload(true)">
       {{ _("Check Again") }}
     </button>
   </div>

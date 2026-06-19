@@ -40,8 +40,6 @@ document.addEventListener("DOMContentLoaded", function () {
       document.getElementById("success-scu-date").innerText =
         ledgerData.invoice_date || ledgerData.posting_date || "-";
 
-      document.getElementById("success-scu-gross").innerText =
-        `${currency} ${ledgerData.total_gross_amount || "0.00"}`;
       document.getElementById("success-scu-vat").innerText =
         `${currency} ${ledgerData.total_vat || "0.00"}`;
       document.getElementById("success-scu-amount").innerText =
@@ -115,6 +113,10 @@ document.addEventListener("DOMContentLoaded", function () {
     method:
       "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.check_invoice_submission_status",
     args: { id, key },
+    headers: {
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      Pragma: "no-cache",
+    },
     callback: function (r) {
       if (!r.message) {
         loadingState.style.display = "none";
