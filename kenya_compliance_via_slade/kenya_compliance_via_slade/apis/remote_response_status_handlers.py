@@ -314,13 +314,13 @@ def sales_information_submission_on_success(
     }
 
     frappe.db.set_value(doctype, document_name, updates)
+    invoice_name = frappe.db.get_value(doctype, document_name, "return_against")
 
     frappe.enqueue(
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_invoices",
-        document_name=document_name,
+        document_name=invoice_name,
         settings_name=settings_name,
-        company=frappe.get_value(doctype, document_name, "company"),
-        request_data={"reference_number": document_name},
+        company=frappe.db.get_value(doctype, invoice_name, "company"),
         queue="long",
     )
 
