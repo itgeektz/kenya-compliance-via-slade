@@ -28,6 +28,87 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
     },
     __("eTims Actions"),
   );
+
+  listview.page.add_action_item(__("Refetch eTIMS Invoices"), () => {
+    const selected_docs = listview.get_checked_items();
+
+    frappe.confirm(
+      __(
+        "Are you sure you want to refetch eTIMS data for {0} selected entries?",
+        [selected_docs.length],
+      ),
+      () => {
+        frappe
+          .run_serially(
+            selected_docs.map((doc) => {
+              return () =>
+                frappe.call({
+                  method:
+                    "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_ledger_entry",
+                  args: {
+                    name: doc.name,
+                    queue: true,
+                  },
+                });
+            }),
+          )
+          .then(() => {
+            frappe.show_alert({
+              message: __("Selected eTIMS invoices refetched successfully."),
+              indicator: "green",
+            });
+            listview.refresh();
+          });
+      },
+    );
+  });
+
+  listview.page.add_action_item(__("Generate Credit Notes"), () => {
+    const selected_docs = listview
+      .get_checked_items()
+      .filter((d) => d.type === "Sales Invoice");
+
+    if (selected_docs.length === 0) {
+      frappe.msgprint(
+        __(
+          "Please select at least one 'Sales Invoice' entry to generate Credit Notes.",
+        ),
+      );
+      return;
+    }
+
+    frappe.confirm(
+      __(
+        "Are you sure you want to generate Credit Notes for {0} selected Sales Invoices?",
+        [selected_docs.length],
+      ),
+      () => {
+        frappe
+          .run_serially(
+            selected_docs.map((doc) => {
+              return () =>
+                frappe.call({
+                  method:
+                    "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.return_etims_credit_note",
+                  args: {
+                    name: doc.name,
+                    queue: true,
+                  },
+                });
+            }),
+          )
+          .then(() => {
+            frappe.show_alert({
+              message: __(
+                "Credit Notes process completed for selected invoices.",
+              ),
+              indicator: "green",
+            });
+            listview.refresh();
+          });
+      },
+    );
+  });
 };
 
 function showSettingsModalAndExecute(settings) {
@@ -129,7 +210,7 @@ function showSettingsModalAndExecute(settings) {
         if (values.invoice_date_before)
           request_data.invoice_date_before = values.invoice_date_before;
         if (values.reference_number)
-          request_data.reference_number = values.reference_number;
+          request_data.search = values.reference_number;
 
         dialog.hide();
         executeFetch(settings_name, request_data, values.type);
