@@ -5,8 +5,9 @@ from frappe.utils import now
 
 def get_context(context):
     frappe.local.response["headers"] = {
-        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0, post-check=0, pre-check=0",
         "Pragma": "no-cache",
+        "Expires": "0",
     }
 
     context.cache_buster = now()
