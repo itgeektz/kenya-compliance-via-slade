@@ -5,6 +5,12 @@ import frappe.defaults
 from frappe.model.document import Document
 from frappe.utils import get_datetime, get_datetime_str
 
+from ..apis.process_request import (
+    process_request,
+)
+from ..apis.remote_response_status_handlers import (
+    get_response_data,
+)
 from ..doctype.doctype_names_mapping import (
     COUNTRIES_DOCTYPE_NAME,
     ITEM_CLASSIFICATIONS_DOCTYPE_NAME,
@@ -741,7 +747,14 @@ def update_clusters(response: dict, settings_name: str, **kwargs) -> None:
 def fetch_etims_sales_invoices_on_success(
     response: dict, company: str, **kwargs
 ) -> None:
-    data = response.get("results")
+    if not response:
+        return
+
+    if isinstance(response, dict) and "id" in response:
+        data = [response]
+    else:
+        data = response.get("results") or []
+
     if not data or not isinstance(data, list):
         return
 
@@ -875,35 +888,18 @@ def save_etims_sync_errors(errors: list, entry_type: str, settings_name: str) ->
     if not errors:
         return
 
-    try:
-        error_doc = frappe.new_doc("eTIMS Sync Error Log")
-        error_doc.settings_name = settings_name
-        error_doc.entry_type = entry_type
-        error_doc.total_errors = len(errors)
-        error_doc.sync_date = frappe.utils.now_datetime()
-
-        error_details = []
-        for error in errors:
-            error_details.append(
-                {
-                    "document_number": error.get("document", "Unknown"),
-                    "etims_id": error.get("etims_id", "Unknown"),
-                    "error_message": str(error.get("error", "Unknown error"))[:1000],
-                    "error_traceback": error.get("traceback", "")[:2000],
-                    "error_type": error.get("type", entry_type),
-                }
-            )
-
-        error_doc.errors_json = frappe.as_json(error_details)
-        error_doc.insert(ignore_permissions=True)
-
-        frappe.db.commit()
-
-    except Exception as e:
-        frappe.log_error(
-            title="eTIMS Error Batch Save Failed",
-            message=f"Failed to save error batch: {str(e)}\nErrors: {frappe.as_json(errors)}",
+    for error in errors:
+        title = f"eTIMS Sync Error - {error.get('document', 'Unknown')}"
+        message = (
+            f"Settings Name: {settings_name}\n"
+            f"Entry Type: {entry_type}\n"
+            f"eTIMS ID: {error.get('etims_id', 'Unknown')}\n"
+            f"Error Type: {error.get('type', entry_type)}\n"
+            f"Error Message: {error.get('error', 'Unknown error')}\n\n"
+            f"Traceback:\n{error.get('traceback', '')}"
         )
+
+        frappe.log_error(title=title, message=message)
 
 
 def process_single_etims_entry(
@@ -1003,7 +999,9 @@ def process_single_etims_entry(
             pluck="name",
         )
         for child in existing_child_records:
-            frappe.delete_doc("eTIMS Sales Ledger Item", child, force=True)
+            frappe.delete_doc(
+                "eTIMS Sales Ledger Item", child, force=True, ignore_permissions=True
+            )
     else:
         sales_ledger = frappe.new_doc("eTIMS Sales Ledger Entry")
         sales_ledger.etims_id = slade_id
@@ -1099,3 +1097,54 @@ def process_single_etims_entry(
         )
         if sales_invoice:
             update_sales_invoice_etims_details(sales_invoice)
+
+
+def process_etims_ledger_credit_note(
+    response: dict,
+    document_name: str,
+    doctype: str,
+    settings_name: str | None = None,
+    **kwargs,
+) -> None:
+    data = get_response_data(response)
+    doc = frappe.get_doc(doctype, document_name)
+
+    items = []
+
+    for line in data.get("sales_invoice_lines", []):
+        items.append(
+            {
+                "item_name": line.get("product_name"),
+                "quantity": round(abs(line.get("quantity", 0)), 2),
+                "amount": round(abs(line.get("price_inclusive_tax", 0)), 4),
+            }
+        )
+
+    return_payload = {
+        "document_name": document_name,
+        "invoice_reference": doc.reference_number,
+        "refund_reason": "13",
+        "items": items,
+    }
+
+    process_request(
+        return_payload,
+        "CreditNoteSaveReq",
+        etims_ledger_credit_note_on_success,
+        doctype=doctype,
+        request_method="POST",
+        document_name=document_name,
+        settings_name=settings_name,
+        queue=False,
+    )
+
+
+def etims_ledger_credit_note_on_success(
+    response: dict, document_name: str, **kwargs
+) -> None:
+    frappe.enqueue(
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_ledger_entry",
+        name=document_name,
+        is_async=True,
+        queue="default",
+    )
