@@ -177,10 +177,19 @@ def bulk_invoice_callback():
         message=frappe.as_json(data),
     )
 
-    frappe.enqueue(
-        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.run_etims_ledger_scheduler",
-        queue="long",
-    )
+    payload = data.get("data", {})
+    ref_number = payload.get("reference_number")
+
+    if ref_number:
+        invoice_name = ref_number.split("-REV")[0]
+        company = frappe.get_value("Sales Invoice", invoice_name, "company")
+        frappe.enqueue(
+            "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_invoices",
+            document_name=invoice_name,
+            settings_name="eTIMS Settings",
+            company=company,
+            queue="long",
+        )
 
     return {
         "status": "success",

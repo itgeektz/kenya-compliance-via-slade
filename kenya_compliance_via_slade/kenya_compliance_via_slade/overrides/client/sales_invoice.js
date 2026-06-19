@@ -20,7 +20,7 @@ frappe.ui.form.on(parentDoctype, {
       clearEtimsHtmlAndWarnings(frm);
       return;
     }
-    if (frm.doc.is_opening === "Yes") {
+    if (frm.doc.is_opening === "Yes" || frm.doc.etr_invoice_number) {
       clearEtimsHtmlAndWarnings(frm);
       frm.set_value("prevent_etims_submission", 1);
       return;
@@ -63,12 +63,17 @@ frappe.ui.form.on(parentDoctype, {
       );
     }
 
-    if (summaryData?.hasSignificantMismatch && frm.doc.sent_to_etims) {
+    if (
+      summaryData?.hasSignificantMismatch &&
+      frm.doc.sent_to_etims &&
+      (Math.abs(summaryData.invoiceDiffPercent || 0) > 0.01 ||
+        Math.abs(summaryData.netDiffPercent || 0) > 0.01)
+    ) {
       showEtimsAlert(
         frm,
         "danger",
         "eTIMS Reconciliation Mismatch Detected",
-        `Invoices: ${summaryData.invoiceDiffPercent?.toFixed(1)}% | Credits: ${summaryData.creditDiffPercent?.toFixed(1)}% | Net: ${summaryData.netDiffPercent?.toFixed(1)}%`,
+        `Invoices: ${summaryData.invoiceDiffPercent?.toFixed(1)}% | Credits: ${summaryData.creditDiffPercent?.toFixed(1)}% | Total: ${summaryData.netDiffPercent?.toFixed(1)}%`,
         () => frm.scroll_to_field("etims_summary"),
       );
     }
@@ -157,7 +162,7 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
         <div class="etims-root">
           <div class="etims-hero">
             <div>
-              <div class="etims-hero-title">Return / Credit Note - Original eTIMS ID Reconciliation</div>
+              <div class="etims-hero-title">Return / Credit Note - Original eTIMS Summary</div>
               <div class="etims-hero-sub">${data.from_date || "—"} — ${data.to_date || "—"}</div>
               <div style="margin-top:8px;font-size:12px;color:var(--text-muted);">
                 Original Invoice: <strong>${frappe.utils.escape_html(invoiceName)}</strong>
@@ -206,10 +211,10 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
             </div>
 
             <div class="etims-stat-card">
-              <div class="etims-stat-header">Net Values</div>
+              <div class="etims-stat-header">Total Values</div>
               <div class="etims-stat-body">
-                <div class="etims-compare-row"><span class="etims-compare-label">System Net</span><span class="etims-compare-value erp">${fmt(data.metrics?.erp?.erp_net_gross)}</span></div>
-                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Net</span><span class="etims-compare-value etims">${fmt(data.metrics?.etims?.etims_net_gross)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">System Total</span><span class="etims-compare-value erp">${fmt(data.metrics?.erp?.erp_net_gross)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Total</span><span class="etims-compare-value etims">${fmt(data.metrics?.etims?.etims_net_gross)}</span></div>
                 <div class="etims-diff-section">
                   <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.metrics?.variance?.gross_difference >= 0 ? "positive" : "negative"}">${fmt(data.metrics?.variance?.gross_difference)}</span></div>
                   <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">0.00%</span></div></div>
@@ -269,9 +274,9 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
       return null;
     }
 
-    const hasMismatch =
-      Math.abs(data.metrics?.variance?.gross_difference || 0) > 0.1 ||
-      Math.abs(data.metrics?.variance?.tax_difference || 0) > 0.1;
+    const grossDiff = Math.abs(data.metrics?.variance?.gross_difference || 0);
+    const taxDiff = Math.abs(data.metrics?.variance?.tax_difference || 0);
+    const hasMismatch = grossDiff > 0.01 || taxDiff > 0.01;
 
     const calcPercent = (diff, base) => {
       if (!base) return 0;
@@ -630,10 +635,10 @@ function renderSummaryDashboard(htmlField, data) {
         </div>
 
         <div class="etims-stat-card">
-          <div class="etims-stat-header">Net Values</div>
+          <div class="etims-stat-header">Total Values</div>
           <div class="etims-stat-body">
-            <div class="etims-compare-row"><span class="etims-compare-label">System Net</span><span class="etims-compare-value erp">${data.fmt(data.erpNetAmount)}</span></div>
-            <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Net</span><span class="etims-compare-value etims">${data.fmt(data.etimsNetAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">System Total</span><span class="etims-compare-value erp">${data.fmt(data.erpNetAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Total</span><span class="etims-compare-value etims">${data.fmt(data.etimsNetAmount)}</span></div>
             <div class="etims-diff-section">
               <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.netDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.netDifference)}</span></div>
               <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.netDiffPercent.toFixed(2)}%</span></div></div>
@@ -1393,7 +1398,6 @@ const SHARED_ETIMS_STYLES = `
     .etims-table-wrap {
       overflow-x: auto;
       overflow-y: auto;
-      max-height: 520px;
     }
     .etims-table {
       width: 100%;
