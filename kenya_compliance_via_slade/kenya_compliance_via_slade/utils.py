@@ -2448,11 +2448,11 @@ def delete_hanging_custom_fields():
         "Item",
         "Item Group",
         "Customer",
-        # "Sales Invoice",
-        # "Sales Invoice Item",
+        "Sales Invoice",
+        "Sales Invoice Item",
         "Item Tax Template",
         "Supplier",
-        # "Stock Ledger Entry",
+        "Stock Ledger Entry",
         "Sales Taxes and Charges Template",
     ]
 
