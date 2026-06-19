@@ -888,35 +888,18 @@ def save_etims_sync_errors(errors: list, entry_type: str, settings_name: str) ->
     if not errors:
         return
 
-    try:
-        error_doc = frappe.new_doc("eTIMS Sync Error Log")
-        error_doc.settings_name = settings_name
-        error_doc.entry_type = entry_type
-        error_doc.total_errors = len(errors)
-        error_doc.sync_date = frappe.utils.now_datetime()
-
-        error_details = []
-        for error in errors:
-            error_details.append(
-                {
-                    "document_number": error.get("document", "Unknown"),
-                    "etims_id": error.get("etims_id", "Unknown"),
-                    "error_message": str(error.get("error", "Unknown error"))[:1000],
-                    "error_traceback": error.get("traceback", "")[:2000],
-                    "error_type": error.get("type", entry_type),
-                }
-            )
-
-        error_doc.errors_json = frappe.as_json(error_details)
-        error_doc.insert(ignore_permissions=True)
-
-        frappe.db.commit()
-
-    except Exception as e:
-        frappe.log_error(
-            title="eTIMS Error Batch Save Failed",
-            message=f"Failed to save error batch: {str(e)}\nErrors: {frappe.as_json(errors)}",
+    for error in errors:
+        title = f"eTIMS Sync Error - {error.get('document', 'Unknown')}"
+        message = (
+            f"Settings Name: {settings_name}\n"
+            f"Entry Type: {entry_type}\n"
+            f"eTIMS ID: {error.get('etims_id', 'Unknown')}\n"
+            f"Error Type: {error.get('type', entry_type)}\n"
+            f"Error Message: {error.get('error', 'Unknown error')}\n\n"
+            f"Traceback:\n{error.get('traceback', '')}"
         )
+
+        frappe.log_error(title=title, message=message)
 
 
 def process_single_etims_entry(
@@ -1016,7 +999,9 @@ def process_single_etims_entry(
             pluck="name",
         )
         for child in existing_child_records:
-            frappe.delete_doc("eTIMS Sales Ledger Item", child, force=True)
+            frappe.delete_doc(
+                "eTIMS Sales Ledger Item", child, force=True, ignore_permissions=True
+            )
     else:
         sales_ledger = frappe.new_doc("eTIMS Sales Ledger Entry")
         sales_ledger.etims_id = slade_id
