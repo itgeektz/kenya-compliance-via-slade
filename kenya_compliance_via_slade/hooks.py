@@ -53,6 +53,7 @@ doctype_js = {
     # "BOM": "kenya_compliance_via_slade/overrides/client/bom.js",
     # "Branch": "kenya_compliance_via_slade/overrides/client/branch.js",
     # "Stock Ledger Entry": "kenya_compliance_via_slade/overrides/client/stock_ledger_entry.js",
+    "eTIMS Sales Ledger Entry": "kenya_compliance_via_slade/overrides/client/etims_sales_ledger_entry.js",
 }
 
 doctype_list_js = {
