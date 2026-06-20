@@ -689,7 +689,9 @@ def _calculate_taxes_by_hierarchy(doc: "Document") -> dict:
         elif template_rate > 0:
             rate = template_rate
         elif not has_item_templates and doc.get("taxes") and total_net > 0:
-            total_doc_tax = sum(float(t.etims_tax_amount or 0) for t in doc.taxes)
+            total_doc_tax = sum(
+                float(t.base_tax_amount or t.tax_amount or 0) for t in doc.taxes
+            )
             item_tax = total_doc_tax * (base_net / total_net)
             rate = (item_tax / base_net) * 100 if base_net else 0.0
 
