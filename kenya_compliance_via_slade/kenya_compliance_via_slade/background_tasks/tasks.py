@@ -83,6 +83,7 @@ def fetch_sales_invoices(filters: dict) -> list:
     return frappe.get_all("Sales Invoice", filters, ["name"])
 
 
+@frappe.whitelist()
 def send_sales_invoices_information(settings_name: str = None) -> None:
     if not settings_name:
         return
@@ -123,17 +124,26 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
     # if sent_unprocessed:
     #     process_sent_invoices(sent_unprocessed)
 
-    # processed_unsent_to_etims = fetch_sales_invoices(
-    #     {
-    #         "docstatus": 1,
-    #         "sent_to_etims": 0,
-    #         "custom_transition_successful": 1,
-    #         "creation": [">=", timeframe_ago],
-    #         "is_opening":"No"
-    #     }
-    # )
-    # if processed_unsent_to_etims:
-    #     sign_processed_invoices(processed_unsent_to_etims)
+    processed_unsent_to_etims = frappe.get_all(
+        "eTIMS Sales Ledger Entry",
+        filters={
+            "is_signed": 0,
+            "sales_invoice": ["is", "set"],
+            "creation": [">=", timeframe_ago],
+        },
+        fields=["sales_invoice", "etims_id"],
+    )
+    if processed_unsent_to_etims:
+        for entry in processed_unsent_to_etims:
+            from ..apis.remote_response_status_handlers import process_sales_sign
+
+            frappe.enqueue(
+                process_sales_sign,
+                document_name=entry.sales_invoice,
+                doctype="Sales Invoice",
+                invoice_slade_id=entry.etims_id,
+                queue="long",
+            )
 
 
 def handle_invoice_submission(invoices: list, action_func: callable) -> None:
@@ -604,6 +614,7 @@ def run_etims_autosubmission_scheduler_hourly():
             )
 
 
+@frappe.whitelist()
 def run_etims_autosubmission_scheduler_daily():
     settings_list = frappe.get_all(
         SETTINGS_DOCTYPE_NAME,
@@ -643,6 +654,7 @@ def run_etims_autosubmission_scheduler_daily():
             )
 
 
+@frappe.whitelist()
 def run_etims_ledger_scheduler():
     settings_list = frappe.get_all(
         SETTINGS_DOCTYPE_NAME,
