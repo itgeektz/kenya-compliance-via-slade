@@ -985,23 +985,13 @@ def process_single_etims_entry(
             update_values[field] = value
 
     if existing_name:
-        for field, value in update_values.items():
-            if value is not None:
-                frappe.db.set_value(
-                    "eTIMS Sales Ledger Entry", existing_name, field, value
-                )
-
-        sales_ledger_name = existing_name
-
-        existing_child_records = frappe.get_all(
-            "eTIMS Sales Ledger Item",
-            filters={"parent": sales_ledger_name},
-            pluck="name",
+        frappe.db.set_value(
+            "eTIMS Sales Ledger Entry",
+            existing_name,
+            update_values,
+            update_modified=True,
         )
-        for child in existing_child_records:
-            frappe.delete_doc(
-                "eTIMS Sales Ledger Item", child, force=True, ignore_permissions=True
-            )
+        sales_ledger_name = existing_name
     else:
         sales_ledger = frappe.new_doc("eTIMS Sales Ledger Entry")
         sales_ledger.etims_id = slade_id
@@ -1027,76 +1017,125 @@ def process_single_etims_entry(
                 frappe.db.set_value(
                     "eTIMS Sales Ledger Entry",
                     sales_ledger_name,
-                    "etims_invoice",
-                    etims_invoice,
+                    {
+                        "etims_invoice": etims_invoice,
+                        "sales_invoice": frappe.db.get_value(
+                            "eTIMS Sales Ledger Entry",
+                            {"etims_id": parent_invoice_id},
+                            "sales_invoice",
+                        ),
+                    },
+                    update_modified=False,
                 )
-                sales_invoice = frappe.db.get_value(
-                    "eTIMS Sales Ledger Entry",
-                    {"etims_id": parent_invoice_id},
-                    "sales_invoice",
-                )
-                if sales_invoice:
-                    frappe.db.set_value(
-                        "eTIMS Sales Ledger Entry",
-                        sales_ledger_name,
-                        "sales_invoice",
-                        sales_invoice,
-                    )
 
     lines = (
         entry_data.get("sales_credit_note_lines" if is_cn else "sales_invoice_lines")
         or []
     )
 
-    for idx, line in enumerate(lines):
-        child_doc = frappe.new_doc("eTIMS Sales Ledger Item")
-        child_doc.parent = sales_ledger_name
-        child_doc.parenttype = "eTIMS Sales Ledger Entry"
-        child_doc.parentfield = "sales_invoice_lines"
-        child_doc.idx = idx + 1
-        child_doc.product_name = line.get("product_name")
-        child_doc.quantity = line.get("quantity", 1)
-        child_doc.tax_code = line.get("tax_code")
-        child_doc.tax_code_description = line.get("tax_code_description")
-        child_doc.pricelist_name = line.get("pricelist_name")
+    existing_items = frappe.get_all(
+        "eTIMS Sales Ledger Item",
+        filters={"parent": sales_ledger_name},
+        fields=[
+            "name",
+            "product_name",
+            "quantity",
+            "tax_code",
+            "tax_code_description",
+            "pricelist_name",
+            "price_inclusive_tax",
+            "price_exclusive_tax",
+            "etims_tax_amount",
+            "gross_line_amount",
+            "tax_exclusive_amount",
+            "tax_inclusive_amount",
+            "total_net_amount",
+        ],
+    )
+
+    current_idx_max = max(
+        [
+            frappe.db.get_value("eTIMS Sales Ledger Item", item.name, "idx") or 0
+            for item in existing_items
+        ]
+        or [0]
+    )
+
+    for line in lines:
+        prod_name = line.get("product_name")
+        qty = line.get("quantity", 1)
+        t_code = line.get("tax_code")
+        t_desc = line.get("tax_code_description")
+        p_name = line.get("pricelist_name")
 
         if is_cn:
-            child_doc.price_inclusive_tax = sign * abs(
-                line.get("price_inclusive_tax", 0)
-            )
-            child_doc.price_exclusive_tax = sign * abs(
-                line.get("price_exclusive_tax", 0)
-            )
-            child_doc.etims_tax_amount = sign * abs(line.get("tax_amount", 0))
-            child_doc.gross_line_amount = sign * abs(line.get("gross_line_amount", 0))
-            child_doc.tax_exclusive_amount = sign * abs(
-                line.get("total_tax_exclusive_amount", 0)
-            )
-            child_doc.tax_inclusive_amount = sign * abs(
-                line.get("total_amount_line", 0)
-            )
-            child_doc.total_net_amount = sign * abs(
-                line.get("total_tax_exclusive_amount", 0)
-            )
+            p_inc = sign * abs(line.get("price_inclusive_tax", 0))
+            p_exc = sign * abs(line.get("price_exclusive_tax", 0))
+            t_amt = sign * abs(line.get("tax_amount", 0))
+            g_amt = sign * abs(line.get("gross_line_amount", 0))
+            t_exc_amt = sign * abs(line.get("total_tax_exclusive_amount", 0))
+            t_inc_amt = sign * abs(line.get("total_amount_line", 0))
+            n_amt = sign * abs(line.get("total_tax_exclusive_amount", 0))
         else:
-            child_doc.price_inclusive_tax = line.get("price_inclusive_tax", 0)
-            child_doc.price_exclusive_tax = line.get("price_exclusive_tax", 0)
-            child_doc.etims_tax_amount = line.get("tax_amount", 0)
-            child_doc.gross_line_amount = line.get("gross_line_amount", 0)
-            child_doc.tax_exclusive_amount = line.get("tax_exclusive_amount", 0)
-            child_doc.tax_inclusive_amount = line.get("tax_inclusive_amount", 0)
-            child_doc.total_net_amount = line.get("total_net_amount", 0)
+            p_inc = line.get("price_inclusive_tax", 0)
+            p_exc = line.get("price_exclusive_tax", 0)
+            t_amt = line.get("tax_amount", 0)
+            g_amt = line.get("gross_line_amount", 0)
+            t_exc_amt = line.get("tax_exclusive_amount", 0)
+            t_inc_amt = line.get("tax_inclusive_amount", 0)
+            n_amt = line.get("total_net_amount", 0)
 
-        child_doc.insert(ignore_permissions=True)
+        matched_child_id = None
+        for item in existing_items:
+            if (
+                item.product_name == prod_name
+                and float(item.quantity or 0) == float(qty)
+                and item.tax_code == t_code
+                and item.tax_code_description == t_desc
+                and item.pricelist_name == p_name
+                and float(item.price_inclusive_tax or 0) == float(p_inc)
+                and float(item.price_exclusive_tax or 0) == float(p_exc)
+                and float(item.etims_tax_amount or 0) == float(t_amt)
+                and float(item.gross_line_amount or 0) == float(g_amt)
+                and float(item.tax_exclusive_amount or 0) == float(t_exc_amt)
+                and float(item.tax_inclusive_amount or 0) == float(t_inc_amt)
+                and float(item.total_net_amount or 0) == float(n_amt)
+            ):
+                matched_child_id = item.name
+                break
+
+        if matched_child_id:
+            child_doc = frappe.get_doc("eTIMS Sales Ledger Item", matched_child_id)
+        else:
+            current_idx_max += 1
+            child_doc = frappe.new_doc("eTIMS Sales Ledger Item")
+            child_doc.parent = sales_ledger_name
+            child_doc.parenttype = "eTIMS Sales Ledger Entry"
+            child_doc.parentfield = "sales_invoice_lines"
+            child_doc.idx = current_idx_max
+
+        child_doc.product_name = prod_name
+        child_doc.quantity = qty
+        child_doc.tax_code = t_code
+        child_doc.tax_code_description = t_desc
+        child_doc.pricelist_name = p_name
+        child_doc.price_inclusive_tax = p_inc
+        child_doc.price_exclusive_tax = p_exc
+        child_doc.etims_tax_amount = t_amt
+        child_doc.gross_line_amount = g_amt
+        child_doc.tax_exclusive_amount = t_exc_amt
+        child_doc.tax_inclusive_amount = t_inc_amt
+        child_doc.total_net_amount = n_amt
+
+        child_doc.save(ignore_permissions=True)
 
     frappe.db.commit()
 
-    if not is_cn:
-        sales_invoice = frappe.db.get_value(
-            "eTIMS Sales Ledger Entry", sales_ledger_name, "sales_invoice"
-        )
-        if sales_invoice:
-            update_sales_invoice_etims_details(sales_invoice)
+    sales_invoice = frappe.db.get_value(
+        "eTIMS Sales Ledger Entry", sales_ledger_name, "sales_invoice"
+    )
+    if sales_invoice:
+        update_sales_invoice_etims_details(sales_invoice)
 
 
 def process_etims_ledger_credit_note(
