@@ -76,6 +76,22 @@ frappe.listview_settings[doctypeName].onload = async function (listview) {
       },
       __("eTims Actions"),
     );
+
+    listview.page.add_inner_button(
+      __("Run Auto-submission Scheduler"),
+      function () {
+        showSettingsModalAndExecute(
+          "Run Auto-submission Scheduler",
+          activeSetting,
+          (settings_name) => ({
+            method: "send_sales_invoices_information",
+            args: { settings_name: settings_name },
+            success_msg: "Bulk submission to eTims queued.",
+          }),
+        );
+      },
+      __("eTims Actions"),
+    );
   }
 };
 
@@ -133,6 +149,8 @@ function executeEtimsAction(method, args, successMsg) {
 
   if (method === "regenerate_qr_code") {
     methodPath = `kenya_compliance_via_slade.kenya_compliance_via_slade.overrides.server.sales_invoice.${method}`;
+  } else if (method === "send_sales_invoices_information") {
+    methodPath = `kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.${method}`;
   } else {
     methodPath = `kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.${method}`;
   }

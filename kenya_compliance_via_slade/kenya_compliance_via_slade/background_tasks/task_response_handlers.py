@@ -760,9 +760,6 @@ def fetch_etims_sales_invoices_on_success(
 
     settings_name = kwargs.get("settings_name")
     if not settings_name:
-        frappe.log_error(
-            title="eTIMS Fetch Error", message="Settings name not provided in kwargs"
-        )
         return
 
     errors = []
