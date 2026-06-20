@@ -531,7 +531,6 @@ def handle_invoice_sign_success(
     frappe.enqueue(
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_invoices",
         document_name=document_name,
-        invoice_type=doctype,
         request_data=request_data,
         queue="long",
     )
