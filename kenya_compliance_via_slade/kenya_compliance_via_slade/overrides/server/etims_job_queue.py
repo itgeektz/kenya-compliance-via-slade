@@ -146,7 +146,7 @@ def process_job_request(
         document_name=document_name or doc_name,
         settings=settings,
         job_queue=job_queue,
-        page_size=job_queue.page_size if job_queue else 1000,
+        page_size=job_queue.page_size if job_queue else 200,
         page=job_queue.page if job_queue else 1,
         company=company_name,
     )
