@@ -735,7 +735,7 @@ def fetch_etims_sales_invoices(
     if "invoice_date_after" not in request_data:
         invoice_date_before_obj = now_datetime().date()
         request_data["invoice_date_after"] = (
-            invoice_date_before_obj - timedelta(days=2)
+            invoice_date_before_obj - timedelta(days=1)
         ).isoformat()
 
     doc = frappe.get_doc("Sales Invoice", document_name) if document_name else None

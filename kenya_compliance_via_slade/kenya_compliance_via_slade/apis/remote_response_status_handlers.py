@@ -314,7 +314,8 @@ def sales_information_submission_on_success(
     }
 
     frappe.db.set_value(doctype, document_name, updates)
-    invoice_name = frappe.db.get_value(doctype, document_name, "return_against")
+    doc = frappe.get_doc(doctype, document_name)
+    invoice_name = doc.return_against if doc.is_return else document_name
 
     frappe.enqueue(
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_invoices",
