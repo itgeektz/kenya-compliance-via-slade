@@ -75,7 +75,10 @@ def generic_invoices_on_submit_override(
 
     updates = {}
 
-    if not doc.get("etims_verification_url"):
+    if (
+        not doc.get("etims_verification_url")
+        and settings_doc.enable_verification_redirect
+    ):
         updates["etims_verification_url"] = build_verification_url(doc)
 
     current_verification_url = updates.get("etims_verification_url") or doc.get(
@@ -115,6 +118,7 @@ def generic_invoices_on_submit_override(
             doctype=invoice_type,
             document_name=doc.name,
             settings_name=settings_doc.name,
+            company=company_name,
         )
 
     else:
@@ -208,8 +212,13 @@ def validate(doc: "Document", method: str) -> None:
 def before_submit(doc: Document, method: str) -> None:
     if doc.doctype == "Sales Invoice":
         response = analyze_etims_eligibility(doc.name)
+        settings_doc = get_settings(company_name=doc.company)
 
-        if response.get("eligible"):
+        if (
+            response.get("eligible")
+            and settings_doc
+            and settings_doc.enable_verification_redirect
+        ):
             url = build_verification_url(doc)
 
             if not doc.get("etims_verification_url"):

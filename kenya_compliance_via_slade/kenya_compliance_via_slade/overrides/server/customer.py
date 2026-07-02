@@ -26,31 +26,31 @@ def validate(doc: Document, method: str = None) -> None:
 
     validate_kra_pin(tax_id)
 
-    tax_id_lower = tax_id.lower()
+    # tax_id_lower = tax_id.lower()
 
-    existing = frappe.get_all(
-        "Customer",
-        filters={
-            "name": ["!=", doc.name or ""],
-            "tax_id": ["like", tax_id_lower],
-        },
-        fields=["name", "tax_id"],
-        limit_page_length=1,
-    )
+    # existing = frappe.get_all(
+    #     "Customer",
+    #     filters={
+    #         "name": ["!=", doc.name or ""],
+    #         "tax_id": ["like", tax_id_lower],
+    #     },
+    #     fields=["name", "tax_id"],
+    #     limit_page_length=1,
+    # )
 
-    existing = [c for c in existing if (c.get("tax_id") or "").lower() == tax_id_lower]
+    # existing = [c for c in existing if (c.get("tax_id") or "").lower() == tax_id_lower]
 
-    if existing:
-        links = ", ".join(
-            f'<a href="/app/customer/{c.get("name")}" target="_blank">{c.get("name")}</a>'
-            for c in existing
-        )
-        frappe.throw(
-            f"""
-            Tax ID <strong>{tax_id}</strong> is already used by Customer(s) {links}.
-            """,
-            title="Duplicate Tax ID",
-        )
+    # if existing:
+    #     links = ", ".join(
+    #         f'<a href="/app/customer/{c.get("name")}" target="_blank">{c.get("name")}</a>'
+    #         for c in existing
+    #     )
+    #     frappe.throw(
+    #         f"""
+    #         Tax ID <strong>{tax_id}</strong> is already used by Customer(s) {links}.
+    #         """,
+    #         title="Duplicate Tax ID",
+    #     )
 
 
 def submit_details(doc: Document) -> None:

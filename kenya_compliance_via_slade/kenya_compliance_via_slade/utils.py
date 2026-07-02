@@ -824,7 +824,13 @@ def after_save_(doc: "Document", method: str | None = None) -> None:
     if doc.doctype == "Sales Invoice":
         response = analyze_etims_eligibility(doc.name)
 
-        if response.get("eligible"):
+        settings_doc = get_settings(company_name=doc.company)
+
+        if (
+            response.get("eligible")
+            and settings_doc
+            and settings_doc.enable_verification_redirect
+        ):
             url = build_verification_url(doc)
 
             if not doc.get("etims_verification_url"):
@@ -2228,6 +2234,11 @@ def clean_url_params(url: str) -> str:
 def update_sales_invoice_etims_details(name: str) -> None:
     sales_invoice = frappe.get_doc("Sales Invoice", name)
 
+    settings_doc = get_settings(company_name=sales_invoice.company)
+    enable_verification_redirect = (
+        settings_doc.enable_verification_redirect if settings_doc else False
+    )
+
     return_invoices = frappe.get_all(
         "Sales Invoice",
         filters={"return_against": sales_invoice.name, "docstatus": 1, "is_return": 1},
@@ -2262,8 +2273,8 @@ def update_sales_invoice_etims_details(name: str) -> None:
         "etims_qr_code_url": None,
         "etims_id": None,
         "sent_to_etims": 0,
-        "etims_verification_url": sales_invoice.get("etims_verification_url"),
-        "etims_qr_image": sales_invoice.get("etims_qr_image"),
+        "etims_verification_url": None,
+        "etims_qr_image": None,
     }
 
     if ledgers:
@@ -2337,13 +2348,21 @@ def update_sales_invoice_etims_details(name: str) -> None:
             }
         )
 
-    if not updates["etims_verification_url"]:
-        updates["etims_verification_url"] = build_verification_url(sales_invoice)
+    if enable_verification_redirect:
+        if not updates["etims_verification_url"]:
+            updates["etims_verification_url"] = build_verification_url(sales_invoice)
 
-    if not updates["etims_qr_image"] and updates["etims_verification_url"]:
-        updates["etims_qr_image"] = generate_and_attach_qr_code(
-            updates["etims_verification_url"], sales_invoice.name, sales_invoice.doctype
-        )
+        if not updates["etims_qr_image"] and updates["etims_verification_url"]:
+            updates["etims_qr_image"] = generate_and_attach_qr_code(
+                updates["etims_verification_url"],
+                sales_invoice.name,
+                sales_invoice.doctype,
+            )
+    else:
+        if not updates["etims_qr_image"] and updates["etims_qr_code_url"]:
+            updates["etims_qr_image"] = generate_and_attach_qr_code(
+                updates["etims_qr_code_url"], sales_invoice.name, sales_invoice.doctype
+            )
 
     sales_invoice.db_set(updates, update_modified=False)
 
