@@ -7,6 +7,7 @@ from ...utils import (
     apply_item_taxes_and_codes,
     build_verification_url,
     generate_and_attach_qr_code,
+    get_kes_conversion_rate,
     get_settings,
 )
 from .shared_overrides import generic_invoices_on_submit_override
@@ -75,39 +76,57 @@ def regenerate_qr_code(names):
     for name in names:
         try:
             doc = frappe.get_doc("Sales Invoice", name)
+            settings_doc = get_settings(company_name=doc.company)
 
-            etims_verification_url = build_verification_url(doc)
-
-            if etims_verification_url:
-                doc.db_set(
-                    "etims_verification_url",
-                    etims_verification_url,
-                    update_modified=False,
-                )
-
-                etims_qr_image = generate_and_attach_qr_code(
-                    etims_verification_url, name, doc.doctype
-                )
-
-                doc.db_set("etims_qr_image", etims_qr_image, update_modified=False)
-
-                frappe.db.commit()
-
+            if doc.sent_to_etims == 0:
                 results.append(
                     {
                         "invoice": name,
-                        "status": "success",
-                        "message": "Verification URL and QR Code regenerated successfully",
+                        "status": "skipped",
+                        "message": "Invoice has not been submitted to eTIMS yet",
                     }
                 )
+            etims_qr_image = None
+
+            if settings_doc.enable_verification_redirect:
+                etims_verification_url = build_verification_url(doc)
+
+                if etims_verification_url:
+                    doc.db_set(
+                        "etims_verification_url",
+                        etims_verification_url,
+                        update_modified=False,
+                    )
+
+                    etims_qr_image = generate_and_attach_qr_code(
+                        etims_verification_url, name, doc.doctype
+                    )
+            elif doc.etims_qr_code_url:
+                etims_qr_image = generate_and_attach_qr_code(
+                    doc.etims_qr_code_url, name, doc.doctype
+                )
+
             else:
                 results.append(
                     {
                         "invoice": name,
                         "status": "skipped",
-                        "message": "Unable to build verification URL",
+                        "message": "No verification URL or QR code available for this invoice",
                     }
                 )
+                continue
+
+            doc.db_set("etims_qr_image", etims_qr_image, update_modified=False)
+
+            frappe.db.commit()
+
+            results.append(
+                {
+                    "invoice": name,
+                    "status": "success",
+                    "message": "Verification URL and QR Code regenerated successfully",
+                }
+            )
 
         except Exception as e:
             frappe.db.rollback()
@@ -147,15 +166,32 @@ def get_single_invoice_reconciliation(invoice_name):
 
 
 def _get_erp_metrics(invoice, company_currency):
-    if invoice.currency == "KES":
-        invoice_amount = flt(invoice.grand_total)
-        invoice_tax = flt(invoice.total_taxes_and_charges)
+    currency = invoice.currency
+    conversion_rate = 1
+    gross_field, tax_field = "grand_total", "total_taxes_and_charges"
+
+    if currency == "KES":
+        gross_field = "grand_total"
+        tax_field = "total_taxes_and_charges"
     elif company_currency == "KES":
-        invoice_amount = flt(invoice.base_grand_total)
-        invoice_tax = flt(invoice.base_total_taxes_and_charges)
+        gross_field = "base_grand_total"
+        tax_field = "base_total_taxes_and_charges"
     else:
-        invoice_amount = flt(invoice.grand_total)
-        invoice_tax = flt(invoice.total_taxes_and_charges)
+        conversion_rate, used_rate = get_kes_conversion_rate(
+            currency=currency,
+            company_currency=company_currency,
+            posting_date=invoice.posting_date,
+        )
+        if used_rate != "net":
+            gross_field = "base_grand_total"
+            tax_field = "base_total_taxes_and_charges"
+
+    invoice_amount = flt(invoice.get(gross_field))
+    invoice_tax = flt(invoice.get(tax_field))
+
+    if gross_field == "grand_total" and conversion_rate != 1:
+        invoice_amount *= conversion_rate
+        invoice_tax *= conversion_rate
 
     credit_notes = frappe.get_all(
         "Sales Invoice",
@@ -173,23 +209,43 @@ def _get_erp_metrics(invoice, company_currency):
     total_erp_credit_tax = 0
 
     for cn in credit_notes:
-        if cn.currency == "KES":
-            total_erp_credit += flt(cn.grand_total)
-            total_erp_credit_tax += flt(cn.total_taxes_and_charges)
+        cn_currency = cn.currency
+        cn_conversion_rate = 1
+        cn_gross_field, cn_tax_field = "grand_total", "total_taxes_and_charges"
+
+        if cn_currency == "KES":
+            cn_gross_field = "grand_total"
+            cn_tax_field = "total_taxes_and_charges"
         elif company_currency == "KES":
-            total_erp_credit += flt(cn.base_grand_total)
-            total_erp_credit_tax += flt(cn.base_total_taxes_and_charges)
+            cn_gross_field = "base_grand_total"
+            cn_tax_field = "base_total_taxes_and_charges"
         else:
-            total_erp_credit += flt(cn.grand_total)
-            total_erp_credit_tax += flt(cn.total_taxes_and_charges)
+            cn_conversion_rate, cn_used_rate = get_kes_conversion_rate(
+                currency=cn_currency,
+                company_currency=company_currency,
+                posting_date=invoice.posting_date,
+            )
+            if cn_used_rate != "net":
+                cn_gross_field = "base_grand_total"
+                cn_tax_field = "base_total_taxes_and_charges"
+
+        cn_amt = flt(cn.get(cn_gross_field))
+        cn_tx = flt(cn.get(cn_tax_field))
+
+        if cn_gross_field == "grand_total" and cn_conversion_rate != 1:
+            cn_amt *= cn_conversion_rate
+            cn_tx *= cn_conversion_rate
+
+        total_erp_credit -= abs(cn_amt)
+        total_erp_credit_tax -= abs(cn_tx)
 
     return {
         "erp_invoice_gross": invoice_amount,
         "erp_invoice_tax": invoice_tax,
         "erp_credit_gross": total_erp_credit,
         "erp_credit_tax": total_erp_credit_tax,
-        "erp_net_gross": invoice_amount - total_erp_credit,
-        "erp_net_tax": invoice_tax - total_erp_credit_tax,
+        "erp_net_gross": invoice_amount + total_erp_credit,
+        "erp_net_tax": invoice_tax + total_erp_credit_tax,
     }
 
 
@@ -242,9 +298,13 @@ def _get_sequential_etims_data(invoice, references):
         if is_invoice:
             etims_invoice_gross += amt
             etims_invoice_tax += tax
+            display_amt = amt
+            display_tax = tax
         else:
-            etims_credit_gross += abs(amt)
-            etims_credit_tax += abs(tax)
+            etims_credit_gross -= abs(amt)
+            etims_credit_tax -= abs(tax)
+            display_amt = -abs(amt)
+            display_tax = -abs(tax)
 
         details.append(
             {
@@ -264,8 +324,8 @@ def _get_sequential_etims_data(invoice, references):
                 "scu_internal_data": entry.scu_internal_data,
                 "etims_qr_code_url": entry.etims_qr_code_url,
                 "is_signed": entry.is_signed,
-                "amount": amt if is_invoice else -abs(amt),
-                "tax": tax if is_invoice else -abs(tax),
+                "amount": display_amt,
+                "tax": display_tax,
                 "has_returns": False,
             }
         )
@@ -284,8 +344,8 @@ def _get_sequential_etims_data(invoice, references):
         "etims_invoice_tax": etims_invoice_tax,
         "etims_credit_gross": etims_credit_gross,
         "etims_credit_tax": etims_credit_tax,
-        "etims_net_gross": etims_invoice_gross - etims_credit_gross,
-        "etims_net_tax": etims_invoice_tax - etims_credit_tax,
+        "etims_net_gross": etims_invoice_gross + etims_credit_gross,
+        "etims_net_tax": etims_invoice_tax + etims_credit_tax,
     }
 
 
