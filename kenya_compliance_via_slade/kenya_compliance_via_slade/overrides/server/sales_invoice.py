@@ -166,15 +166,32 @@ def get_single_invoice_reconciliation(invoice_name):
 
 
 def _get_erp_metrics(invoice, company_currency):
-    if invoice.currency == "KES":
-        invoice_amount = flt(invoice.grand_total)
-        invoice_tax = flt(invoice.total_taxes_and_charges)
+    currency = invoice.currency
+    conversion_rate = 1
+    gross_field, tax_field = "grand_total", "total_taxes_and_charges"
+
+    if currency == "KES":
+        gross_field = "grand_total"
+        tax_field = "total_taxes_and_charges"
     elif company_currency == "KES":
-        invoice_amount = flt(invoice.base_grand_total)
-        invoice_tax = flt(invoice.base_total_taxes_and_charges)
+        gross_field = "base_grand_total"
+        tax_field = "base_total_taxes_and_charges"
     else:
-        invoice_amount = flt(invoice.grand_total)
-        invoice_tax = flt(invoice.total_taxes_and_charges)
+        conversion_rate, used_rate = get_kes_conversion_rate(
+            currency=currency,
+            company_currency=company_currency,
+            posting_date=invoice.posting_date,
+        )
+        if used_rate != "net":
+            gross_field = "base_grand_total"
+            tax_field = "base_total_taxes_and_charges"
+
+    invoice_amount = flt(invoice.get(gross_field))
+    invoice_tax = flt(invoice.get(tax_field))
+
+    if gross_field == "grand_total" and conversion_rate != 1:
+        invoice_amount *= conversion_rate
+        invoice_tax *= conversion_rate
 
     credit_notes = frappe.get_all(
         "Sales Invoice",
@@ -192,23 +209,43 @@ def _get_erp_metrics(invoice, company_currency):
     total_erp_credit_tax = 0
 
     for cn in credit_notes:
-        if cn.currency == "KES":
-            total_erp_credit += flt(cn.grand_total)
-            total_erp_credit_tax += flt(cn.total_taxes_and_charges)
+        cn_currency = cn.currency
+        cn_conversion_rate = 1
+        cn_gross_field, cn_tax_field = "grand_total", "total_taxes_and_charges"
+
+        if cn_currency == "KES":
+            cn_gross_field = "grand_total"
+            cn_tax_field = "total_taxes_and_charges"
         elif company_currency == "KES":
-            total_erp_credit += flt(cn.base_grand_total)
-            total_erp_credit_tax += flt(cn.base_total_taxes_and_charges)
+            cn_gross_field = "base_grand_total"
+            cn_tax_field = "base_total_taxes_and_charges"
         else:
-            total_erp_credit += flt(cn.grand_total)
-            total_erp_credit_tax += flt(cn.total_taxes_and_charges)
+            cn_conversion_rate, cn_used_rate = get_kes_conversion_rate(
+                currency=cn_currency,
+                company_currency=company_currency,
+                posting_date=invoice.posting_date,
+            )
+            if cn_used_rate != "net":
+                cn_gross_field = "base_grand_total"
+                cn_tax_field = "base_total_taxes_and_charges"
+
+        cn_amt = flt(cn.get(cn_gross_field))
+        cn_tx = flt(cn.get(cn_tax_field))
+
+        if cn_gross_field == "grand_total" and cn_conversion_rate != 1:
+            cn_amt *= cn_conversion_rate
+            cn_tx *= cn_conversion_rate
+
+        total_erp_credit -= abs(cn_amt)
+        total_erp_credit_tax -= abs(cn_tx)
 
     return {
         "erp_invoice_gross": invoice_amount,
         "erp_invoice_tax": invoice_tax,
         "erp_credit_gross": total_erp_credit,
         "erp_credit_tax": total_erp_credit_tax,
-        "erp_net_gross": invoice_amount - total_erp_credit,
-        "erp_net_tax": invoice_tax - total_erp_credit_tax,
+        "erp_net_gross": invoice_amount + total_erp_credit,
+        "erp_net_tax": invoice_tax + total_erp_credit_tax,
     }
 
 
@@ -261,9 +298,13 @@ def _get_sequential_etims_data(invoice, references):
         if is_invoice:
             etims_invoice_gross += amt
             etims_invoice_tax += tax
+            display_amt = amt
+            display_tax = tax
         else:
-            etims_credit_gross += abs(amt)
-            etims_credit_tax += abs(tax)
+            etims_credit_gross -= abs(amt)
+            etims_credit_tax -= abs(tax)
+            display_amt = -abs(amt)
+            display_tax = -abs(tax)
 
         details.append(
             {
@@ -283,8 +324,8 @@ def _get_sequential_etims_data(invoice, references):
                 "scu_internal_data": entry.scu_internal_data,
                 "etims_qr_code_url": entry.etims_qr_code_url,
                 "is_signed": entry.is_signed,
-                "amount": amt if is_invoice else -abs(amt),
-                "tax": tax if is_invoice else -abs(tax),
+                "amount": display_amt,
+                "tax": display_tax,
                 "has_returns": False,
             }
         )
@@ -303,8 +344,8 @@ def _get_sequential_etims_data(invoice, references):
         "etims_invoice_tax": etims_invoice_tax,
         "etims_credit_gross": etims_credit_gross,
         "etims_credit_tax": etims_credit_tax,
-        "etims_net_gross": etims_invoice_gross - etims_credit_gross,
-        "etims_net_tax": etims_invoice_tax - etims_credit_tax,
+        "etims_net_gross": etims_invoice_gross + etims_credit_gross,
+        "etims_net_tax": etims_invoice_tax + etims_credit_tax,
     }
 
 
