@@ -7,6 +7,7 @@ from ...utils import (
     apply_item_taxes_and_codes,
     build_verification_url,
     generate_and_attach_qr_code,
+    get_kes_conversion_rate,
     get_settings,
 )
 from .shared_overrides import generic_invoices_on_submit_override
@@ -75,39 +76,57 @@ def regenerate_qr_code(names):
     for name in names:
         try:
             doc = frappe.get_doc("Sales Invoice", name)
+            settings_doc = get_settings(company_name=doc.company)
 
-            etims_verification_url = build_verification_url(doc)
-
-            if etims_verification_url:
-                doc.db_set(
-                    "etims_verification_url",
-                    etims_verification_url,
-                    update_modified=False,
-                )
-
-                etims_qr_image = generate_and_attach_qr_code(
-                    etims_verification_url, name, doc.doctype
-                )
-
-                doc.db_set("etims_qr_image", etims_qr_image, update_modified=False)
-
-                frappe.db.commit()
-
+            if doc.sent_to_etims == 0:
                 results.append(
                     {
                         "invoice": name,
-                        "status": "success",
-                        "message": "Verification URL and QR Code regenerated successfully",
+                        "status": "skipped",
+                        "message": "Invoice has not been submitted to eTIMS yet",
                     }
                 )
+            etims_qr_image = None
+
+            if settings_doc.enable_verification_redirect:
+                etims_verification_url = build_verification_url(doc)
+
+                if etims_verification_url:
+                    doc.db_set(
+                        "etims_verification_url",
+                        etims_verification_url,
+                        update_modified=False,
+                    )
+
+                    etims_qr_image = generate_and_attach_qr_code(
+                        etims_verification_url, name, doc.doctype
+                    )
+            elif doc.etims_qr_code_url:
+                etims_qr_image = generate_and_attach_qr_code(
+                    doc.etims_qr_code_url, name, doc.doctype
+                )
+
             else:
                 results.append(
                     {
                         "invoice": name,
                         "status": "skipped",
-                        "message": "Unable to build verification URL",
+                        "message": "No verification URL or QR code available for this invoice",
                     }
                 )
+                continue
+
+            doc.db_set("etims_qr_image", etims_qr_image, update_modified=False)
+
+            frappe.db.commit()
+
+            results.append(
+                {
+                    "invoice": name,
+                    "status": "success",
+                    "message": "Verification URL and QR Code regenerated successfully",
+                }
+            )
 
         except Exception as e:
             frappe.db.rollback()
