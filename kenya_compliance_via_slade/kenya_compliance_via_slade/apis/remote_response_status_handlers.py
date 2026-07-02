@@ -314,7 +314,8 @@ def sales_information_submission_on_success(
     }
 
     frappe.db.set_value(doctype, document_name, updates)
-    invoice_name = frappe.db.get_value(doctype, document_name, "return_against")
+    doc = frappe.get_doc(doctype, document_name)
+    invoice_name = doc.return_against if doc.is_return else document_name
 
     frappe.enqueue(
         "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_invoices",
@@ -495,22 +496,13 @@ def process_sales_transition(
     )
 
 
-def process_sales_sign(document_name: str, doctype: str, invoice_slade_id: str) -> None:
+@frappe.whitelist()
+def process_sales_sign(
+    document_name: str, doctype: str, invoice_slade_id: str, queue: bool = True
+) -> None:
     from .process_request import process_request
 
     invoice = frappe.get_doc(doctype, document_name)
-
-    def handle_invoice_sign_success(
-        response: dict, document_name: str, **kwargs
-    ) -> None:
-        frappe.db.set_value(doctype, document_name, {"sent_to_etims": 1})
-        frappe.enqueue(
-            "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.apis.get_invoice_details",
-            id=invoice_slade_id,
-            document_name=document_name,
-            invoice_type=doctype,
-            queue="long",
-        )
 
     payload = {"invoice_id": invoice_slade_id, "document_name": document_name}
     route_key = "SalesSignInvReq"
@@ -524,6 +516,24 @@ def process_sales_sign(document_name: str, doctype: str, invoice_slade_id: str) 
         request_method="POST",
         doctype=doctype,
         document_name=document_name,
+        queue=queue,
+    )
+
+
+def handle_invoice_sign_success(
+    response: dict, document_name: str, doctype: str, **kwargs
+) -> None:
+    frappe.db.set_value(doctype, document_name, {"sent_to_etims": 1})
+    invoice = frappe.get_doc(doctype, document_name)
+    invoice_date_after = invoice.posting_date
+    request_data = {
+        "invoice_date_after": invoice_date_after.isoformat(),
+    }
+    frappe.enqueue(
+        "kenya_compliance_via_slade.kenya_compliance_via_slade.background_tasks.tasks.fetch_etims_sales_invoices",
+        document_name=document_name,
+        request_data=request_data,
+        queue="long",
     )
 
 

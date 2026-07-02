@@ -18,9 +18,8 @@ from ..doctype.doctype_names_mapping import (
     SETTINGS_DOCTYPE_NAME,
     WORKSTATION_DOCTYPE_NAME,
 )
-from ..utils import get_etims_id, get_max_submission_attempts
+from ..utils import get_max_submission_attempts
 from .task_response_handlers import (
-    fetch_etims_credit_notes_on_success,
     fetch_etims_sales_invoices_on_success,
     operation_types_search_on_success,
     process_etims_ledger_credit_note,
@@ -84,6 +83,7 @@ def fetch_sales_invoices(filters: dict) -> list:
     return frappe.get_all("Sales Invoice", filters, ["name"])
 
 
+@frappe.whitelist()
 def send_sales_invoices_information(settings_name: str = None) -> None:
     if not settings_name:
         return
@@ -124,17 +124,26 @@ def send_sales_invoices_information(settings_name: str = None) -> None:
     # if sent_unprocessed:
     #     process_sent_invoices(sent_unprocessed)
 
-    # processed_unsent_to_etims = fetch_sales_invoices(
-    #     {
-    #         "docstatus": 1,
-    #         "sent_to_etims": 0,
-    #         "custom_transition_successful": 1,
-    #         "creation": [">=", timeframe_ago],
-    #         "is_opening":"No"
-    #     }
-    # )
-    # if processed_unsent_to_etims:
-    #     sign_processed_invoices(processed_unsent_to_etims)
+    processed_unsent_to_etims = frappe.get_all(
+        "eTIMS Sales Ledger Entry",
+        filters={
+            "is_signed": 0,
+            "sales_invoice": ["is", "set"],
+            "creation": [">=", timeframe_ago],
+        },
+        fields=["sales_invoice", "etims_id"],
+    )
+    if processed_unsent_to_etims:
+        for entry in processed_unsent_to_etims:
+            from ..apis.remote_response_status_handlers import process_sales_sign
+
+            frappe.enqueue(
+                process_sales_sign,
+                document_name=entry.sales_invoice,
+                doctype="Sales Invoice",
+                invoice_slade_id=entry.etims_id,
+                queue="long",
+            )
 
 
 def handle_invoice_submission(invoices: list, action_func: callable) -> None:
@@ -605,6 +614,7 @@ def run_etims_autosubmission_scheduler_hourly():
             )
 
 
+@frappe.whitelist()
 def run_etims_autosubmission_scheduler_daily():
     settings_list = frappe.get_all(
         SETTINGS_DOCTYPE_NAME,
@@ -644,6 +654,7 @@ def run_etims_autosubmission_scheduler_daily():
             )
 
 
+@frappe.whitelist()
 def run_etims_ledger_scheduler():
     settings_list = frappe.get_all(
         SETTINGS_DOCTYPE_NAME,
@@ -654,7 +665,7 @@ def run_etims_ledger_scheduler():
     for s in settings_list:
         try:
             invoice_date_before = now_datetime().date()
-            invoice_date_after = invoice_date_before - timedelta(days=30)
+            invoice_date_after = invoice_date_before - timedelta(days=2)
             request_data = {
                 "invoice_date_after": invoice_date_after.isoformat(),
                 "invoice_date_before": invoice_date_before.isoformat(),
@@ -717,7 +728,15 @@ def fetch_etims_sales_invoices(
     document_name: str = None,
     company: str = None,
 ) -> None:
-    request_data = parse_request_data(request_data)
+    request_data = parse_request_data(request_data) or {}
+
+    if "invoice_date_before" not in request_data:
+        request_data["invoice_date_before"] = now_datetime().date().isoformat()
+    if "invoice_date_after" not in request_data:
+        invoice_date_before_obj = now_datetime().date()
+        request_data["invoice_date_after"] = (
+            invoice_date_before_obj - timedelta(days=1)
+        ).isoformat()
 
     doc = frappe.get_doc("Sales Invoice", document_name) if document_name else None
     if doc and doc.is_return:
@@ -745,24 +764,25 @@ def fetch_etims_credit_notes(
     company: str = None,
 ) -> None:
     # request_data = parse_request_data(request_data)
-    request_data = {}
+    # request_data = {}
 
-    if document_name:
-        doc = frappe.get_doc("Sales Invoice", document_name)
+    # if document_name:
+    #     doc = frappe.get_doc("Sales Invoice", document_name)
 
-        request_data["customer"] = get_etims_id("Customer", doc.customer, settings_name)
+    #     request_data["customer"] = get_etims_id("Customer", doc.customer, settings_name)
 
-    process_request(
-        request_data,
-        "SalesCreditNoteSaveReq",
-        request_method="GET",
-        doctype="Sales Invoice",
-        settings_name=settings_name,
-        document_name=document_name,
-        handler_function=fetch_etims_credit_notes_on_success,
-        page_size=50,
-        company=company,
-    )
+    # process_request(
+    #     request_data,
+    #     "SalesCreditNoteSaveReq",
+    #     request_method="GET",
+    #     doctype="Sales Invoice",
+    #     settings_name=settings_name,
+    #     document_name=document_name,
+    #     handler_function=fetch_etims_credit_notes_on_success,
+    #     page_size=50,
+    #     company=company,
+    # )
+    pass
 
 
 def parse_request_data(request_data):
