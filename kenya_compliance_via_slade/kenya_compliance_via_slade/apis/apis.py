@@ -1440,10 +1440,28 @@ def submit_credit_note(
 ) -> None:
     """Submit credit note"""
     doc = frappe.get_doc(doctype, document_name)
-    data = response.get("results", [])[0] if response.get("results") else response
+    slade_id = frappe.db.get_value("Sales Invoice", doc.return_against, "etims_id")
+
+    results = response.get("results", [])
+    data = None
+
+    if results:
+        for result in results:
+            if result.get("id") == slade_id:
+                data = result
+                break
+        if not data:
+            data = results[0]
+    else:
+        data = response
+
+    if not data:
+        return
+
     scu_data = data.get("scu_data")
     if not scu_data:
         return
+
     payload = build_return_invoice_payload(doc, data)
     frappe.enqueue(
         process_request,
