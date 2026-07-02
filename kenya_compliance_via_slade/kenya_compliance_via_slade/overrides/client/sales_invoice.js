@@ -38,15 +38,25 @@ frappe.ui.form.on(parentDoctype, {
 
     clearEtimsHtmlAndWarnings(frm);
 
+    let parsedSetting = activeSetting[0];
+    let settingsDoc = null;
+    if (parsedSetting && parsedSetting.name) {
+      settingsDoc = await frappe.db.get_doc(
+        settingsDoctypeName,
+        parsedSetting.name,
+      );
+    }
+
     const eligibilityData = await fetchEligibilityData(frm);
     const summaryData = await fetchAndRenderSummary(
       frm,
       activeSetting,
       eligibilityData,
+      settingsDoc,
     );
 
     if (frm.doc.docstatus !== 0) {
-      addCustomButtons(frm, activeSetting, summaryData);
+      addCustomButtons(frm, activeSetting, summaryData, settingsDoc);
     }
 
     if (
@@ -94,7 +104,12 @@ async function fetchEligibilityData(frm) {
   }
 }
 
-async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
+async function fetchAndRenderSummary(
+  frm,
+  activeSetting,
+  eligibilityData,
+  settingsDoc,
+) {
   const htmlField = frm.fields_dict.etims_summary;
   if (!htmlField) return null;
 
@@ -154,13 +169,24 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
       return null;
     }
 
-    const tableHtml = buildTransactionTableHtml(data.details, fmt);
+    const sortedDetails = [...(data.details || [])].sort((a, b) => {
+      const matchA = a.reference_number === frm.doc.name ? 1 : 0;
+      const matchB = b.reference_number === frm.doc.name ? 1 : 0;
+      return matchB - matchA;
+    });
+
+    const tableHtml = buildTransactionTableHtml(
+      sortedDetails,
+      fmt,
+      frm.doc.name,
+      settingsDoc,
+    );
 
     if (frm.doc.is_return) {
       htmlField.$wrapper.html(`
         ${SHARED_ETIMS_STYLES}
         <div class="etims-root">
-          <div class="etims-hero">
+          <div class="etims-hero theme-credit">
             <div>
               <div class="etims-hero-title">Return / Credit Note - Original eTIMS Summary</div>
               <div class="etims-hero-sub">${data.from_date || "—"} — ${data.to_date || "—"}</div>
@@ -174,8 +200,8 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
           </div>
 
           <div class="etims-stats-grid-2x2">
-            <div class="etims-stat-card">
-              <div class="etims-stat-header">Invoices</div>
+            <div class="etims-stat-card border-credit">
+              <div class="etims-stat-header header-credit">Invoices</div>
               <div class="etims-stat-body">
                 <div class="etims-compare-row"><span class="etims-compare-label">System Baseline</span><span class="etims-compare-value erp">${fmt(data.metrics?.erp?.erp_invoice_gross)}</span></div>
                 <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${fmt(data.metrics?.etims?.etims_invoice_gross)}</span></div>
@@ -186,11 +212,11 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
               </div>
             </div>
 
-            <div class="etims-stat-card">
-              <div class="etims-stat-header">Credit Notes</div>
+            <div class="etims-stat-card border-credit">
+              <div class="etims-stat-header header-credit">Credit Notes</div>
               <div class="etims-stat-body">
-                <div class="etims-compare-row"><span class="etims-compare-label">System Baseline</span><span class="etims-compare-value erp">${fmt(data.metrics?.erp?.erp_credit_gross)}</span></div>
-                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${fmt(data.metrics?.etims?.etims_credit_gross)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">System Baseline</span><span class="etims-compare-value erp-credit">${fmt(data.metrics?.erp?.erp_credit_gross)}</span></div>
+                <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims-credit">${fmt(data.metrics?.etims?.etims_credit_gross)}</span></div>
                 <div class="etims-diff-section">
                   <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.metrics?.variance?.gross_difference >= 0 ? "positive" : "negative"}">${fmt(data.metrics?.variance?.gross_difference)}</span></div>
                   <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">0.00%</span></div></div>
@@ -198,8 +224,8 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
               </div>
             </div>
 
-            <div class="etims-stat-card">
-              <div class="etims-stat-header">Tax</div>
+            <div class="etims-stat-card border-credit">
+              <div class="etims-stat-header header-credit">Tax</div>
               <div class="etims-stat-body">
                 <div class="etims-compare-row"><span class="etims-compare-label">System Tax</span><span class="etims-compare-value erp">${fmt(data.metrics?.erp?.erp_invoice_tax)}</span></div>
                 <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Tax</span><span class="etims-compare-value etims">${fmt(data.metrics?.etims?.etims_invoice_tax)}</span></div>
@@ -210,8 +236,8 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
               </div>
             </div>
 
-            <div class="etims-stat-card">
-              <div class="etims-stat-header">Total Values</div>
+            <div class="etims-stat-card border-credit">
+              <div class="etims-stat-header header-credit">Total Values</div>
               <div class="etims-stat-body">
                 <div class="etims-compare-row"><span class="etims-compare-label">System Total</span><span class="etims-compare-value erp">${fmt(data.metrics?.erp?.erp_net_gross)}</span></div>
                 <div class="etims-compare-row"><span class="etims-compare-label">eTIMS Total</span><span class="etims-compare-value etims">${fmt(data.metrics?.etims?.etims_net_gross)}</span></div>
@@ -357,17 +383,20 @@ async function fetchAndRenderSummary(frm, activeSetting, eligibilityData) {
   }
 }
 
-function buildTransactionTableHtml(details, fmt) {
-  const badge = (ok) =>
-    ok
-      ? `<span class="etims-pill etims-pill-success">${ETIMS_ICONS.check} Signed</span>`
-      : `<span class="etims-pill etims-pill-danger">${ETIMS_ICONS.x} Unsigned</span>`;
+function buildTransactionTableHtml(details, fmt, currentDocName, settingsDoc) {
+  const badge = (ok, isCurrent) => {
+    if (!ok) {
+      return `<span class="etims-pill etims-pill-danger ${isCurrent ? "pulse-border" : ""}">${ETIMS_ICONS.x} Unsigned</span>`;
+    }
+    return `<span class="etims-pill etims-pill-success">${ETIMS_ICONS.check} Signed</span>`;
+  };
 
   const rowsHtml = details.length
     ? details
         .map((row, i) => {
           const isInvoice = row.type === "Sales Invoice";
           const isCredit = row.type === "Credit Note";
+          const isCurrent = row.reference_number === currentDocName;
           const bannerType = row.row_status || "neutral";
           const statusText = row.status_message || "Active Trace Baseline";
           const actionText = row.action_message || "Metrics aligned cleanly.";
@@ -375,6 +404,7 @@ function buildTransactionTableHtml(details, fmt) {
           let bgStyle =
             "background: rgba(107,114,128,0.06); border: 1px solid rgba(107,114,128,0.2);";
           let labelColor = "#475569";
+
           if (bannerType === "success") {
             bgStyle =
               "background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.18);";
@@ -403,18 +433,55 @@ function buildTransactionTableHtml(details, fmt) {
             ? frappe.datetime.str_to_user(row.scu_receipt_date)
             : "—";
 
+          let typeChipClass = "etims-type-chip";
+          if (isCredit) {
+            typeChipClass += " chip-credit";
+          } else if (isInvoice) {
+            typeChipClass += " chip-invoice";
+          }
+
+          let rowClass = i % 2 === 0 ? "row-even" : "row-odd";
+          if (isCurrent) {
+            rowClass += " row-highlight-current";
+          } else if (!row.is_signed) {
+            rowClass += " row-highlight-unsigned";
+          } else if (bannerType === "danger") {
+            rowClass += " row-highlight-wrong";
+          }
+
+          let targetLinkUrl = "";
+          if (settingsDoc && settingsDoc.enable_verification_redirect == 1) {
+            const key = currentDocName.replace(/[-:\s]/g, "").replace(".", "");
+            targetLinkUrl = `/invoice-verification?id=${encodeURIComponent(currentDocName)}&key=${encodeURIComponent(key)}`;
+          } else if (row.etims_qr_code_url) {
+            targetLinkUrl = row.etims_qr_code_url;
+          }
+
+          const portalLinkHtml = targetLinkUrl
+            ? `
+              <div class="scu-qr-action" style="margin-top: 12px; display: flex; justify-content: flex-start;">
+                <a href="${targetLinkUrl}" target="_blank" class="btn btn-xs btn-default" style="font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg> Verify via KRA Portal
+                </a>
+              </div>
+            `
+            : "";
+
           return `
-            <tr class="${i % 2 === 0 ? "row-even" : "row-odd"}">
-              <td class="muted">${frappe.datetime.str_to_user(row.invoice_date)}</td>
+            <tr class="${rowClass}">
+              <td class="muted">
+                ${isCurrent ? `<span class="current-indicator-dot"></span>` : ""}
+                ${frappe.datetime.str_to_user(row.invoice_date)}
+              </td>
               <td class="bold">${frappe.utils.escape_html(row.customer || "—")}</td>
-              <td><span class="etims-type-chip">${row.type || "—"}</span></td>
+              <td><span class="${typeChipClass}">${row.type || "—"} ${isCurrent ? " (Current)" : ""}</span></td>
               <td class="r mono">${isInvoice ? fmt(row.amount) : "—"}</td>
               <td class="r mono" style="color:var(--text-muted);">${isCredit ? fmt(row.amount) : "—"}</td>
               <td class="r mono" style="color:var(--text-muted);">${fmt(row.tax)}</td>
-              <td class="muted" style="font-family:monospace;font-size:11px;">${frappe.utils.escape_html(row.reference_number || "—")}</td>
-              <td class="c">${badge(row.is_signed)}</td>
+              <td class="muted text-ellipsis-ref" style="font-family:monospace;font-size:11px;">${frappe.utils.escape_html(row.reference_number || "—")}</td>
+              <td class="c">${badge(row.is_signed, isCurrent)}</td>
             </tr>
-            <tr class="${i % 2 === 0 ? "row-even" : "row-odd"} data-scu-row">
+            <tr class="${rowClass} data-scu-row">
               <td colspan="8" style="padding: 0px 16px 14px 16px;">
                 <div class="scu-details-enhanced">
                   <div class="scu-grid-layout">
@@ -452,17 +519,7 @@ function buildTransactionTableHtml(details, fmt) {
                     </div>
                   </div>
                   
-                  ${
-                    row.etims_qr_code_url
-                      ? `
-                    <div class="scu-qr-action" style="margin-top: 12px; display: flex; justify-content: flex-start;">
-                      <a href="${row.etims_qr_code_url}" target="_blank" class="btn btn-xs btn-default" style="font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg> Verify via KRA Portal
-                      </a>
-                    </div>
-                  `
-                      : ""
-                  }
+                  ${portalLinkHtml}
                   ${noteContextHtml}
                 </div>
               </td>
@@ -610,12 +667,12 @@ function renderSummaryDashboard(htmlField, data) {
           </div>
         </div>
 
-        <div class="etims-stat-card">
-          <div class="etims-stat-header">Credit Notes</div>
+        <div class="etims-stat-card border-credit-subtle">
+          <div class="etims-stat-header header-credit-subtle">Credit Notes</div>
           <div class="etims-stat-body">
-            <div class="etims-compare-row"><span class="etims-compare-label">System Baseline</span><span class="etims-compare-value erp">${data.fmt(data.erpCreditAmount)}</span></div>
-            <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims">${data.fmt(data.etimsCreditAmount)}</span></div>
-            <div class="etims-diff-section">
+            <div class="etims-compare-row"><span class="etims-compare-label">System Baseline</span><span class="etims-compare-value erp-credit">${data.fmt(data.erpCreditAmount)}</span></div>
+            <div class="etims-compare-row"><span class="etims-compare-label">eTIMS</span><span class="etims-compare-value etims-credit">${data.fmt(data.etimsCreditAmount)}</span></div>
+            <div class="etims-diff-section" style="border-top-style: dotted;">
               <div class="etims-diff-row"><span class="etims-diff-label">Difference</span><span class="etims-diff-amount ${data.creditDifference >= 0 ? "positive" : "negative"}">${data.fmt(data.creditDifference)}</span></div>
               <div class="etims-diff-row"><span class="etims-diff-label">Difference %</span><div><span class="etims-diff-percent" style="font-size:13px;font-weight:700;">${data.creditDiffPercent.toFixed(2)}%</span></div></div>
             </div>
@@ -667,7 +724,7 @@ function renderErrorBlock(htmlField) {
   `);
 }
 
-function addCustomButtons(frm, activeSetting, summaryData) {
+function addCustomButtons(frm, activeSetting, summaryData, settingsDoc) {
   if (frm.doc.docstatus === 0 || frm.doc.prevent_etims_submission) return;
 
   if (!frm.doc.sent_to_etims) {
@@ -740,17 +797,30 @@ function addCustomButtons(frm, activeSetting, summaryData) {
     __("eTims Actions"),
   );
 
-  frm.add_custom_button(
-    __("View Invoice Status"),
-    () => {
-      const key = frm.doc.creation.replace(/[-:\s]/g, "").replace(".", "");
-      window.open(
-        `/invoice-verification?id=${encodeURIComponent(frm.doc.name)}&key=${encodeURIComponent(key)}`,
-        "_blank",
-      );
-    },
-    __("eTims Actions"),
-  );
+  let showVerificationBtn = false;
+  let targetActionUrl = "";
+
+  if (settingsDoc && settingsDoc.enable_verification_redirect == 1) {
+    showVerificationBtn = true;
+    const key = frm.doc.creation.replace(/[-:\s]/g, "").replace(".", "");
+    targetActionUrl = `/invoice-verification?id=${encodeURIComponent(frm.doc.name)}&key=${encodeURIComponent(key)}`;
+  } else if (frm.doc.etims_qr_code_url) {
+    showVerificationBtn = true;
+    targetActionUrl = frm.doc.etims_qr_code_url;
+    frm.toggle_display("etims_verification_url", false);
+  } else {
+    frm.toggle_display("etims_verification_url", false);
+  }
+
+  if (showVerificationBtn && targetActionUrl) {
+    frm.add_custom_button(
+      __("View Invoice Status"),
+      () => {
+        window.open(targetActionUrl, "_blank");
+      },
+      __("eTims Actions"),
+    );
+  }
 
   if (frm.doc.sent_to_etims && summaryData?.hasSignificantMismatch) {
     frm.add_custom_button(
@@ -812,9 +882,6 @@ async function regenerateQRCode(frm, activeSetting) {
                   <div style="color: #78350f;">
                     <strong>Reason:</strong> ${invoiceResult.message}
                   </div>
-                  <div style="margin-top: 8px; padding: 8px 12px; background: #fef3c7; border-radius: 4px; font-size: 13px;">
-                    ${__("No verification URL found. Please ensure the invoice has been submitted to eTIMS first.")}
-                  </div>
                 </div>
               `,
               });
@@ -829,9 +896,6 @@ async function regenerateQRCode(frm, activeSetting) {
                   </div>
                   <div style="color: #7f1d1d;">
                     <strong>Error:</strong> ${invoiceResult.message}
-                  </div>
-                  <div style="margin-top: 8px; padding: 8px 12px; background: #fee2e2; border-radius: 4px; font-size: 13px;">
-                    ${__("Please check the logs or contact support if the issue persists.")}
                   </div>
                 </div>
               `,
@@ -851,9 +915,6 @@ async function regenerateQRCode(frm, activeSetting) {
               </div>
               <div style="color: #7f1d1d;">
                 <strong>Error:</strong> ${err.message || err}
-              </div>
-              <div style="margin-top: 8px; padding: 8px 12px; background: #fee2e2; border-radius: 4px; font-size: 13px;">
-                ${__("An unexpected error occurred. Please try again or contact support.")}
               </div>
             </div>
           `,
@@ -958,17 +1019,17 @@ function showCorrectionDialog(frm, activeSetting, summaryData) {
                 <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;">System Gross Invoice</div>
                 <div style="margin-top:6px;font-size:20px;font-weight:700;color:#0f172a;font-family:monospace;">${formatValue(erpInvoiceAmount)}</div>
               </div>
-              <div style="padding:14px;border-radius:10px;border:1px solid #e2e8f0;background:#ffffff;">
-                <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;">System Returns Applied</div>
-                <div style="margin-top:6px;font-size:20px;font-weight:700;color:#0f172a;font-family:monospace;">${formatValue(erpCreditAmount)}</div>
+              <div style="padding:14px;border-radius:10px;border:1px solid #b2c5d9;background:#f1f5f9;">
+                <div style="font-size:11px;color:#475569;font-weight:600;text-transform:uppercase;">System Returns Applied</div>
+                <div style="margin-top:6px;font-size:20px;font-weight:700;color:#1e293b;font-family:monospace;">${formatValue(erpCreditAmount)}</div>
               </div>
               <div style="padding:14px;border-radius:10px;border:1px solid #bfdbfe;background:#eff6ff;">
                 <div style="font-size:11px;color:#1d4ed8;font-weight:600;text-transform:uppercase;">eTIMS Registered Gross</div>
                 <div style="margin-top:6px;font-size:20px;font-weight:700;color:#1e3a8a;font-family:monospace;">${formatValue(etimsInvoiceAmount)}</div>
               </div>
-              <div style="padding:14px;border-radius:10px;border:1px solid #bfdbfe;background:#eff6ff;">
-                <div style="font-size:11px;color:#1d4ed8;font-weight:600;text-transform:uppercase;">eTIMS Credit Trace</div>
-                <div style="margin-top:6px;font-size:20px;font-weight:700;color:#1e3a8a;font-family:monospace;">${formatValue(etimsCreditAmount)}</div>
+              <div style="padding:14px;border-radius:10px;border:1px solid #cbd5e1;background:#f8fafc;">
+                <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;">eTIMS Credit Trace</div>
+                <div style="margin-top:6px;font-size:20px;font-weight:700;color:#334155;font-family:monospace;">${formatValue(etimsCreditAmount)}</div>
               </div>
               <div style="padding:14px;border-radius:10px;border:1px solid #e5e7eb;background:#ffffff;">
                 <div style="font-size:11px;color:#475569;font-weight:600;text-transform:uppercase;">System Core Balance</div>
@@ -1258,6 +1319,10 @@ const SHARED_ETIMS_STYLES = `
       flex-wrap: wrap;
       gap: 16px;
     }
+    .etims-hero.theme-credit {
+      background: linear-gradient(135deg, rgba(71, 85, 105, 0.07) 0%, var(--card-bg) 100%);
+      border-color: rgba(71, 85, 105, 0.3);
+    }
     .etims-hero-title {
       font-size: 14px;
       font-weight: 800;
@@ -1307,6 +1372,12 @@ const SHARED_ETIMS_STYLES = `
       overflow: hidden;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
+    .etims-stat-card.border-credit {
+      border-color: rgba(71, 85, 105, 0.4);
+    }
+    .etims-stat-card.border-credit-subtle {
+      border-color: rgba(71, 85, 105, 0.25);
+    }
     .etims-stat-card:hover {
       transform: translateY(-2px);
       box-shadow: 0 8px 16px rgba(0,0,0,0.1);
@@ -1322,6 +1393,14 @@ const SHARED_ETIMS_STYLES = `
       font-size: 13px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+    .etims-stat-header.header-credit {
+      background: rgba(71, 85, 105, 0.08);
+      color: #475569;
+    }
+    .etims-stat-header.header-credit-subtle {
+      background: rgba(71, 85, 105, 0.03);
       color: var(--text-muted);
     }
     .etims-stat-body {
@@ -1355,8 +1434,12 @@ const SHARED_ETIMS_STYLES = `
     }
     .etims-compare-value.erp { color: #3b82f6; }
     .etims-compare-value.etims { color: #10b981; }
+    .etims-compare-value.erp-credit { color: #64748b; }
+    .etims-compare-value.etims-credit { color: #475569; }
     html[data-theme="dark"] .etims-compare-value.erp { color: #60a5fa; }
     html[data-theme="dark"] .etims-compare-value.etims { color: #34d399; }
+    html[data-theme="dark"] .etims-compare-value.erp-credit { color: #94a3b8; }
+    html[data-theme="dark"] .etims-compare-value.etims-credit { color: #cbd5e1; }
     
     .etims-diff-section {
       margin-top: 16px;
@@ -1438,6 +1521,27 @@ const SHARED_ETIMS_STYLES = `
     html[data-theme="dark"] .etims-table tbody tr:hover { background: rgba(107,114,128,0.2) !important; }
     .etims-table tbody tr.row-even { background: var(--card-bg); }
     .etims-table tbody tr.row-odd  { background: var(--disabled-bg, var(--control-bg)); }
+    
+    .etims-table tbody tr.row-highlight-current {
+      background: rgba(59, 130, 246, 0.06) !important;
+    }
+    .etims-table tbody tr.row-highlight-unsigned {
+      background: rgba(239, 68, 68, 0.04) !important;
+    }
+    .etims-table tbody tr.row-highlight-wrong {
+      background: rgba(245, 158, 11, 0.04) !important;
+    }
+    
+    .current-indicator-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      background-color: #3b82f6;
+      border-radius: 50%;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+    
     .etims-table td {
       padding: 12px 16px;
       color: var(--text-color);
@@ -1450,6 +1554,13 @@ const SHARED_ETIMS_STYLES = `
     }
     .etims-table td.muted { color: var(--text-muted); font-size: 12px; }
     .etims-table td.bold  { font-weight: 700; color: var(--heading-color, var(--text-color)); }
+    .etims-table td.text-ellipsis-ref {
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
     .etims-type-chip {
       display: inline-block;
       padding: 3px 10px;
@@ -1462,13 +1573,30 @@ const SHARED_ETIMS_STYLES = `
       color: var(--gray-700, var(--text-muted));
       border: 1px solid var(--gray-200, var(--border-color));
     }
+    .etims-type-chip.chip-invoice {
+      background: rgba(59, 130, 246, 0.12);
+      color: #1e40af;
+      border-color: rgba(59, 130, 246, 0.25);
+    }
+    .etims-type-chip.chip-credit {
+      background: rgba(71, 85, 105, 0.12);
+      color: #334155;
+      border-color: rgba(71, 85, 105, 0.25);
+    }
     html[data-theme="dark"] .etims-type-chip {
       background: rgba(107,114,128,0.2);
       color: #9ca3af;
       border-color: rgba(107,114,128,0.3);
     }
+    html[data-theme="dark"] .etims-type-chip.chip-invoice {
+      background: rgba(59, 130, 246, 0.2);
+      color: #93c5fd;
+    }
+    html[data-theme="dark"] .etims-type-chip.chip-credit {
+      background: rgba(148, 163, 184, 0.2);
+      color: #cbd5e1;
+    }
 
-    /* Enhanced Structuring for SCU Details Metadata Pane */
     .scu-details-enhanced {
       background: var(--navbar-bg, var(--panel-bg, var(--control-bg)));
       border: 1px solid var(--border-color);
@@ -1666,6 +1794,17 @@ const SHARED_ETIMS_STYLES = `
       animation: etims-spin 0.75s linear infinite;
       margin: 0 auto 16px;
     }
+    
+    .pulse-border {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+      animation: pulse-danger 1.5s infinite;
+    }
+    @keyframes pulse-danger {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+      70% { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    
     @keyframes etims-spin { to { transform: rotate(360deg); } }
     @keyframes etims-fade { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
     .etims-root { animation: etims-fade 0.3s ease; }

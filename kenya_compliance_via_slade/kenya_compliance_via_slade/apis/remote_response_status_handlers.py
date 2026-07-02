@@ -307,13 +307,25 @@ def sales_information_submission_on_success(
     """
     Callback after successful submission. Maps SCU data and signature_link.
     """
+
+    settings_doc = frappe.get_doc(SETTINGS_DOCTYPE_NAME, settings_name)
+    doc = frappe.get_doc(doctype, document_name)
+
     updates = {
         "sent_to_etims": 1,
         "etims_id": response.get("sales_invoice_id"),
         "etims_qr_code_url": response.get("signature_link"),
     }
 
+    if not settings_doc.enable_verification_redirect and response.get("signature_link"):
+        updates["etims_qr_image"] = generate_and_attach_qr_code(
+            response.get("signature_link"),
+            doc.name,
+            doc.doctype,
+        )
+
     frappe.db.set_value(doctype, document_name, updates)
+
     doc = frappe.get_doc(doctype, document_name)
     invoice_name = doc.return_against if doc.is_return else document_name
 
