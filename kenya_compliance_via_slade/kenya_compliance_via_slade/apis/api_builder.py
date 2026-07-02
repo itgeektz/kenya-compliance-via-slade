@@ -499,7 +499,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                 else (
                     self.job_queue.page_size
                     if self.job_queue and self.job_queue.page_size
-                    else 1000
+                    else 200
                 )
             )
 

@@ -64,6 +64,32 @@ frappe.ui.form.on("eTIMS Sales Ledger Entry", {
             }
           });
       }
+
+      if (!frm.doc.is_signed) {
+        frm.add_custom_button(
+          __("Sign eTIMS Invoice"),
+          () => {
+            frm.call({
+              method:
+                "kenya_compliance_via_slade.kenya_compliance_via_slade.apis.remote_response_status_handlers.process_sales_sign",
+              args: {
+                document_name: frm.doc.sales_invoice,
+                queue: false,
+                doctype: "Sales Invoice",
+                invoice_slade_id: frm.doc.etims_id,
+              },
+              freeze: true,
+              freeze_message: __("Signing eTIMS Invoice..."),
+              callback: function (r) {
+                if (!r.exc) {
+                  frm.reload_doc();
+                }
+              },
+            });
+          },
+          __("Actions"),
+        );
+      }
     }
   },
 });
