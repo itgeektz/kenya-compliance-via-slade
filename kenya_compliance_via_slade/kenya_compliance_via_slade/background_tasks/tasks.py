@@ -730,20 +730,20 @@ def fetch_etims_sales_invoices(
 ) -> None:
     request_data = parse_request_data(request_data) or {}
 
-    if "invoice_date_before" not in request_data:
-        request_data["invoice_date_before"] = now_datetime().date().isoformat()
-    if "invoice_date_after" not in request_data:
-        invoice_date_before_obj = now_datetime().date()
-        request_data["invoice_date_after"] = (
-            invoice_date_before_obj - timedelta(days=1)
-        ).isoformat()
-
     doc = frappe.get_doc("Sales Invoice", document_name) if document_name else None
     if doc and doc.is_return:
         document_name = doc.return_against
     if document_name:
         request_data["search"] = document_name
 
+    else:
+        if "invoice_date_before" not in request_data:
+            request_data["invoice_date_before"] = now_datetime().date().isoformat()
+        if "invoice_date_after" not in request_data:
+            invoice_date_before_obj = now_datetime().date()
+            request_data["invoice_date_after"] = (
+                invoice_date_before_obj - timedelta(days=1)
+            ).isoformat()
     process_request(
         request_data,
         "TrnsSalesSaveWrReq",
