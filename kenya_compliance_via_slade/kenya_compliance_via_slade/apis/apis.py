@@ -563,11 +563,7 @@ def send_branch_customer_details(
 
     partner_name = data.customer_name if is_customer else data.supplier_name
 
-    request_data = (
-        {"customer_tax_pin": data.tax_id, "document_name": name}
-        if hasattr(data, "tax_id") and data.tax_id not in (None, "")
-        else {"partner_name": partner_name, "document_name": name}
-    )
+    request_data = {"partner_name": partner_name, "document_name": name}
 
     process_request(
         request_data,
@@ -1440,10 +1436,28 @@ def submit_credit_note(
 ) -> None:
     """Submit credit note"""
     doc = frappe.get_doc(doctype, document_name)
-    data = response.get("results", [])[0] if response.get("results") else response
+    slade_id = frappe.db.get_value("Sales Invoice", doc.return_against, "etims_id")
+
+    results = response.get("results", [])
+    data = None
+
+    if results:
+        for result in results:
+            if result.get("id") == slade_id:
+                data = result
+                break
+        if not data:
+            data = results[0]
+    else:
+        data = response
+
+    if not data:
+        return
+
     scu_data = data.get("scu_data")
     if not scu_data:
         return
+
     payload = build_return_invoice_payload(doc, data)
     frappe.enqueue(
         process_request,
