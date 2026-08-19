@@ -1,4 +1,4 @@
-from typing import Callable
+from collections.abc import Callable
 
 import frappe
 import frappe.defaults
@@ -224,8 +224,47 @@ def execute_remote_request(
     response = endpoints_builder.make_remote_call()
 
     if job_queue and isinstance(response, dict) and response.get("next"):
-        next_url: str = response["next"]
-        job_queue.enqueue_next_page(next_url)
+        _create_next_page_job(job_queue, response["next"])
 
     frappe.db.commit()
     return response
+
+
+def _create_next_page_job(current_job: Document, next_url: str) -> None:
+    """
+    Create the follow-up ``eTims Job Queue`` entry for the next pagination page.
+
+    The new job inherits all configuration from *current_job* but targets
+    ``next_url`` (the URL returned in the ``next`` field of the API response)
+    and advances the page counter by one.  The job is inserted synchronously
+    (instead of via a deferred background enqueue) so the queue manager can
+    pick it up immediately after the current job completes.
+
+    Args:
+        current_job: The ``eTims Job Queue`` document that just completed and
+                     returned a ``next`` URL.
+        next_url: Full URL for the next page as returned by the remote API.
+    """
+    current_page = int(current_job.page or 1)
+
+    next_job = frappe.get_doc(
+        {
+            "doctype": "eTims Job Queue",
+            "route_key": current_job.route_key,
+            "handler_function": current_job.handler_function,
+            "request_method": current_job.request_method,
+            "status": "Pending",
+            "reference_doctype": current_job.reference_doctype,
+            "reference_docname": current_job.reference_docname,
+            "company": current_job.company,
+            "settings_name": current_job.settings_name,
+            "request_data": current_job.request_data,
+            "retry_count": 0,
+            "error_callback": current_job.error_callback,
+            "url": next_url,
+            "page_size": current_job.page_size or 200,
+            "page": current_page + 1,
+            "is_page": 1,
+        }
+    )
+    next_job.insert(ignore_permissions=True)
