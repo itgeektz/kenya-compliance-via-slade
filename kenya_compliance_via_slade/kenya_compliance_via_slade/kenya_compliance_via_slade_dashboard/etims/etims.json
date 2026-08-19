@@ -1,73 +1,37 @@
 {
  "cards": [
   {
-   "card": "Queued Requests"
-  },
-  {
-   "card": "Total Successful Requests"
-  },
-  {
-   "card": "Total Failed Requests"
-  },
-  {
-   "card": "Pending Item Submissions"
-  },
-  {
    "card": "Pending Invoice Submissions"
-  },
-  {
-   "card": "Signed Invoices"
-  },
-  {
-   "card": "Failed Invoices"
-  },
-  {
-   "card": "Registered Items"
   },
   {
    "card": "Pending Credit Notes"
   },
   {
-   "card": "Successful Credit Notes"
+   "card": "Pending Item Submissions"
   },
   {
-   "card": "Failed Credit Notes"
+   "card": "Registered Items"
+  },
+  {
+   "card": "Signed Invoices"
+  },
+  {
+   "card": "Signed Credit Notes"
   },
   {
    "card": "Pending Customer Submissions"
   },
   {
-   "card": "Pending Purchase Submissions"
-  },
-  {
-   "card": "Successful Purchases"
-  },
-  {
-   "card": "Failed Purchases"
-  },
-  {
    "card": "Registered Customers"
   },
   {
-   "card": "Pending Stock Ledger Entry Submissions"
+   "card": "Failed Invoices"
   },
   {
-   "card": "Successful Stock Ledger Entries"
-  },
-  {
-   "card": "Failed Stock Ledger Entries"
+   "card": "Failed Credit Notes"
   },
   {
    "card": "Pending Supplier Submissions"
-  },
-  {
-   "card": "Pending BOM Submissions"
-  },
-  {
-   "card": "Successful BOMs"
-  },
-  {
-   "card": "Failed BOMs"
   },
   {
    "card": "Registered Suppliers"
@@ -98,7 +62,7 @@
  "idx": 9,
  "is_default": 0,
  "is_standard": 1,
- "modified": "2025-02-25 15:23:05.076034",
+ "modified": "2026-08-19 09:36:19.040394",
  "modified_by": "Administrator",
  "module": "Kenya Compliance Via Slade",
  "name": "eTims",
