@@ -1,10 +1,19 @@
+"""Document Submission Status Analytics report.
+
+Tracks eTIMS submission status for Item, Customer and Supplier via the
+``eTims ID Mapping`` child table, and for Sales Invoice / Credit Note via
+the ``sent_to_etims`` checkbox. An optional company filter scopes results.
+"""
+
 from typing import Any, Dict, List, Optional, Tuple
 
-from pypika.functions import Sum
+from pypika.functions import Count
 from pypika.terms import Case
 
 import frappe
 from frappe.query_builder import DocType
+
+from ...doctype.doctype_names_mapping import SLADE_ID_MAPPING_DOCTYPE_NAME
 
 
 def execute(
@@ -14,6 +23,8 @@ def execute(
 
 
 class DocumentSubmissionStatusAnalytics:
+    """Aggregates eTIMS submission status across tracked document types."""
+
     def __init__(self, filters: Optional[Dict[str, Any]] = None) -> None:
         self.filters = frappe._dict(filters or {})
         self.columns = [
@@ -46,12 +57,14 @@ class DocumentSubmissionStatusAnalytics:
         ]
         self.data: List[Dict[str, Any]] = []
         self.chart: Dict[str, Any] = {}
-        self.tracked_docs = {
+        self.mapped_docs = {
             "Item": DocType("Item"),
-            "Invoice": DocType("Sales Invoice"),
-            "Credit Note": DocType("Sales Invoice"),
-            "Purchase Invoice": DocType("Purchase Invoice"),
-            "Stock Ledger Entry": DocType("Stock Ledger Entry"),
+            "Customer": DocType("Customer"),
+            "Supplier": DocType("Supplier"),
+        }
+        self.invoice_docs = {
+            "Invoice": 0,  # is_return = 0
+            "Credit Note": 1,  # is_return = 1
         }
 
     def run(
@@ -62,95 +75,104 @@ class DocumentSubmissionStatusAnalytics:
         return self.columns, self.data, None, self.chart
 
     def fetch_data(self) -> None:
-        from_date = self.filters.get("from_date")
-        to_date = self.filters.get("to_date")
-
-        for doc_name, doctype in self.tracked_docs.items():
-            meta = frappe.get_meta(
-                "Sales Invoice" if doc_name in ["Invoice", "Credit Note"] else doc_name
-            )
-            has_fields = {
-                "custom_slade_id": meta.has_field("custom_slade_id"),
-                "custom_successfully_submitted": meta.has_field(
-                    "custom_successfully_submitted"
-                ),
-                "custom_submitted_successfully": meta.has_field(
-                    "custom_submitted_successfully"
-                ),
-                "custom_sent_to_slade": meta.has_field("custom_sent_to_slade"),
-            }
-
-            sent_condition = (
-                doctype.custom_slade_id.isnotnull()
-                if has_fields["custom_slade_id"]
-                else None
-            )
-            not_sent_condition = (
-                doctype.custom_slade_id.isnull()
-                if has_fields["custom_slade_id"]
-                else None
-            )
-
-            success_conditions = []
-            if has_fields["custom_sent_to_slade"]:
-                success_conditions.append(doctype.custom_sent_to_slade)
-            if has_fields["custom_successfully_submitted"]:
-                success_conditions.append(doctype.custom_successfully_submitted)
-            if has_fields["custom_submitted_successfully"]:
-                success_conditions.append(doctype.custom_submitted_successfully)
-
-            success_condition = None
-            if success_conditions:
-                success_condition = success_conditions[0]
-                for cond in success_conditions[1:]:
-                    success_condition |= cond
-
-            failed_condition = (
-                sent_condition & ~success_condition
-                if sent_condition and success_condition
-                else None
-            )
-
-            query = frappe.qb.from_(doctype).select(
-                (
-                    Sum(Case().when(success_condition, 1).else_(0)).as_("successful")
-                    if success_condition
-                    else Sum(0).as_("successful")
-                ),
-                (
-                    Sum(Case().when(sent_condition, 1).else_(0)).as_("sent")
-                    if sent_condition
-                    else Sum(0).as_("sent")
-                ),
-                (
-                    Sum(Case().when(not_sent_condition, 1).else_(0)).as_("not_sent")
-                    if not_sent_condition
-                    else Sum(0).as_("not_sent")
-                ),
-                (
-                    Sum(Case().when(failed_condition, 1).else_(0)).as_("failed")
-                    if failed_condition
-                    else Sum(0).as_("failed")
-                ),
-                Sum(1).as_("total"),
-            )
-
-            if from_date:
-                query = query.where(doctype.creation >= from_date)
-            if to_date:
-                query = query.where(doctype.creation <= to_date)
-
-            if doc_name == "Invoice":
-                query = query.where(doctype.is_return == 0)
-            elif doc_name == "Credit Note":
-                query = query.where(doctype.is_return == 1)
-
-            try:
-                row = query.run(as_dict=True)[0]
+        for doc_name, doctype in self.mapped_docs.items():
+            row = self._fetch_mapped_doc_counts(doc_name, doctype)
+            if row:
                 row["doctype"] = doc_name
                 self.data.append(row)
-            except Exception as e:
-                frappe.log_error(f"Error fetching data for {doc_name}: {str(e)}")
+
+        invoice = DocType("Sales Invoice")
+        for doc_name, is_return in self.invoice_docs.items():
+            row = self._fetch_invoice_counts(invoice, is_return)
+            if row:
+                row["doctype"] = doc_name
+                self.data.append(row)
+
+    def _fetch_mapped_doc_counts(
+        self, doc_name: str, doctype: DocType
+    ) -> Optional[Dict[str, Any]]:
+        """Counts registered vs unregistered entities using etims_id_mapping.
+
+        An entity is considered "sent" when it has at least one row in the
+        ``eTims ID Mapping`` child table.
+        """
+        mapping = DocType(SLADE_ID_MAPPING_DOCTYPE_NAME)
+
+        sent_condition = mapping.name.isnotnull()
+
+        query = (
+            frappe.qb.from_(doctype)
+            .left_join(mapping)
+            .on(
+                (mapping.parent == doctype.name)
+                & (mapping.parenttype == doc_name)
+            )
+            .select(
+                Count(doctype.name).distinct().as_("total"),
+                Count(Case().when(sent_condition, doctype.name).else_(None))
+                .distinct()
+                .as_("sent"),
+            )
+        )
+        query = self._apply_date_filters(query, doctype)
+
+        try:
+            row = query.run(as_dict=True)[0]
+            total = row.get("total") or 0
+            sent = row.get("sent") or 0
+            row["not_sent"] = total - sent
+            row["failed"] = 0
+            row["successful"] = sent
+            return row
+        except Exception as e:
+            frappe.log_error(f"Error fetching data for {doc_name}: {str(e)}")
+            return None
+
+    def _fetch_invoice_counts(
+        self, invoice: DocType, is_return: int
+    ) -> Optional[Dict[str, Any]]:
+        """Counts Sales Invoices / Credit Notes based on sent_to_etims checkbox."""
+        company = self.filters.get("company")
+
+        query = (
+            frappe.qb.from_(invoice)
+            .select(
+                Count(invoice.name).distinct().as_("total"),
+                Count(
+                    Case()
+                    .when(invoice.sent_to_etims == 1, invoice.name)
+                    .else_(None)
+                )
+                .distinct()
+                .as_("sent"),
+            )
+            .where(invoice.is_return == is_return)
+        )
+        if company:
+            query = query.where(invoice.company == company)
+        query = self._apply_date_filters(query, invoice)
+
+        try:
+            row = query.run(as_dict=True)[0]
+            total = row.get("total") or 0
+            sent = row.get("sent") or 0
+            row["not_sent"] = total - sent
+            row["failed"] = 0
+            row["successful"] = sent
+            return row
+        except Exception as e:
+            frappe.log_error(f"Error fetching data for invoice return {is_return}: {str(e)}")
+            return None
+
+    def _apply_date_filters(self, query, doctype: DocType):
+        """Applies from_date / to_date creation filters to a query."""
+        from_date = self.filters.get("from_date")
+        to_date = self.filters.get("to_date")
+        if from_date:
+            query = query.where(doctype.creation >= from_date)
+        if to_date:
+            query = query.where(doctype.creation <= to_date)
+        return query
 
     def get_chart_data(self) -> None:
         labels = [row["doctype"] for row in self.data]
