@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Callable, Literal, Optional, Union
+import json
+from collections.abc import Callable
+from datetime import datetime, timedelta
+from typing import Literal
 from urllib import parse
 
 import frappe
 import requests
 from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
+from frappe.utils import now_datetime
 
 from ..logger import etims_logger
 from ..utils import (
@@ -81,7 +84,7 @@ class BaseEndpointsBuilder:
     def company(self, value: str | None) -> None:
         self._company = value
 
-    def attach(self, observer: "ErrorObserver") -> None:
+    def attach(self, observer: ErrorObserver) -> None:
         """
         Attach an error observer.
 
@@ -142,6 +145,12 @@ class EndpointsBuilder(BaseEndpointsBuilder):
     """
     Concrete HTTP client used to communicate with eTims / Slade 360 servers.
 
+    Duplicate remote calls are prevented: if a near-identical
+    ``Integration Request`` was created within the configured
+    duplicate-detection window (``eTims Queue Manager`` →
+    ``duplicate_detection_window``), the new log (and therefore the HTTP
+    call) is blocked.
+
     Usage pattern::
 
         builder = EndpointsBuilder()
@@ -161,6 +170,10 @@ class EndpointsBuilder(BaseEndpointsBuilder):
     The builder is typically reused (module-level singleton in ``etims_job_queue.py``)
     with properties reset before each call.
     """
+
+    #: Fallback duplicate-detection window in seconds when the Queue Manager
+    #: has not configured ``duplicate_detection_window`` (defaults to 5 min).
+    DEFAULT_DUPLICATE_WINDOW_SECONDS = 300
 
     def __init__(self) -> None:
         super().__init__()
@@ -437,6 +450,113 @@ class EndpointsBuilder(BaseEndpointsBuilder):
                 is_minimizable=True,
             )
 
+    def _get_duplicate_window_seconds(self) -> int:
+        """
+        Return the duplicate-detection window in seconds.
+
+        Reads the ``duplicate_detection_window`` (Duration field, stored in
+        seconds) from the ``eTims Queue Manager`` singleton.  Falls back to
+        :attr:`DEFAULT_DUPLICATE_WINDOW_SECONDS` when the field is not set.
+
+        Returns:
+            Window duration in seconds.
+        """
+        queue_manager = frappe.get_single("eTims Queue Manager")
+        window = queue_manager.get("duplicate_detection_window")
+        return int(window) if window else self.DEFAULT_DUPLICATE_WINDOW_SECONDS
+
+    def _reject_duplicate_integration_request(self) -> None:
+        """
+        Block a new integration log when a similar request already exists
+        within the duplicate-detection window (configured on the
+        ``eTims Queue Manager``, default 300 seconds).
+
+        A request is considered a duplicate when all of the following match
+        an existing remote ``Integration Request`` created within the window:
+
+            * ``integration_request_service``
+            * ``request_description``
+            * ``url``
+
+        Additionally ``request_headers`` and ``data`` are compared
+        semantically (JSON decoded) so key ordering or whitespace
+        differences in the serialised values do not cause false negatives.
+
+        Raises:
+            frappe.ValidationError: When a matching request already exists.
+        """
+        window_seconds = self._get_duplicate_window_seconds()
+        cutoff = now_datetime() - timedelta(seconds=window_seconds)
+
+        filters = {}
+        for field in (
+            "integration_request_service",
+            "request_description",
+            "url",
+        ):
+            value = (
+                self.request_description
+                if field == "integration_request_service"
+                else getattr(self, field, None)
+            )
+            if value is not None:
+                filters[field] = value
+
+        filters["is_remote_request"] = 1
+        filters["creation"] = (">", cutoff)
+
+        current_data = self._normalize_json(self.payload)
+        current_headers = self._normalize_json(self.headers)
+
+        similar_requests = frappe.get_all(
+            "Integration Request",
+            filters=filters,
+            fields=["name", "data", "request_headers"],
+        )
+
+        for request in similar_requests:
+            if (
+                self._normalize_json(request.data) == current_data
+                and self._normalize_json(request.request_headers) == current_headers
+            ):
+                similar_request_name = request.name
+                message = (
+                    frappe._(
+                        "Duplicate Integration Request blocked within a {0} second window.\n"
+                    ).format(window_seconds)
+                    + frappe._("Similar existing request: {0}").format(
+                        similar_request_name
+                    )
+                    + f"\n\n{frappe._('New request data')}:\n"
+                    + json.dumps(
+                        {
+                            "url": self.url,
+                            "request_description": self.request_description,
+                            "data": self.payload,
+                            "request_headers": self.headers,
+                        },
+                        indent=2,
+                        default=str,
+                    )
+                )
+                frappe.log_error(
+                    message=message,
+                    title=frappe._(
+                        "Duplicate Integration Request - Similar Request: {0}"
+                    ).format(similar_request_name),
+                )
+                raise frappe.ValidationError(message)
+
+    @staticmethod
+    def _normalize_json(value) -> object:
+        """Parse a JSON string into a comparable Python object."""
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except (TypeError, ValueError):
+                return value
+        return value
+
     def _create_integration_log(
         self,
         doctype: str | None,
@@ -454,12 +574,21 @@ class EndpointsBuilder(BaseEndpointsBuilder):
 
         Returns:
             The newly created ``Integration Request`` document.
+
+        Raises:
+            frappe.ValidationError: If a similar request already exists in the
+                duplicate-detection window (see
+                :meth:`_reject_duplicate_integration_request`).
         """
+        self._reject_duplicate_integration_request()
+
         cleaned_url = clean_url_params(self.url)
+
+        description = self._build_request_description()
 
         common = dict(
             data=self.payload,
-            request_description=self.request_description,
+            request_description=description,
             is_remote_request=True,
             service_name=self.request_description,
             request_headers=self.headers,
@@ -475,6 +604,68 @@ class EndpointsBuilder(BaseEndpointsBuilder):
 
         except frappe.LinkValidationError:
             return create_request_log(**common)
+
+    def _build_request_description(self) -> str | None:
+        """
+        Build the description stored on the ``Integration Request``.
+
+        When the call is paginated (a page number higher than 1 is being
+        fetched) the label includes the current page, e.g.
+        ``"Fetch Sales Page 2"``.  Otherwise the plain
+        :attr:`request_description` is used.
+
+        Returns:
+            The description string, or ``None`` if no description is set.
+        """
+        if not self.request_description:
+            return None
+
+        current_page = self.page or (
+            self.job_queue.page if self.job_queue and self.job_queue.page else 1
+        )
+
+        page_num = int(current_page or 1)
+
+        if page_num > 1:
+            return f"{self.request_description} Page {page_num}"
+
+        return self.request_description
+
+    def _build_page_description(self, response_data) -> str | None:
+        """
+        Build the final ``Integration Request`` description from the response.
+
+        When the response contains pagination metadata (``next``,
+        ``total_pages``, ``count``) the description becomes
+        ``"ItemClsSearchReq Page 30 of 32(1552 records)"``.  Otherwise the
+        description created at call time is preserved.
+
+        Args:
+            response_data: Parsed response body (dict, str, or bytes).
+
+        Returns:
+            The enriched description string, or ``None``.
+        """
+        base = self._build_request_description()
+
+        if not isinstance(response_data, dict):
+            return base
+
+        total_pages = response_data.get("total_pages")
+        count = response_data.get("count")
+
+        if total_pages is None or count is None:
+            return base
+
+        current_page = self.page or (
+            self.job_queue.page if self.job_queue and self.job_queue.page else 1
+        )
+
+        return (
+            f"{self.request_description} "
+            f"Page {int(current_page or 1)} of {int(total_pages)}"
+            f"({int(count)} records)"
+        )
 
     def _dispatch_http_request(self) -> requests.Response:
         """
@@ -613,16 +804,13 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             company=company,
         )
 
-        current_page = (
-            response_data.get("current_page")
-            if isinstance(response_data, dict)
-            else None
-        )
+        description = self._build_page_description(response_data)
 
-        total_pages = (
-            response_data.get("total_pages", 0)
-            if isinstance(response_data, dict)
-            else 0
+        frappe.db.set_value(
+            "Integration Request",
+            self.integration_request.name,
+            {"status": "Completed", "request_description": description},
+            update_modified=False,
         )
 
         _update_integration_request(
@@ -630,11 +818,6 @@ class EndpointsBuilder(BaseEndpointsBuilder):
             status="Completed",
             output=str(response_data),
             error=None,
-            request_description=(
-                f"Page {current_page} of {total_pages}"
-                if total_pages and int(total_pages) > 1
-                else None
-            ),
         )
 
         if self.job_queue:
@@ -717,7 +900,7 @@ class EndpointsBuilder(BaseEndpointsBuilder):
 
 def _parse_response(
     response: requests.Response,
-) -> Optional[Union[dict, str, bytes]]:
+) -> dict | str | bytes | None:
     """
     Extract the response body in the most appropriate Python type based on the
     ``Content-Type`` header.

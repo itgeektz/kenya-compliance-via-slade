@@ -733,9 +733,40 @@ def fetch_etims_sales_invoices(
     doc = frappe.get_doc("Sales Invoice", document_name) if document_name else None
     if doc and doc.is_return:
         document_name = doc.return_against
-    if document_name:
-        request_data["search"] = document_name
 
+    if document_name:
+        revision_count = int(doc.get("revision_count") or 0) if doc else 0
+        if revision_count > 0:
+            for i in range(revision_count + 1):
+                rev_request_data = request_data.copy()
+                if i == 0:
+                    rev_request_data["search"] = document_name
+                else:
+                    rev_request_data["search"] = f"{document_name}-REV{i}"
+
+                process_request(
+                    rev_request_data,
+                    "TrnsSalesSaveWrReq",
+                    request_method="GET",
+                    doctype="Sales Invoice",
+                    settings_name=settings_name,
+                    document_name=document_name,
+                    handler_function=fetch_etims_sales_invoices_on_success,
+                    company=company,
+                )
+        else:
+            request_data["search"] = document_name
+
+            process_request(
+                request_data,
+                "TrnsSalesSaveWrReq",
+                request_method="GET",
+                doctype="Sales Invoice",
+                settings_name=settings_name,
+                document_name=document_name,
+                handler_function=fetch_etims_sales_invoices_on_success,
+                company=company,
+            )
     else:
         if "invoice_date_before" not in request_data:
             request_data["invoice_date_before"] = now_datetime().date().isoformat()
@@ -744,16 +775,16 @@ def fetch_etims_sales_invoices(
             request_data["invoice_date_after"] = (
                 invoice_date_before_obj - timedelta(days=1)
             ).isoformat()
-    process_request(
-        request_data,
-        "TrnsSalesSaveWrReq",
-        request_method="GET",
-        doctype="Sales Invoice",
-        settings_name=settings_name,
-        document_name=document_name,
-        handler_function=fetch_etims_sales_invoices_on_success,
-        company=company,
-    )
+        process_request(
+            request_data,
+            "TrnsSalesSaveWrReq",
+            request_method="GET",
+            doctype="Sales Invoice",
+            settings_name=settings_name,
+            document_name=document_name,
+            handler_function=fetch_etims_sales_invoices_on_success,
+            company=company,
+        )
 
 
 @frappe.whitelist()
